@@ -17,4 +17,4 @@ LibImport("libTinyMCP" "src/libTinyMCP")
 
 ExeImport("Example" "libTinyMCP;jsoncpp")
 
-AddInstall("MCPServer")
+AddInstall("EchoMCPServer")
