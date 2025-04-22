@@ -15,7 +15,7 @@ namespace MCP
 				std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
 				return converter.from_bytes(str);
 			}
-			catch (const std::exception& e) {
+			catch (...) {
 				// Èç¹û×ª»»Ê§°Ü£¬·µ»Ø¿Õ×Ö·û´®
 				return L"";
 			}
@@ -28,7 +28,7 @@ namespace MCP
 				std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
 				return converter.to_bytes(strW);
 			}
-			catch (const std::exception& e) {
+			catch (...) {
 				// Èç¹û×ª»»Ê§°Ü£¬·µ»Ø¿Õ×Ö·û´®
 				return "";
 			}

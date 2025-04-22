@@ -1,0 +1,64 @@
+name: mac
+
+on: [workflow_dispatch]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: relwithdebinfo
+
+jobs:
+  mac:
+    runs-on: ${{ matrix.config.os }}
+
+    strategy:
+      matrix:
+        config:
+          - os: macos-latest
+            cc: gcc
+            cxx: g++
+            vcpkg_triplet: arm64-osx
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+            vcpkg_triplet: arm64-osx
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: brinkqiang/get-cmake@v1
+      - name: vcpkg build
+        uses: brinkqiang/vcpkg-action@v1
+        id: vcpkg
+        with:
+          pkgs: gtest
+          triplet: ${{ matrix.config.vcpkg_triplet }}
+          cache-key: ${{ matrix.config.os }}
+          token: ${{ github.token }}
+          github-binarycache: true
+
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%dT%H%M')"
+
+      - name: Create Build Environment
+        run: cmake -E make_directory ${{github.workspace}}/build
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+        env:
+          CC: ${{ matrix.config.cc }}
+          CXX: ${{ matrix.config.cxx }}
+        run: cmake -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=${{ matrix.config.vcpkg_triplet }} -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ..
+
+      - name: Build
+        working-directory: ${{github.workspace}}/build
+        shell: bash
+        run: cmake --build . --config ${{env.BUILD_TYPE}}
+
+      - name: Status
+        uses: brinkqiang/github-status-action@v2
+        with:
+          authToken: ${{secrets.GITHUB_TOKEN}}
+          context: 'Set Status'
+          description: 'Passed'
+          state: 'success'
