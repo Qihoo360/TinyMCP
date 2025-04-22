@@ -9,7 +9,7 @@ ModuleSetCompileOptions()
 ModuleSetWinCompilerFlags()
 
 if(WIN32)
-    add_compile_definitions(-D_UNICODE)
+    add_compile_definitions(_UNICODE)
 endif()
 
 LibImport("jsoncpp" "src/jsoncpp")
