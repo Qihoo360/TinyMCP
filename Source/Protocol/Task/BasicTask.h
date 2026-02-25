@@ -30,6 +30,19 @@ namespace MCP
 		std::shared_ptr<MCP::Request> m_spRequest;
 	};
 
+	class ProcessPingRequest : public ProcessRequest
+	{
+	public:
+		ProcessPingRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
 	class ProcessErrorRequest : public ProcessRequest
 	{
 	public:
@@ -90,6 +103,7 @@ namespace MCP
 		std::shared_ptr<MCP::CallToolResult> BuildResult();
 		int NotifyProgress(int iProgress, int iTotal);
 		int NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult);
+		int NotifyCancelled();
 
 	private:
 		bool m_bFinished{ false };

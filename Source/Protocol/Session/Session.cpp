@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "../Public/PublicDef.h"
+#include "../Public/StringHelper.h"
 #include "../Message/BasicMessage.h"
 #include "../Message/Notification.h"
 #include "../Message/Request.h"
@@ -45,9 +46,13 @@ namespace MCP
 			iErrCode = m_spTransport->Read(strIncomingMsg);
 			if (ERRNO_OK == iErrCode)
 			{
-				std::shared_ptr<MCP::Message> spMsg;
-				iErrCode = ParseMessage(strIncomingMsg, spMsg);
-				iErrCode = ProcessMessage(iErrCode, spMsg);
+				auto vecStrObj = StringHelper::split_json_objects_string(strIncomingMsg);
+				for (auto& strObj : vecStrObj)
+				{
+					std::shared_ptr<MCP::Message> spMsg;
+					iErrCode = ParseMessage(strObj, spMsg);
+					iErrCode = ProcessMessage(iErrCode, spMsg);
+				}
 			}
 			else
 			{
@@ -204,10 +209,29 @@ namespace MCP
 				iErrCode = CommitAsyncTask(spNewProcessCallToolRequest);
 
 			} break;
+			case MessageType_PingRequest:
+			{
+				if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+				{
+					iErrCode = ERRNO_INVALID_REQUEST;
+					goto PROC_END;
+				}
+
+				auto spTask = std::make_shared<ProcessPingRequest>(spRequest);
+				if (!spTask)
+				{
+					iErrCode = ERRNO_INTERNAL_ERROR;
+					goto PROC_END;
+				}
+
+				iErrCode = spTask->Execute();
+
+			} break;
 			default: break;
 		}
 
 	PROC_END:
+		if (ERRNO_OK != iErrCode)
 		{
 			auto spTask = std::make_shared<ProcessErrorRequest>(spRequest);
 			if (spTask)
@@ -379,6 +403,20 @@ namespace MCP
 				return ERRNO_INVALID_REQUEST;
 
 			spMsg = spCallToolRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_PING) == 0)
+		{
+			auto spPingRequest = std::make_shared<MCP::PingRequest>(true);
+			if (!spPingRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spPingRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spPingRequest;
 
 			return ERRNO_OK;
 		}

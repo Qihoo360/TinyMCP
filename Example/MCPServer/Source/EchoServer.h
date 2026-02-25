@@ -17,6 +17,9 @@ namespace Implementation
 		// The Server can be started only after the configuration is successful.
 		int Initialize() override;
 
+		// This is the deinitialization method, where you can perform any necessary cleanup tasks.
+		int Uninitialize() override;
+
 	private:
 		friend class MCP::CMCPServer<CEchoServer>;
 		CEchoServer() = default;

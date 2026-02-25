@@ -20,6 +20,9 @@ int LaunchEchoServer()
             // 3. Stop the Server.
             server.Stop();
         }
+
+        // 4. Deinitialization
+        server.Uninitialize();
     }
 
     return iErrCode;

@@ -57,6 +57,7 @@ namespace MCP
 		}
 
 		virtual int Initialize() = 0;
+		virtual int Uninitialize() = 0;
 
 		int Start()
 		{

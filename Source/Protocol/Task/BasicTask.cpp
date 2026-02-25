@@ -45,6 +45,34 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessPingRequest
+	std::shared_ptr<CMCPTask> ProcessPingRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessPingRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
+		if (!spEmptyResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spEmptyResponse->requestId = m_spRequest->requestId;
+		std::string strResponse;
+		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessErrorRequest
 	std::shared_ptr<CMCPTask> ProcessErrorRequest::Clone() const
 	{
@@ -59,7 +87,7 @@ namespace MCP
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
 			return ERRNO_INTERNAL_ERROR;
-
+		spErrorResponse->requestId = m_spRequest->requestId;
 		if (m_strMessage.empty())
 		{
 			switch (m_iCode)
@@ -323,6 +351,12 @@ namespace MCP
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
+		return ERRNO_OK;
+	}
+
+	int ProcessCallToolRequest::NotifyCancelled()
+	{
+		m_bCancelled = true;
 		return ERRNO_OK;
 	}
 }

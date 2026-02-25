@@ -26,6 +26,19 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
+	struct PingRequest : public MCP::Request
+	{
+		PingRequest(bool bNeedIdentity)
+			: Request(MessageType_PingRequest, bNeedIdentity)
+		{
+
+		}
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct InitializeRequest : public MCP::Request
 	{
 	public:
@@ -65,11 +78,12 @@ namespace MCP
 		CallToolRequest(bool bNeedIdentity)
 			: Request(MessageType_CallToolRequest, bNeedIdentity)
 		{
-
+			toolCallId.SetMsgKey(MCP::MSG_KEY_TOOL_CALL_ID);
 		}
 
 		std::string strName;
 		Json::Value jArguments;
+		RequestId toolCallId;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

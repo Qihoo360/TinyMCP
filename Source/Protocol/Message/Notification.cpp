@@ -8,7 +8,7 @@ namespace MCP
 	int Notification::DoSerialize(Json::Value& jMsg) const
 	{
 		if (!IsValid())
-			return ERRNO_INVALID_REQUEST;
+			return ERRNO_INVALID_NOTIFICATION;
 
 		Json::Value jRPC(JSON_RPC_VER);
 		jMsg[MSG_KEY_JSONRPC] = jRPC;
@@ -72,6 +72,8 @@ namespace MCP
 	int CancelledNotification::DoDeserialize(const Json::Value& jMsg)
 	{
 		int iErrCode = Notification::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
 		
 		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
 			return ERRNO_INVALID_NOTIFICATION;
@@ -117,6 +119,8 @@ namespace MCP
 	int ProgressNotification::DoDeserialize(const Json::Value& jMsg)
 	{
 		int iErrCode = Notification::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
 
 		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
 			return ERRNO_INVALID_NOTIFICATION;

@@ -70,6 +70,29 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// PingRequest
+	int PingRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int PingRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Request::DoDeserialize(jMsg);
+	}
+
+	bool PingRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_PING) != 0)
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// InitializeRequest
 	int InitializeRequest::DoSerialize(Json::Value& jMsg) const
 	{
@@ -168,6 +191,11 @@ namespace MCP
 		if (jParams.isMember(MSG_KEY_ARGUMENTS) && jParams[MSG_KEY_ARGUMENTS].isObject())
 		{
 			jArguments = jParams[MSG_KEY_ARGUMENTS];
+		}
+		if (jParams.isMember(MSG_KEY_META) && jParams[MSG_KEY_META].isObject())
+		{
+			auto& jMeta = jParams[MSG_KEY_META];
+			toolCallId.DoDeserialize(jMeta);
 		}
 
 		return ERRNO_OK;

@@ -33,5 +33,69 @@ namespace MCP
 				return "";
 			}
 		}
+
+		inline std::vector<std::string> split_json_objects_string(const std::string& input)
+		{
+			std::vector<std::string> result;
+			int braceCount = 0;
+			bool inString = false;
+			bool escape = false;
+
+			size_t start = std::string::npos;
+
+			for (size_t i = 0; i < input.size(); ++i)
+			{
+				char c = input[i];
+
+				// 处理字符串内部的转义字符
+				if (inString)
+				{
+					if (escape)
+					{
+						escape = false;
+					}
+					else if (c == '\\')
+					{
+						escape = true;
+					}
+					else if (c == '"')
+					{
+						inString = false;
+					}
+					continue;
+				}
+
+				// 字符串开始
+				if (c == '"')
+				{
+					inString = true;
+					continue;
+				}
+
+				// 跳过空白直到遇到第一个 '{'
+				if (braceCount == 0)
+				{
+					if (c == '{')
+					{
+						start = i;
+						braceCount = 1;
+					}
+					continue;
+				}
+
+				// 计数大括号
+				if (c == '{') braceCount++;
+				else if (c == '}') braceCount--;
+
+				// 完成一个 JSON 对象
+				if (braceCount == 0 && start != std::string::npos)
+				{
+					result.push_back(input.substr(start, i - start + 1));
+					start = std::string::npos;
+				}
+			}
+
+			return result;
+		}
 	}
 }

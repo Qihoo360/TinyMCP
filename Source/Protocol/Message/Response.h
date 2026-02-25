@@ -23,6 +23,20 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
+	struct EmptyResponse : public MCP::Response
+	{
+	public:
+		EmptyResponse(bool bNeedIdentity)
+			: Response(MessageType_EmptyResponse, bNeedIdentity)
+		{
+
+		}
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct ErrorResponse : public MCP::Response
 	{
 	public:

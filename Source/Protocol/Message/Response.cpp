@@ -33,6 +33,26 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// EmptyResponse
+	int EmptyResponse::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int EmptyResponse::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool EmptyResponse::IsValid() const
+	{
+		return Response::IsValid();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// ErrorResponse
 	int ErrorResponse::DoSerialize(Json::Value& jMsg) const
 	{

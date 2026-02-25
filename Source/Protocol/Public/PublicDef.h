@@ -49,8 +49,10 @@ namespace MCP
 	static constexpr const char* MSG_KEY_PROGRESS = "progress";
 	static constexpr const char* MSG_KEY_TOTAL = "total";
 	static constexpr const char* MSG_KEY_REQUEST_ID = "requestId";
+	static constexpr const char* MSG_KEY_TOOL_CALL_ID = "toolCallId";
 	
 
+	static constexpr const char* METHOD_PING = "ping";
 	static constexpr const char* METHOD_INITIALIZE = "initialize";
 	static constexpr const char* METHOD_NOTIFICATION_INITIALIZED = "notifications/initialized";
 	static constexpr const char* METHOD_NOTIFICATION_CANCELLED = "notifications/cancelled";
@@ -107,6 +109,7 @@ namespace MCP
 		MessageType_Unknown,
 		MessageType_RequestId,
 		MessageType_Implementation,
+		MessageType_PingRequest,
 		MessageType_InitializeRequest,
 		MessageType_InitializeResult,
 		MessageType_InitializedNotification,
@@ -128,5 +131,6 @@ namespace MCP
 		MessageType_ProgressToken,
 		MessageType_ProgressNotification,
 		MessageType_ErrorResponse,
+		MessageType_EmptyResponse,
 	};
 }

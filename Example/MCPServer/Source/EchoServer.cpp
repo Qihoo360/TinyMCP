@@ -38,5 +38,10 @@ namespace Implementation
         return MCP::ERRNO_OK;
     }
 
+    int CEchoServer::Uninitialize()
+    {
+        return MCP::ERRNO_OK;
+    }
+
     CEchoServer CEchoServer::s_Instance;
 }
