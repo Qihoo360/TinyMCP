@@ -39,8 +39,15 @@ namespace MCP
 			if (ERRNO_OK != iErrCode)
 				return iErrCode;
 
-			Json::FastWriter writer;
-			str = writer.write(jMsg);
+			Json::StreamWriterBuilder builder;
+			builder["indentation"] = "";
+			builder["enableYAMLCompatibility"] = false;
+			builder["commentStyle"] = "None";
+			builder["emitUTF8"] = true;
+			str = Json::writeString(builder, jMsg);
+
+			//Json::FastWriter writer;
+			//str = writer.write(jMsg);
 
 			return ERRNO_OK;
 		}
