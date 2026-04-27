@@ -15,6 +15,8 @@ namespace Implementation
         MCP::Tools tools;
         RegisterServerToolsCapabilities(tools);
 		MCP::Resources resources;
+        resources.bListChanged = true;
+		resources.bSubscribe = true;
 		RegisterServerResourcesCapabilities(resources);
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
@@ -30,11 +32,18 @@ namespace Implementation
         RegisterServerTools({ tool }, false);
 
 		MCP::Resource resource;
-		resource.strName = "echo_resource";
-		resource.strUri = "echo_resource_uri";
-		resource.strDescription = "This is a resource for echo server.";
-		resource.strMimeType = "text/plain";
+		resource.strName = "main.rs";
+		resource.strUri = "file:///project/src/main.rs";
+		resource.strDescription = "Primary application entry point";
+		resource.strMimeType = "text/x-rust";
         RegisterServerResources({ resource }, false);
+
+		MCP::ResourceTemplate resourceTemplate;
+		resourceTemplate.strName = "Project Files";
+		resourceTemplate.strUriTemplate = "file:///{path}";
+		resourceTemplate.strDescription = "Access files in the project directory";
+		resourceTemplate.strMimeType = "application/octet-stream";
+        RegisterServerResourceTemplates({ resourceTemplate }, false);
 
         // 4. Register the tasks for implementing the actual capabilities.
         auto spCallToolsTask = std::make_shared<Implementation::CEchoTask>(nullptr);
