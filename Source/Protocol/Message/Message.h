@@ -1,6 +1,6 @@
 #pragma once
-// 为保证较好的跨平台特性，MCP命名空间的代码均使用标准c++编码
-// 非必要情况下，禁止使用特定系统平台API
+// To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
+// The use of platform-specific system APIs is prohibited unless necessary.
 
 #include "../Public/PublicDef.h"
 #include <atomic>
@@ -27,9 +27,9 @@ namespace MCP
 
 		MessageCategory eMessageCategory{ MessageCategory_Unknown };
 		MessageType eMessageType{ MessageType_Unknown };
-		bool bExist{ true };	// 可选时对象是否存在
-		unsigned long long ullTimestamp{ 0 };	// 毫秒级时间戳
-		unsigned long ulRuntimeId{ 0 };	// 运行时id
+		bool bExist{ true };	// Does the optional object exist
+		unsigned long long ullTimestamp{ 0 };	// Timestamp in milliseconds
+		unsigned long ulRuntimeId{ 0 };	// runtime id
 		static std::atomic_ulong s_ulIdBase;
 
 		int Serialize(std::string& str) const

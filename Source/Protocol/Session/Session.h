@@ -1,6 +1,6 @@
 #pragma once
-// 为保证较好的跨平台特性，MCP命名空间的代码均使用标准c++编码
-// 非必要情况下，禁止使用特定系统平台API
+// To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
+// The use of platform-specific system APIs is prohibited unless necessary.
 
 #include <memory>
 #include <vector>
@@ -66,7 +66,7 @@ namespace MCP
 		int ProcessNotification(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int SwitchState(SessionState eState);
 
-		// 异步任务
+		// Asynchronous Task
 		int CommitAsyncTask(const std::shared_ptr<MCP::CMCPTask>& spTask);
 		int CancelAsyncTask(const MCP::RequestId& requestId);
 		int StartAsyncTaskThread();
@@ -86,7 +86,7 @@ namespace MCP
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 
-		// 异步任务
+		// Asynchronous Task
 		std::unique_ptr<std::thread> m_upTaskThread;
 		std::atomic_bool m_bRunAsyncTask{ true };
 		std::mutex m_mtxAsyncThread;

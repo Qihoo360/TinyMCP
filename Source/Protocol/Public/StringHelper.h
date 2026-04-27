@@ -16,7 +16,6 @@ namespace MCP
 				return converter.from_bytes(str);
 			}
 			catch (const std::exception& e) {
-				// 如果转换失败，返回空字符串
 				return L"";
 			}
 		}
@@ -29,7 +28,6 @@ namespace MCP
 				return converter.to_bytes(strW);
 			}
 			catch (const std::exception& e) {
-				// 如果转换失败，返回空字符串
 				return "";
 			}
 		}
@@ -47,7 +45,7 @@ namespace MCP
 			{
 				char c = input[i];
 
-				// 处理字符串内部的转义字符
+				// Process escape characters inside the string
 				if (inString)
 				{
 					if (escape)
@@ -65,14 +63,14 @@ namespace MCP
 					continue;
 				}
 
-				// 字符串开始
+				// String start
 				if (c == '"')
 				{
 					inString = true;
 					continue;
 				}
 
-				// 跳过空白直到遇到第一个 '{'
+				// Skip whitespace until the first '{' is encountered.
 				if (braceCount == 0)
 				{
 					if (c == '{')
@@ -83,11 +81,11 @@ namespace MCP
 					continue;
 				}
 
-				// 计数大括号
+				// Count curly braces
 				if (c == '{') braceCount++;
 				else if (c == '}') braceCount--;
 
-				// 完成一个 JSON 对象
+				// Complete a JSON object
 				if (braceCount == 0 && start != std::string::npos)
 				{
 					result.push_back(input.substr(start, i - start + 1));

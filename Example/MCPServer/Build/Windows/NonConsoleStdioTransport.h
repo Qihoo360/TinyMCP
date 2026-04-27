@@ -1,5 +1,5 @@
 #pragma once
-// 具体业务模块，不属于MCP命名空间的一部分，可以使用平台特有API
+// Specific business modules, which are not part of the MCP namespace, may adopt platform-specific APIs.
 
 #include "../../Protocol/Transport/Transport.h"
 #include <Windows.h>

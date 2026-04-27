@@ -1,6 +1,6 @@
 #pragma once
-// 为保证较好的跨平台特性，MCP命名空间的代码均使用标准c++编码
-// 非必要情况下，禁止使用特定系统平台API
+// To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
+// The use of platform-specific system APIs is prohibited unless necessary.
 
 #include <string>
 #include <json/json.h>
