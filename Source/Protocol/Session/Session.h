@@ -45,11 +45,19 @@ namespace MCP
 		void SetServerCapabilities(const MCP::ServerCapabilities& capabilities);
 		void SetServerToolsPagination(bool bPagination);
 		void SetServerTools(const std::vector<MCP::Tool>& tools);
+		void SetServerResourcesPagination(bool bPagination);
+		void SetServerResources(const std::vector<MCP::Resource>& resources);
+		void SetServerResourceTemplatesPagination(bool bPagination);
+		void SetServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates);
 		void SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
 		std::vector<MCP::Tool> GetServerTools() const;
+		bool GetServerResourcesPagination() const;
+		std::vector<MCP::Resource> GetServerResources() const;
+		bool GetServerResourceTemplatesPagination() const;
+		std::vector<MCP::ResourceTemplate> GetServerResourceTemplates() const;
 		std::shared_ptr<CMCPTransport> GetTransport() const;
 		SessionState GetSessionState() const;
 		std::shared_ptr<MCP::ProcessRequest> GetServerCallToolsTask(const std::string& strToolName);
@@ -81,7 +89,11 @@ namespace MCP
 		MCP::Implementation m_serverInfo;
 		MCP::ServerCapabilities m_capabilities;
 		std::vector<MCP::Tool> m_tools;
+		std::vector<MCP::Resource> m_resources;
+		std::vector<MCP::ResourceTemplate> m_resourceTemplates;
 		bool m_bToolsPagination{ false };
+		bool m_bResourcesPagination{ false };
+		bool m_bResourceTemplatesPagination{ false };
 
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;

@@ -402,26 +402,108 @@ namespace MCP
 		if (!IsValid())
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spListResourcesResult = std::make_shared<ListResourcesResult>(true);
-		if (!spListResourcesResult)
+		auto spListResourcesRequest = std::dynamic_pointer_cast<ListResourcesRequest>(m_spRequest);
+		if (!spListResourcesRequest)
 			return ERRNO_INTERNAL_ERROR;
-		spListResourcesResult->requestId = m_spRequest->requestId;
-
-		// TODO: 实现资源列表的获取逻辑
-
+		
+		std::shared_ptr<ListResourcesResult> spListResourcesResult = nullptr;
 		std::string strResponse;
-		if (ERRNO_OK != spListResourcesResult->Serialize(strResponse))
-			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
+
+		bool bPagination = CMCPSession::GetInstance().GetServerResourcesPagination();
+		if (bPagination)
+		{
+			if (!spListResourcesRequest->strCursor.empty())
+			{
+				bool bValidCursor = true;
+				unsigned nCursor = 0;
+				try
+				{
+					nCursor = std::stoul(spListResourcesRequest->strCursor);
+				}
+				catch (const std::invalid_argument&)
+				{
+					bValidCursor = false;
+				}
+				catch (const std::out_of_range&)
+				{
+					bValidCursor = false;
+				}
+
+				auto vecServerResources = CMCPSession::GetInstance().GetServerResources();
+				if (bValidCursor)
+				{
+					if (nCursor >= vecServerResources.size())
+					{
+						bValidCursor = false;
+					}
+				}
+
+				if (!bValidCursor)
+				{
+					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+					if (!spErrorResponse)
+						return ERRNO_INTERNAL_ERROR;
+					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
+					spErrorResponse->strMesage = "invalid params";
+					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+						return ERRNO_INTERNAL_ERROR;
+				}
+				else
+				{
+					spListResourcesResult = std::make_shared<ListResourcesResult>(true);
+					if (!spListResourcesResult)
+						return ERRNO_INTERNAL_ERROR;
+					spListResourcesResult->requestId = spListResourcesRequest->requestId;
+					spListResourcesResult->vecResources.clear();
+					spListResourcesResult->vecResources.push_back(vecServerResources[nCursor]);
+					if (nCursor < vecServerResources.size() - 1)
+					{
+						spListResourcesResult->strNextCursor = std::to_string(nCursor + 1);
+					}
+				}
+			}
+			else
+			{
+				spListResourcesResult = std::make_shared<ListResourcesResult>(true);
+				if (!spListResourcesResult)
+					return ERRNO_INTERNAL_ERROR;
+				spListResourcesResult->requestId = spListResourcesRequest->requestId;
+				auto vecServerResources = CMCPSession::GetInstance().GetServerResources();
+				spListResourcesResult->vecResources.clear();
+				if (vecServerResources.size() > 0)
+					spListResourcesResult->vecResources.push_back(vecServerResources[0]);
+				if (vecServerResources.size() > 1)
+					spListResourcesResult->strNextCursor = std::to_string(1);
+			}
+		}
+		else
+		{
+			spListResourcesResult = std::make_shared<ListResourcesResult>(true);
+			if (!spListResourcesResult)
+				return ERRNO_INTERNAL_ERROR;
+			spListResourcesResult->requestId = spListResourcesRequest->requestId;
+			spListResourcesResult->vecResources = CMCPSession::GetInstance().GetServerResources();
+		}
+
+		if (spListResourcesResult)
+		{
+			if (ERRNO_OK != spListResourcesResult->Serialize(strResponse))
+				return ERRNO_INTERNAL_ERROR;
+		}
+
+		if (!strResponse.empty())
+		{
+			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			if (!spTransport)
+				return ERRNO_INTERNAL_ERROR;
 #ifdef _WIN32
-		strResponse += "\r\n";
+			strResponse += "\r\n";
 #else
-		strResponse += "\n";
+			strResponse += "\n";
 #endif // _WIN32
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+			if (ERRNO_OK != spTransport->Write(strResponse))
+				return ERRNO_INTERNAL_ERROR;
+		}
 
 		return ERRNO_OK;
 	}

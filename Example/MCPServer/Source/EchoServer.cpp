@@ -1,4 +1,4 @@
-#include "EchoServer.h"
+﻿#include "EchoServer.h"
 #include "EchoTask.h"
 
 namespace Implementation
@@ -14,6 +14,8 @@ namespace Implementation
         // 2. Register the Server's capability declaration.
         MCP::Tools tools;
         RegisterServerToolsCapabilities(tools);
+		MCP::Resources resources;
+		RegisterServerResourcesCapabilities(resources);
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
         MCP::Tool tool;
@@ -25,9 +27,14 @@ namespace Implementation
         if (!reader.parse(strInputSchema, jInputSchema) || !jInputSchema.isObject())
             return MCP::ERRNO_PARSE_ERROR;
         tool.jInputSchema = jInputSchema;
-        std::vector<MCP::Tool> vecTools;
-        vecTools.push_back(tool);
-        RegisterServerTools(vecTools, false);
+        RegisterServerTools({ tool }, false);
+
+		MCP::Resource resource;
+		resource.strName = "echo_resource";
+		resource.strUri = "echo_resource_uri";
+		resource.strDescription = "This is a resource for echo server.";
+		resource.strMimeType = "text/plain";
+        RegisterServerResources({ resource }, false);
 
         // 4. Register the tasks for implementing the actual capabilities.
         auto spCallToolsTask = std::make_shared<Implementation::CEchoTask>(nullptr);

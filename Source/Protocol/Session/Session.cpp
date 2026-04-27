@@ -687,6 +687,26 @@ namespace MCP
 		m_tools = tools;
 	}
 
+	void CMCPSession::SetServerResourcesPagination(bool bPagination)
+	{
+		m_bResourcesPagination = bPagination;
+	}
+
+	void CMCPSession::SetServerResources(const std::vector<MCP::Resource>& resources)
+	{
+		m_resources = resources;
+	}
+
+	void CMCPSession::SetServerResourceTemplatesPagination(bool bPagination)
+	{
+		m_bResourceTemplatesPagination = bPagination;
+	}
+
+	void CMCPSession::SetServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates)
+	{
+		m_resourceTemplates = resourceTemplates;
+	}
+
 	void CMCPSession::SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks)
 	{
 		m_hashCallToolsTasks = hashCallToolsTasks;
@@ -710,6 +730,26 @@ namespace MCP
 	std::vector<MCP::Tool> CMCPSession::GetServerTools() const
 	{
 		return m_tools;
+	}
+
+	bool CMCPSession::GetServerResourcesPagination() const
+	{
+		return m_bResourcesPagination;
+	}
+
+	std::vector<MCP::Resource> CMCPSession::GetServerResources() const
+	{
+		return m_resources;
+	}
+
+	bool CMCPSession::GetServerResourceTemplatesPagination() const
+	{
+		return m_bResourceTemplatesPagination;
+	}
+
+	std::vector<MCP::ResourceTemplate> CMCPSession::GetServerResourceTemplates() const
+	{
+		return m_resourceTemplates;
 	}
 
 	std::shared_ptr<CMCPTransport> CMCPSession::GetTransport() const

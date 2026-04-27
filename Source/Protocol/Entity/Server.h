@@ -51,6 +51,18 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerTools(tools);
 		}
 
+		void RegisterServerResources(const std::vector<MCP::Resource>& resources, bool bPagination)
+		{
+			MCP::CMCPSession::GetInstance().SetServerResourcesPagination(bPagination);
+			MCP::CMCPSession::GetInstance().SetServerResources(resources);
+		}
+
+		void RegisterServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates, bool bPagination)
+		{
+			MCP::CMCPSession::GetInstance().SetServerResourceTemplatesPagination(bPagination);
+			MCP::CMCPSession::GetInstance().SetServerResourceTemplates(resourceTemplates);
+		}
+
 		void RegisterToolsTasks(const std::string& strToolName, std::shared_ptr<MCP::ProcessCallToolRequest> spTask)
 		{
 			m_hashCallToolsTasks[strToolName] = spTask;
