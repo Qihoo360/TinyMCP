@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -102,6 +102,57 @@ namespace MCP
 		std::vector<MCP::TextContent> vecTextContent;
 		std::vector<MCP::ImageContent> vecImageContent;
 		std::vector<MCP::EmbeddedResource> vecEmbeddedResource;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ListResourcesResult : public MCP::Response
+	{
+	public:
+		ListResourcesResult(bool bNeedIdentity)
+			: Response(MessageType_ListResourcesResult, bNeedIdentity)
+		{
+
+		}
+
+		std::vector<MCP::Resource> vecResources;
+		std::string strNextCursor;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ReadResourceResult : public MCP::Response
+	{
+	public:
+		ReadResourceResult(bool bNeedIdentity)
+			: Response(MessageType_ReadResourceResult, bNeedIdentity)
+		{
+
+		}
+
+		std::vector<MCP::TextResourceContents> vecTextResourceContents;
+		std::vector<MCP::BlobResourceContents> vecBlobResourceContents;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ListResourceTemplatesResult : public MCP::Response
+	{
+	public:
+		ListResourceTemplatesResult(bool bNeedIdentity)
+			: Response(MessageType_ListResourceTemplatesResult, bNeedIdentity)
+		{
+
+		}
+
+		std::vector<MCP::ResourceTemplate> vecResourceTemplates;
+		std::string strNextCursor;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

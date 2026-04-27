@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -108,5 +108,70 @@ namespace MCP
 	private:
 		bool m_bFinished{ false };
 		bool m_bCancelled{ false };
+	};
+
+	class ProcessListResourcesRequest : public ProcessRequest
+	{
+	public:
+		ProcessListResourcesRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
+	class ProcessReadResourceRequest : public ProcessRequest
+	{
+	public:
+		ProcessReadResourceRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
+	class ProcessSubscribeRequest : public ProcessRequest
+	{
+	public:
+		ProcessSubscribeRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
+	class ProcessUnsubscribeRequest : public ProcessRequest
+	{
+	public:
+		ProcessUnsubscribeRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
+	class ProcessListResourceTemplatesRequest : public ProcessRequest
+	{
+	public:
+		ProcessListResourceTemplatesRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
 	};
 }

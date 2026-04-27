@@ -149,4 +149,63 @@ namespace MCP
 
 		return progressToken.IsValid();
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ResourceListChangedNotification
+	bool ResourceListChangedNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED) != 0)
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ResourceUpdatedNotification
+	int ResourceUpdatedNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		Json::Value jUri(strUri);
+		jParams[MSG_KEY_URI] = jUri;
+		jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
+	}
+
+	int ResourceUpdatedNotification::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Notification::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_INVALID_NOTIFICATION;
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+		if (!jParams.isMember(MSG_KEY_URI) || !jParams[MSG_KEY_URI].isString())
+			return ERRNO_INVALID_NOTIFICATION;
+		strUri = jParams[MSG_KEY_URI].asString();
+
+		return ERRNO_OK;
+	}
+
+	bool ResourceUpdatedNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_NOTIFICATION_RESOURCES_UPDATED) != 0)
+			return false;
+
+		if (strUri.empty())
+			return false;
+
+		return true;
+	}
 }

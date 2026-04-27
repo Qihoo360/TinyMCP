@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -38,6 +38,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_ARGUMENTS = "arguments";
 	static constexpr const char* MSG_KEY_IS_ERROR = "isError";
 	static constexpr const char* MSG_KEY_CONTENT = "content";
+	static constexpr const char* MSG_KEY_CONTENTS = "contents";
 	static constexpr const char* MSG_KEY_TEXT = "text";
 	static constexpr const char* MSG_KEY_TYPE = "type";
 	static constexpr const char* MSG_KEY_MIMETYPE = "mimeType";
@@ -50,6 +51,9 @@ namespace MCP
 	static constexpr const char* MSG_KEY_TOTAL = "total";
 	static constexpr const char* MSG_KEY_REQUEST_ID = "requestId";
 	static constexpr const char* MSG_KEY_TOOL_CALL_ID = "toolCallId";
+	static constexpr const char* MSG_KEY_SIZE = "size";
+	static constexpr const char* MSG_KEY_RESOURCE_TEMPLATES = "resourceTemplates";
+	static constexpr const char* MSG_KEY_URI_TEMPLATE = "uriTemplate";
 	
 
 	static constexpr const char* METHOD_PING = "ping";
@@ -59,6 +63,13 @@ namespace MCP
 	static constexpr const char* METHOD_NOTIFICATION_PROGRESS = "notifications/progress";
 	static constexpr const char* METHOD_TOOLS_LIST = "tools/list";
 	static constexpr const char* METHOD_TOOLS_CALL = "tools/call";
+	static constexpr const char* METHOD_RESOURCES_LIST = "resources/list";
+	static constexpr const char* METHOD_RESOURCES_READ = "resources/read";
+	static constexpr const char* METHOD_RESOURCES_SUBSCRIBE = "resources/subscribe";
+	static constexpr const char* METHOD_RESOURCES_UNSUBSCRIBE = "resources/unsubscribe";
+	static constexpr const char* METHOD_RESOURCES_TEMPLATES_LIST = "resources/templates/list";
+	static constexpr const char* METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
+	static constexpr const char* METHOD_NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
@@ -81,11 +92,13 @@ namespace MCP
 
 	// Server-side custom error codes
 	static constexpr const int ERRNO_SERVER_ERROR_FIRST = -32000;
-	static constexpr const int ERRNO_INVALID_RESPONSE = -32001;
-	static constexpr const int ERRNO_INVALID_NOTIFICATION = -32002;
-	static constexpr const int ERRNO_INTERNAL_INPUT_TERMINATE = -32003;
-	static constexpr const int ERRNO_INTERNAL_INPUT_ERROR = -32004;
-	static constexpr const int ERRNO_INTERNAL_OUTPUT_ERROR = -32005;
+	static constexpr const int ERRNO_HEADER_MISMATCH = -32001;
+	static constexpr const int ERRNO_RESOURCE_NOT_FOUND = -32002;
+	static constexpr const int ERRNO_INVALID_RESPONSE = -32094;
+	static constexpr const int ERRNO_INVALID_NOTIFICATION = -32095;
+	static constexpr const int ERRNO_INTERNAL_INPUT_TERMINATE = -32096;
+	static constexpr const int ERRNO_INTERNAL_INPUT_ERROR = -32097;
+	static constexpr const int ERRNO_INTERNAL_OUTPUT_ERROR = -32098;
 	static constexpr const int ERRNO_SERVER_ERROR_LAST = -32099;
 
 	enum DataType
@@ -132,5 +145,17 @@ namespace MCP
 		MessageType_ProgressNotification,
 		MessageType_ErrorResponse,
 		MessageType_EmptyResponse,
+		MessageType_ListResourcesRequest,
+		MessageType_ListResourcesResult,
+		MessageType_ReadResourceRequest,
+		MessageType_ReadResourceResult,
+		MessageType_SubscribeRequest,
+		MessageType_UnsubscribeRequest,
+		MessageType_ListResourceTemplatesRequest,
+		MessageType_ListResourceTemplatesResult,
+		MessageType_ResourceListChangedNotification,
+		MessageType_ResourceUpdatedNotification,
+		MessageType_Resource,
+		MessageType_ResourceTemplate,
 	};
 }

@@ -1,4 +1,4 @@
-#include "BasicTask.h"
+﻿#include "BasicTask.h"
 #include "../Session/Session.h"
 #include "../Message/Notification.h"
 
@@ -387,6 +387,190 @@ namespace MCP
 	int ProcessCallToolRequest::NotifyCancelled()
 	{
 		m_bCancelled = true;
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessListResourcesRequest
+	std::shared_ptr<CMCPTask> ProcessListResourcesRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessListResourcesRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spListResourcesResult = std::make_shared<ListResourcesResult>(true);
+		if (!spListResourcesResult)
+			return ERRNO_INTERNAL_ERROR;
+		spListResourcesResult->requestId = m_spRequest->requestId;
+
+		// TODO: 实现资源列表的获取逻辑
+
+		std::string strResponse;
+		if (ERRNO_OK != spListResourcesResult->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessReadResourceRequest
+	std::shared_ptr<CMCPTask> ProcessReadResourceRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessReadResourceRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spReadResourceRequest = std::dynamic_pointer_cast<ReadResourceRequest>(m_spRequest);
+		if (!spReadResourceRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spReadResourceResult = std::make_shared<ReadResourceResult>(true);
+		if (!spReadResourceResult)
+			return ERRNO_INTERNAL_ERROR;
+		spReadResourceResult->requestId = m_spRequest->requestId;
+
+		// TODO: 实现资源读取逻辑
+
+		std::string strResponse;
+		if (ERRNO_OK != spReadResourceResult->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessSubscribeRequest
+	std::shared_ptr<CMCPTask> ProcessSubscribeRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessSubscribeRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
+		if (!spEmptyResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spEmptyResponse->requestId = m_spRequest->requestId;
+
+		// TODO: 实现资源订阅逻辑
+
+		std::string strResponse;
+		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessUnsubscribeRequest
+	std::shared_ptr<CMCPTask> ProcessUnsubscribeRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessUnsubscribeRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
+		if (!spEmptyResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spEmptyResponse->requestId = m_spRequest->requestId;
+
+		// TODO: 实现资源取消订阅逻辑
+
+		std::string strResponse;
+		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessListResourceTemplatesRequest
+	std::shared_ptr<CMCPTask> ProcessListResourceTemplatesRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessListResourceTemplatesRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spListResourceTemplatesResult = std::make_shared<ListResourceTemplatesResult>(true);
+		if (!spListResourceTemplatesResult)
+			return ERRNO_INTERNAL_ERROR;
+		spListResourceTemplatesResult->requestId = m_spRequest->requestId;
+
+		// TODO: 实现资源模板列表的获取逻辑
+
+		std::string strResponse;
+		if (ERRNO_OK != spListResourceTemplatesResult->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
 		return ERRNO_OK;
 	}
 }

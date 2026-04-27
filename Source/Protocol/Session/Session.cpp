@@ -1,4 +1,4 @@
-#include "Session.h"
+﻿#include "Session.h"
 #include "../Public/PublicDef.h"
 #include "../Public/StringHelper.h"
 #include "../Message/BasicMessage.h"
@@ -129,105 +129,195 @@ namespace MCP
 
 		switch (spRequest->eMessageType)
 		{
-			case MessageType_InitializeRequest:
+		case MessageType_InitializeRequest:
+		{
+			if (CMCPSession::SessionState_Original != CMCPSession::GetInstance().GetSessionState())
 			{
-				if (CMCPSession::SessionState_Original != CMCPSession::GetInstance().GetSessionState())
-				{
-					strMessage = ERROR_MESSAGE_INVALID_REQUEST;
-					iErrCode = ERRNO_INVALID_REQUEST;
-					goto PROC_END;
-				}
+				strMessage = ERROR_MESSAGE_INVALID_REQUEST;
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
 
-				auto spTask = std::make_shared<ProcessInitializeRequest>(spRequest);
-				if (!spTask)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
-				iErrCode = spTask->Execute();
-				if (ERRNO_OK != iErrCode)
-				{
-					goto PROC_END;
-				}
-
-				iErrCode = SwitchState(SessionState_Initializing);
-
-			} break;
-			case MessageType_ListToolsRequest:
+			auto spTask = std::make_shared<ProcessInitializeRequest>(spRequest);
+			if (!spTask)
 			{
-				if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
-				{
-					strMessage = ERROR_MESSAGE_INVALID_REQUEST;
-					iErrCode = ERRNO_INVALID_REQUEST;
-					goto PROC_END;
-				}
-
-				auto spTask = std::make_shared<ProcessListToolsRequest>(spRequest);
-				if (!spTask)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
-
-				iErrCode = spTask->Execute();
-
-			} break;
-			case MessageType_CallToolRequest:
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			iErrCode = spTask->Execute();
+			if (ERRNO_OK != iErrCode)
 			{
-				if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
-				{
-					iErrCode = ERRNO_INVALID_REQUEST;
-					goto PROC_END;
-				}
+				goto PROC_END;
+			}
 
-				auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(spRequest);
-				if (!spCallToolRequest)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
-				auto spProcessCallToolRequest = CMCPSession::GetInstance().GetServerCallToolsTask(spCallToolRequest->strName);
-				if (!spProcessCallToolRequest)
-				{
-					strMessage = ERROR_MESSAGE_INVALID_PARAMS;
-					iErrCode = ERRNO_INVALID_PARAMS;
-					goto PROC_END;
-				}
-				auto spNewTask = spProcessCallToolRequest->Clone();
-				if (!spNewTask)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
-				auto spNewProcessCallToolRequest = std::dynamic_pointer_cast<MCP::ProcessCallToolRequest>(spNewTask);
-				if (!spNewProcessCallToolRequest)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
-				spNewProcessCallToolRequest->SetRequest(spRequest);
-				iErrCode = CommitAsyncTask(spNewProcessCallToolRequest);
+			iErrCode = SwitchState(SessionState_Initializing);
 
-			} break;
-			case MessageType_PingRequest:
+		} break;
+		case MessageType_ListToolsRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
 			{
-				if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
-				{
-					iErrCode = ERRNO_INVALID_REQUEST;
-					goto PROC_END;
-				}
+				strMessage = ERROR_MESSAGE_INVALID_REQUEST;
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
 
-				auto spTask = std::make_shared<ProcessPingRequest>(spRequest);
-				if (!spTask)
-				{
-					iErrCode = ERRNO_INTERNAL_ERROR;
-					goto PROC_END;
-				}
+			auto spTask = std::make_shared<ProcessListToolsRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
 
-				iErrCode = spTask->Execute();
+			iErrCode = spTask->Execute();
 
-			} break;
-			default: break;
+		} break;
+		case MessageType_CallToolRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(spRequest);
+			if (!spCallToolRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spProcessCallToolRequest = CMCPSession::GetInstance().GetServerCallToolsTask(spCallToolRequest->strName);
+			if (!spProcessCallToolRequest)
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spNewTask = spProcessCallToolRequest->Clone();
+			if (!spNewTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spNewProcessCallToolRequest = std::dynamic_pointer_cast<MCP::ProcessCallToolRequest>(spNewTask);
+			if (!spNewProcessCallToolRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			spNewProcessCallToolRequest->SetRequest(spRequest);
+			iErrCode = CommitAsyncTask(spNewProcessCallToolRequest);
+
+		} break;
+		case MessageType_PingRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessPingRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_ListResourcesRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessListResourcesRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_ReadResourceRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessReadResourceRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_SubscribeRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessSubscribeRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_UnsubscribeRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessUnsubscribeRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_ListResourceTemplatesRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessListResourceTemplatesRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		default: break;
 		}
 
 	PROC_END:
@@ -420,6 +510,76 @@ namespace MCP
 
 			return ERRNO_OK;
 		}
+		else if (spRequest->strMethod.compare(METHOD_RESOURCES_LIST) == 0)
+		{
+			auto spListResourcesRequest = std::make_shared<MCP::ListResourcesRequest>(true);
+			if (!spListResourcesRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spListResourcesRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spListResourcesRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_RESOURCES_READ) == 0)
+		{
+			auto spReadResourceRequest = std::make_shared<MCP::ReadResourceRequest>(true);
+			if (!spReadResourceRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spReadResourceRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spReadResourceRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_RESOURCES_SUBSCRIBE) == 0)
+		{
+			auto spSubscribeRequest = std::make_shared<MCP::SubscribeRequest>(true);
+			if (!spSubscribeRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spSubscribeRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spSubscribeRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_RESOURCES_UNSUBSCRIBE) == 0)
+		{
+			auto spUnsubscribeRequest = std::make_shared<MCP::UnsubscribeRequest>(true);
+			if (!spUnsubscribeRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spUnsubscribeRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spUnsubscribeRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_RESOURCES_TEMPLATES_LIST) == 0)
+		{
+			auto spListResourceTemplatesRequest = std::make_shared<MCP::ListResourceTemplatesRequest>(true);
+			if (!spListResourceTemplatesRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spListResourceTemplatesRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spListResourceTemplatesRequest;
+
+			return ERRNO_OK;
+		}
 
 		return ERRNO_INTERNAL_ERROR;
 	}
@@ -467,6 +627,34 @@ namespace MCP
 				return ERRNO_INVALID_NOTIFICATION;
 
 			spMsg = spCancelledNotification;
+
+			return ERRNO_OK;
+		}
+		else if (spNotification->strMethod.compare(METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED) == 0)
+		{
+			auto spResourceListChangedNotification = std::make_shared<MCP::ResourceListChangedNotification>(true);
+			if (!spResourceListChangedNotification)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spResourceListChangedNotification->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_NOTIFICATION;
+
+			spMsg = spResourceListChangedNotification;
+
+			return ERRNO_OK;
+		}
+		else if (spNotification->strMethod.compare(METHOD_NOTIFICATION_RESOURCES_UPDATED) == 0)
+		{
+			auto spResourceUpdatedNotification = std::make_shared<MCP::ResourceUpdatedNotification>(true);
+			if (!spResourceUpdatedNotification)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spResourceUpdatedNotification->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_NOTIFICATION;
+
+			spMsg = spResourceUpdatedNotification;
 
 			return ERRNO_OK;
 		}

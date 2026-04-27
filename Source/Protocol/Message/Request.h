@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -84,6 +84,86 @@ namespace MCP
 		std::string strName;
 		Json::Value jArguments;
 		RequestId toolCallId;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ListResourcesRequest : public MCP::Request
+	{
+	public:
+		ListResourcesRequest(bool bNeedIdentity)
+			: Request(MessageType_ListResourcesRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strCursor;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ReadResourceRequest : public MCP::Request
+	{
+	public:
+		ReadResourceRequest(bool bNeedIdentity)
+			: Request(MessageType_ReadResourceRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strUri;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct SubscribeRequest : public MCP::Request
+	{
+	public:
+		SubscribeRequest(bool bNeedIdentity)
+			: Request(MessageType_SubscribeRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strUri;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct UnsubscribeRequest : public MCP::Request
+	{
+	public:
+		UnsubscribeRequest(bool bNeedIdentity)
+			: Request(MessageType_UnsubscribeRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strUri;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ListResourceTemplatesRequest : public MCP::Request
+	{
+	public:
+		ListResourceTemplatesRequest(bool bNeedIdentity)
+			: Request(MessageType_ListResourceTemplatesRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strCursor;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

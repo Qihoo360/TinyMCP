@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -219,6 +219,43 @@ namespace MCP
 		std::string strType;
 		TextResourceContents textResource;
 		BlobResourceContents blobResource;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct Resource : public MCP::Message
+	{
+		Resource()
+			: Message(MessageType_Resource, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strName;
+		std::string strUri;
+		std::string strDescription;
+		std::string strMimeType;
+		int iSize{ 0 };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ResourceTemplate : public MCP::Message
+	{
+		ResourceTemplate()
+			: Message(MessageType_ResourceTemplate, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strName;
+		std::string strUriTemplate;
+		std::string strDescription;
+		std::string strMimeType;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

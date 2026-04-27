@@ -1,4 +1,4 @@
-#include "Response.h"
+﻿#include "Response.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -221,6 +221,118 @@ namespace MCP
 		if (vecTextContent.empty() && vecImageContent.empty() && vecEmbeddedResource.empty())
 			return false;
 
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ListResourcesResult
+	int ListResourcesResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jResources(Json::arrayValue);
+		for (auto& resource : vecResources)
+		{
+			Json::Value jResource(Json::objectValue);
+			if (ERRNO_OK == resource.DoSerialize(jResource))
+			{
+				jResources.append(jResource);
+			}
+		}
+		jResult[MSG_KEY_RESOURCES] = jResources;
+
+		if (!strNextCursor.empty())
+		{
+			Json::Value jNextCursor(strNextCursor);
+			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
+		}
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int ListResourcesResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool ListResourcesResult::IsValid() const
+	{
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ReadResourceResult
+	int ReadResourceResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jContents(Json::arrayValue);
+		for (auto& text : vecTextResourceContents)
+		{
+			Json::Value jTextContent(Json::objectValue);
+			if (ERRNO_OK == text.DoSerialize(jTextContent))
+				jContents.append(jTextContent);
+		}
+		for (auto& blob : vecBlobResourceContents)
+		{
+			Json::Value jBlobContent(Json::objectValue);
+			if (ERRNO_OK == blob.DoSerialize(jBlobContent))
+				jContents.append(jBlobContent);
+		}
+		jResult[MSG_KEY_CONTENTS] = jContents;
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int ReadResourceResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool ReadResourceResult::IsValid() const
+	{
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ListResourceTemplatesResult
+	int ListResourceTemplatesResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jResourceTemplates(Json::arrayValue);
+		for (auto& template_ : vecResourceTemplates)
+		{
+			Json::Value jTemplate(Json::objectValue);
+			if (ERRNO_OK == template_.DoSerialize(jTemplate))
+			{
+				jResourceTemplates.append(jTemplate);
+			}
+		}
+		jResult[MSG_KEY_RESOURCE_TEMPLATES] = jResourceTemplates;
+
+		if (!strNextCursor.empty())
+		{
+			Json::Value jNextCursor(strNextCursor);
+			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
+		}
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int ListResourceTemplatesResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool ListResourceTemplatesResult::IsValid() const
+	{
 		return true;
 	}
 }

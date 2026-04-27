@@ -1,4 +1,4 @@
-#include "BasicMessage.h"
+﻿#include "BasicMessage.h"
 #include <json/json.h>
 
 namespace MCP
@@ -462,6 +462,105 @@ namespace MCP
 	bool BlobResourceContents::IsValid() const
 	{
 		if (strBlob.empty() || strUri.empty())
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// Resource
+	int Resource::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jName(strName);
+		jMsg[MSG_KEY_NAME] = jName;
+		Json::Value jUri(strUri);
+		jMsg[MSG_KEY_URI] = jUri;
+		if (!strDescription.empty())
+		{
+			Json::Value jDesc(strDescription);
+			jMsg[MSG_KEY_DESCRIPTION] = jDesc;
+		}
+		if (!strMimeType.empty())
+		{
+			Json::Value jMimeType(strMimeType);
+			jMsg[MSG_KEY_MIMETYPE] = jMimeType;
+		}
+		if (iSize > 0)
+		{
+			Json::Value jSize(iSize);
+			jMsg[MSG_KEY_SIZE] = jSize;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int Resource::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isMember(MSG_KEY_NAME) || !jMsg[MSG_KEY_NAME].isString())
+			return ERRNO_PARSE_ERROR;
+		strName = jMsg[MSG_KEY_NAME].asString();
+		if (!jMsg.isMember(MSG_KEY_URI) || !jMsg[MSG_KEY_URI].isString())
+			return ERRNO_PARSE_ERROR;
+		strUri = jMsg[MSG_KEY_URI].asString();
+		if (jMsg.isMember(MSG_KEY_DESCRIPTION) && jMsg[MSG_KEY_DESCRIPTION].isString())
+			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
+		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
+			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
+		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isIntegral())
+			iSize = jMsg[MSG_KEY_SIZE].asInt();
+
+		return ERRNO_OK;
+	}
+
+	bool Resource::IsValid() const
+	{
+		if (strName.empty() || strUri.empty())
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ResourceTemplate
+	int ResourceTemplate::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jName(strName);
+		jMsg[MSG_KEY_NAME] = jName;
+		Json::Value jUriTemplate(strUriTemplate);
+		jMsg[MSG_KEY_URI_TEMPLATE] = jUriTemplate;
+		if (!strDescription.empty())
+		{
+			Json::Value jDesc(strDescription);
+			jMsg[MSG_KEY_DESCRIPTION] = jDesc;
+		}
+		if (!strMimeType.empty())
+		{
+			Json::Value jMimeType(strMimeType);
+			jMsg[MSG_KEY_MIMETYPE] = jMimeType;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int ResourceTemplate::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isMember(MSG_KEY_NAME) || !jMsg[MSG_KEY_NAME].isString())
+			return ERRNO_PARSE_ERROR;
+		strName = jMsg[MSG_KEY_NAME].asString();
+		if (!jMsg.isMember(MSG_KEY_URI_TEMPLATE) || !jMsg[MSG_KEY_URI_TEMPLATE].isString())
+			return ERRNO_PARSE_ERROR;
+		strUriTemplate = jMsg[MSG_KEY_URI_TEMPLATE].asString();
+		if (jMsg.isMember(MSG_KEY_DESCRIPTION) && jMsg[MSG_KEY_DESCRIPTION].isString())
+			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
+		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
+			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
+
+		return ERRNO_OK;
+	}
+
+	bool ResourceTemplate::IsValid() const
+	{
+		if (strName.empty() || strUriTemplate.empty())
 			return false;
 
 		return true;
