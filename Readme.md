@@ -30,7 +30,7 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Message | Definition and implementation of the basic data structures of the MCP protocol, mainly including the implementation of protocol data such as standard requests, responses, and notifications that follow the JSON-RPC 2.0 protocol. |
 | Session | Definition and implementation of MCP protocol interaction sessions, mainly including the implementation of stateful sessions based on the C/S architecture and the maintenance of the complete MCP session lifecycle (initialization phase, running phase, and closing phase). |
 | Transport | Definition of data transmission channels between various endpoints based on the C/S architecture, which also includes an implementation of a default stdio transmission channel. |
-| Task | Definition and implementation of various MCP tasks, such as the three - way handshake and capability negotiation task during the initialization phase, and the processing tasks for major requests like Prompts (not yet implemented), Resources (not yet implemented), Tools (already implemented), etc. Time - consuming tasks are executed asynchronously, while ordinary tasks are executed synchronously. |
+| Task | Definition and implementation of various MCP tasks, such as the three - way handshake and capability negotiation task during the initialization phase, and the processing tasks for major requests like Prompts, Resources, Tools, etc. Time - consuming tasks are executed asynchronously, while ordinary tasks are executed synchronously. |
 | Entity | Definition of various protocol entity classes for MCP, mainly including the base class of the Server following the Singleton pattern. |
 
 ## Feature support brief
