@@ -34,7 +34,7 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Entity | Definition of various protocol entity classes for MCP, mainly including the base class of the Server following the Singleton pattern. |
 
 ## Feature support brief
-> Although not all MCP features have been implemented yet, it is already sufficient for the Tools-type MCP Server.
+> Although not all features of the MCP protocol have been implemented, it is more than sufficient for you to implement your own MCP Server.
 
 | Feature | Remarks | Essential Features | Supported or not |
 | --- | --- | --- | --- |
