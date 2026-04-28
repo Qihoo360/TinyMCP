@@ -36,22 +36,22 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 ## Feature support brief
 > Although not all MCP features have been implemented yet, it is already sufficient for the Tools-type MCP Server.
 
-| Feature | Remarks | Supported or not |
-| --- | --- | --- |
-| Base Protocol | Core JSON-RPC message types | Yes |
-| Lifecycle Management | Connection initialization, capability negotiation, and session control | Yes |
-| Transports | stdio | Yes |
-| Cancellation | Cancellation of in-progress requests through notification messages. | Yes |
-| Progress | Progress tracking for long-running operations through notification messages. | Yes |
-| Tools | Tools enable models to interact with external systems, such as querying databases, calling APIs, or performing computations. | Yes |
-| Pagination | Pagination allows servers to yield results in smaller chunks rather than all at once. | Yes |
-| Ping | Ping mechanism that allows either party to verify that their counterpart is still responsive and the connection is alive. | Yes |
-| Custom Notifications | JSON-RPC 2.0 notifications that are sent by an MCP Server or Client using custom method names, intended for transmitting arbitrary business data. | Yes |
-| Transports | HTTP with Server-Sent Events (SSE) | Not yet |
-| Resources | Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. | Not yet |
-| Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | Not yet |
-| Completion | A standardized way for servers to offer argument autocompletion suggestions for prompts and resource URIs. | Not yet |
-| Logging | A standardized way for servers to send structured log messages to clients. | Not yet |
+| Feature | Remarks | Essential Features | Supported or not |
+| --- | --- | --- | --- |
+| Base Protocol | Core JSON-RPC message types | Yes | Yes |
+| Lifecycle Management | Connection initialization, capability negotiation, and session control | Yes | Yes |
+| Transports | stdio | Yes | Yes |
+| Cancellation | Cancellation of in-progress requests through notification messages. | Yes | Yes |
+| Progress | Progress tracking for long-running operations through notification messages. | Yes | Yes |
+| Tools | Tools enable models to interact with external systems, such as querying databases, calling APIs, or performing computations. | Yes | Yes |
+| Resources | Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. | No | Yes |
+| Pagination | Pagination allows servers to yield results in smaller chunks rather than all at once. | No | Yes |
+| Ping | Ping mechanism that allows either party to verify that their counterpart is still responsive and the connection is alive. | No | Yes |
+| Custom Notifications | JSON-RPC 2.0 notifications that are sent by an MCP Server or Client using custom method names, intended for transmitting arbitrary business data. | No | Yes |
+| Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | No | Not yet |
+| Transports | HTTP with Server-Sent Events (SSE) | No | Not yet |
+| Completion | A standardized way for servers to offer argument autocompletion suggestions for prompts and resource URIs. | No | Not yet |
+| Logging | A standardized way for servers to send structured log messages to clients. | No | Not yet |
 
 ## LICENSE
 TinyMCP is licensed under the MIT License - see the LICENSE file for details.
