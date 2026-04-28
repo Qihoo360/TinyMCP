@@ -715,22 +715,17 @@ namespace MCP
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessUnsubscribeResourceRequest
-	std::shared_ptr<CMCPTask> ProcessUnsubscribeResourceRequest::Clone() const
+	void ProcessUnsubscribeResourceRequest::SetRequestIdToUnsubscribe(const MCP::RequestId& requestId)
 	{
-		return nullptr;
+		m_requestIdToUnsubscribe = requestId;
 	}
 
-	int ProcessUnsubscribeResourceRequest::Execute()
+	int ProcessUnsubscribeResourceRequest::NotifyResult()
 	{
-		if (!IsValid())
-			return ERRNO_INTERNAL_ERROR;
-
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
 		if (!spEmptyResponse)
 			return ERRNO_INTERNAL_ERROR;
 		spEmptyResponse->requestId = m_spRequest->requestId;
-
-		// TODO: 实现资源取消订阅逻辑
 
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
@@ -747,6 +742,62 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		return ERRNO_OK;
+	}
+
+	int ProcessUnsubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
+	{
+		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+		if (!spErrorResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spErrorResponse->requestId = m_spRequest->requestId;
+		spErrorResponse->iCode = iCode;
+		spErrorResponse->strMesage = strMessage;
+		spErrorResponse->jErrorData = jErrData;
+
+		std::string strResponse;
+		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	std::shared_ptr<CMCPTask> ProcessUnsubscribeResourceRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessUnsubscribeResourceRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		int iErrCode = CMCPSession::GetInstance().CancelTask(m_requestIdToUnsubscribe);
+		if (MCP::ERRNO_OK == iErrCode)
+		{
+			NotifyResult();
+		}
+		else
+		{
+			Json::Value jErrData(Json::objectValue);
+			auto spUnsubscribeResourceRequest = std::dynamic_pointer_cast<MCP::UnsubscribeResourceRequest>(m_spRequest);
+			if (spUnsubscribeResourceRequest)
+			{
+				jErrData[MCP::MSG_KEY_DATA] = spUnsubscribeResourceRequest->strUri;
+			}
+			NotifyError(iErrCode, u8"Failed to unsubscribe resource", jErrData);
+		}
+
+		return iErrCode;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

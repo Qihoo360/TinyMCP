@@ -80,6 +80,11 @@ namespace MCP
 		return iErrCode;
 	}
 
+	int CMCPSession::CancelTask(const MCP::RequestId& requestId)
+	{
+		return CancelAsyncTask(requestId);
+	}
+
 	int CMCPSession::ProcessMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg)
 	{
 		if (!spMsg || !spMsg->IsValid())
@@ -331,14 +336,29 @@ namespace MCP
 				goto PROC_END;
 			}
 
+			auto spUnsubscribeRequest = std::dynamic_pointer_cast<MCP::UnsubscribeResourceRequest>(spRequest);
+			if (!spUnsubscribeRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
 			auto spTask = std::make_shared<ProcessUnsubscribeResourceRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
 				goto PROC_END;
 			}
-
+			if (m_hashUri2SubscribeResourceTaskId.find(spUnsubscribeRequest->strUri) == m_hashUri2SubscribeResourceTaskId.end())
+			{
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			spTask->SetRequestIdToUnsubscribe(m_hashUri2SubscribeResourceTaskId[spUnsubscribeRequest->strUri]);
 			iErrCode = spTask->Execute();
+			if (MCP::ERRNO_OK == iErrCode)
+			{
+				m_hashUri2SubscribeResourceTaskId.erase(spUnsubscribeRequest->strUri);
+			}
 
 		} break;
 		case MessageType_ListResourceTemplatesRequest:

@@ -4,6 +4,7 @@
 #include <Message/Request.h>
 #include <string>
 #include <atomic>
+#include <thread>
 
 
 namespace Implementation
@@ -65,5 +66,6 @@ namespace Implementation
 
 	private:
 		std::atomic_bool m_bNeedCancel{ false };
+		std::unique_ptr<std::thread> m_upSubscribeThread;
 	};
 }

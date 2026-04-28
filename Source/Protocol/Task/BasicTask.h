@@ -177,8 +177,15 @@ namespace MCP
 
 		}
 
+		void SetRequestIdToUnsubscribe(const MCP::RequestId& requestId);
+		int NotifyResult();
+		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
+
 		std::shared_ptr<CMCPTask> Clone() const override;
 		int Execute() override;
+
+	private:
+		MCP::RequestId m_requestIdToUnsubscribe;
 	};
 
 	class ProcessListResourceTemplatesRequest : public ProcessRequest

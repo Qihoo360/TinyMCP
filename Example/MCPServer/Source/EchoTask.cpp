@@ -2,8 +2,8 @@
 #include <Public/PublicDef.h>
 #include <Public/StringHelper.h>
 #include <fstream>
-#include <thread>
 #include <chrono>
+#include <memory>
 
 
 namespace Implementation
@@ -163,14 +163,20 @@ namespace Implementation
 		{
 			NotifyResult();
 
-			do
-			{
-				// Simulate resource update notification
-				std::this_thread::sleep_for(std::chrono::seconds(2));
-				NotifyUpdated();
-			} while (!m_bNeedCancel);
+			m_upSubscribeThread = std::make_unique<std::thread>([this]() {
+					do
+					{
+						// Simulate resource update notification
+						std::this_thread::sleep_for(std::chrono::seconds(2));
+						NotifyUpdated();
+					} while (!m_bNeedCancel);
 
-			NotifyCancelled();
+					NotifyCancelled();
+				});
+			if (m_upSubscribeThread)
+			{
+				m_upSubscribeThread->detach();
+			}
 		}
 		else
 		{

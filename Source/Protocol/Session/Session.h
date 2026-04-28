@@ -39,6 +39,7 @@ namespace MCP
 		int Ready();
 		int Run();
 		int Terminate();
+		int CancelTask(const MCP::RequestId& requestId);
 
 		void SetTransport(const std::shared_ptr<CMCPTransport>& spTransport);
 		void SetServerInfo(const MCP::Implementation& impl);
