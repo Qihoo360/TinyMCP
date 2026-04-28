@@ -48,6 +48,7 @@ namespace MCP
 
 		int iCode{ 0 };
 		std::string strMesage;
+		Json::Value jErrorData;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

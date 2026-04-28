@@ -253,14 +253,33 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessReadResourceRequest>(spRequest);
-			if (!spTask)
+			auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(spRequest);
+			if (!spReadResourceRequest)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
 				goto PROC_END;
 			}
-
-			iErrCode = spTask->Execute();
+			auto spProcessReadResourceRequest = CMCPSession::GetInstance().GetServerReadResourceTask(spReadResourceRequest->strUri);
+			if (!spProcessReadResourceRequest)
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spNewTask = spProcessReadResourceRequest->Clone();
+			if (!spNewTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spNewProcessReadResourceRequest = std::dynamic_pointer_cast<MCP::ProcessReadResourceRequest>(spNewTask);
+			if (!spNewProcessReadResourceRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			spNewProcessReadResourceRequest->SetRequest(spRequest);
+			iErrCode = CommitAsyncTask(spNewProcessReadResourceRequest);
 
 		} break;
 		case MessageType_SubscribeRequest:
@@ -712,6 +731,11 @@ namespace MCP
 		m_hashCallToolsTasks = hashCallToolsTasks;
 	}
 
+	void CMCPSession::SetServerReadResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>>& hashReadResourceTasks)
+	{
+		m_hashReadResourceTasks = hashReadResourceTasks;
+	}
+
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
 		return m_serverInfo;
@@ -785,6 +809,14 @@ namespace MCP
 	{
 		if (m_hashCallToolsTasks.count(strToolName) > 0)
 			return m_hashCallToolsTasks[strToolName];
+
+		return nullptr;
+	}
+
+	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerReadResourceTask(const std::string& strResourceUri)
+	{
+		if (m_hashReadResourceTasks.count(strResourceUri) > 0)
+			return m_hashReadResourceTasks[strResourceUri];
 
 		return nullptr;
 	}

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <Task/BasicTask.h>
 #include <Message/Request.h>
@@ -17,6 +17,23 @@ namespace Implementation
 
 		CEchoTask(const std::shared_ptr<MCP::Request>& spRequest)
 			: ProcessCallToolRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		// If it's a time-consuming task, you need to start a thread to execute it asynchronously.
+		int Execute() override;
+		// This method is used to cancel time-consuming asynchronous tasks.
+		int Cancel() override;
+	};
+
+	class CEchoResourceReadTask : public MCP::ProcessReadResourceRequest
+	{
+	public:
+		CEchoResourceReadTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessReadResourceRequest(spRequest)
 		{
 
 		}

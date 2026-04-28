@@ -57,10 +57,12 @@ namespace MCP
 
 		void SetErrorCode(int iCode);
 		void SetErrorMessage(const std::string& strMessage);
+		void SetErrorData(const Json::Value& jErrorData);
 
 	private:
 		int m_iCode{ 0 };
 		std::string m_strMessage;
+		Json::Value m_jErrorData;
 	};
 
 	class ProcessInitializeRequest : public ProcessRequest
@@ -132,8 +134,17 @@ namespace MCP
 
 		}
 
-		std::shared_ptr<CMCPTask> Clone() const override;
-		int Execute() override;
+		bool IsFinished() const override;
+		bool IsCancelled() const override;
+		std::shared_ptr<MCP::ReadResourceResult> BuildResult();
+		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyResult(std::shared_ptr<MCP::ReadResourceResult> spResult);
+		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
+		int NotifyCancelled();
+
+	private:
+		bool m_bFinished{ false };
+		bool m_bCancelled{ false };
 	};
 
 	class ProcessSubscribeRequest : public ProcessRequest

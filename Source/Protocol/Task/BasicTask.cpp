@@ -122,6 +122,7 @@ namespace MCP
 		}
 		spErrorResponse->iCode = m_iCode;
 		spErrorResponse->strMesage = m_strMessage;
+		spErrorResponse->jErrorData = m_jErrorData;
 
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
@@ -148,6 +149,11 @@ namespace MCP
 	void ProcessErrorRequest::SetErrorMessage(const std::string& strMessage)
 	{
 		m_strMessage = strMessage;
+	}
+
+	void ProcessErrorRequest::SetErrorData(const Json::Value& jErrorData)
+	{
+		m_jErrorData = jErrorData;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -510,29 +516,69 @@ namespace MCP
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessReadResourceRequest
-	std::shared_ptr<CMCPTask> ProcessReadResourceRequest::Clone() const
+	bool ProcessReadResourceRequest::IsFinished() const
 	{
-		return nullptr;
+		return m_bFinished;
 	}
 
-	int ProcessReadResourceRequest::Execute()
+	bool ProcessReadResourceRequest::IsCancelled() const
+	{
+		return m_bCancelled;
+	}
+
+	std::shared_ptr<MCP::ReadResourceResult> ProcessReadResourceRequest::BuildResult()
 	{
 		if (!IsValid())
-			return ERRNO_INTERNAL_ERROR;
-
-		auto spReadResourceRequest = std::dynamic_pointer_cast<ReadResourceRequest>(m_spRequest);
-		if (!spReadResourceRequest)
-			return ERRNO_INTERNAL_ERROR;
+			return nullptr;
 
 		auto spReadResourceResult = std::make_shared<ReadResourceResult>(true);
 		if (!spReadResourceResult)
-			return ERRNO_INTERNAL_ERROR;
+			return nullptr;
 		spReadResourceResult->requestId = m_spRequest->requestId;
 
-		// TODO: 实现资源读取逻辑
+		return spReadResourceResult;
+	}
+
+	int ProcessReadResourceRequest::NotifyProgress(int iProgress, int iTotal)
+	{
+		if (!m_spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (m_spRequest->progressToken.IsValid())
+		{
+			MCP::ProgressNotification progressNotification(false);
+			progressNotification.strMethod = METHOD_NOTIFICATION_PROGRESS;
+			progressNotification.progressToken = m_spRequest->progressToken;
+			progressNotification.iProgress = iProgress;
+			progressNotification.iTotal = iTotal;
+
+			std::string strNotification;
+			if (ERRNO_OK != progressNotification.Serialize(strNotification))
+				return ERRNO_INTERNAL_ERROR;
+			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			if (!spTransport)
+				return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+			strNotification += "\r\n";
+#else
+			strNotification += "\n";
+#endif // _WIN32
+			if (ERRNO_OK != spTransport->Write(strNotification))
+				return ERRNO_INTERNAL_ERROR;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int ProcessReadResourceRequest::NotifyResult(std::shared_ptr<MCP::ReadResourceResult> spResult)
+	{
+		m_bFinished = true;
+
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
 
 		std::string strResponse;
-		if (ERRNO_OK != spReadResourceResult->Serialize(strResponse))
+		if (ERRNO_OK != spResult->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
@@ -545,6 +591,26 @@ namespace MCP
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
+		return ERRNO_OK;
+	}
+
+	int ProcessReadResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
+	{
+		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
+		if (spTask)
+		{
+			spTask->SetErrorCode(iCode);
+			spTask->SetErrorMessage(strMessage);
+			spTask->SetErrorData(jErrData);
+			return spTask->Execute();
+		}
+
+		return ERRNO_OK;
+	}
+
+	int ProcessReadResourceRequest::NotifyCancelled()
+	{
+		m_bCancelled = true;
 		return ERRNO_OK;
 	}
 

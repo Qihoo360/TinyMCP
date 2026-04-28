@@ -68,6 +68,10 @@ namespace MCP
 		jError[MSG_KEY_CODE] = jCode;
 		Json::Value jMessage(strMesage);
 		jError[MSG_KEY_MESSAGE] = jMessage;
+		if (!jErrorData.isNull())
+		{
+			jError[MSG_KEY_DATA] = jErrorData;
+		}
 
 		jMsg[MSG_KEY_ERROR] = jError;
 

@@ -68,6 +68,11 @@ namespace MCP
 			m_hashCallToolsTasks[strToolName] = spTask;
 		}
 
+		void RegisterReadResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessReadResourceRequest> spTask)
+		{
+			m_hashReadResourceTasks[strResourceUri] = spTask;
+		}
+
 		virtual int Initialize() = 0;
 		virtual int Uninitialize() = 0;
 
@@ -77,6 +82,7 @@ namespace MCP
 				MCP::CMCPSession::GetInstance().SetTransport(std::make_shared<CStdioTransport>());
 			MCP::CMCPSession::GetInstance().SetServerCapabilities(m_capabilities);
 			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);
+			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
 
 			int iErrCode = MCP::CMCPSession::GetInstance().Ready();
 			if (ERRNO_OK != iErrCode)
@@ -100,5 +106,6 @@ namespace MCP
 
 		MCP::ServerCapabilities m_capabilities;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
 	};
 }

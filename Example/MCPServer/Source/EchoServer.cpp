@@ -50,6 +50,11 @@ namespace Implementation
         if (!spCallToolsTask)
             return MCP::ERRNO_INTERNAL_ERROR;
         RegisterToolsTasks(Implementation::CEchoTask::TOOL_NAME, spCallToolsTask);
+        
+		auto spReadResourceTask = std::make_shared<Implementation::CEchoResourceReadTask>(nullptr);
+		if (!spReadResourceTask)
+            return MCP::ERRNO_INTERNAL_ERROR;
+		RegisterReadResourceTasks(resource.strUri, spReadResourceTask);
 
         return MCP::ERRNO_OK;
     }
