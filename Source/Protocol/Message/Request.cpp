@@ -1,4 +1,4 @@
-#include "Request.h"
+﻿#include "Request.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -290,13 +290,13 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
-	// SubscribeRequest
-	int SubscribeRequest::DoSerialize(Json::Value& jMsg) const
+	// SubscribeResourceRequest
+	int SubscribeResourceRequest::DoSerialize(Json::Value& jMsg) const
 	{
 		return Request::DoSerialize(jMsg);
 	}
 
-	int SubscribeRequest::DoDeserialize(const Json::Value& jMsg)
+	int SubscribeResourceRequest::DoDeserialize(const Json::Value& jMsg)
 	{
 		int iErrCode = Request::DoDeserialize(jMsg);
 		if (ERRNO_OK != iErrCode)
@@ -312,7 +312,7 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
-	bool SubscribeRequest::IsValid() const
+	bool SubscribeResourceRequest::IsValid() const
 	{
 		if (!Request::IsValid())
 			return false;
@@ -327,13 +327,13 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
-	// UnsubscribeRequest
-	int UnsubscribeRequest::DoSerialize(Json::Value& jMsg) const
+	// UnsubscribeResourceRequest
+	int UnsubscribeResourceRequest::DoSerialize(Json::Value& jMsg) const
 	{
 		return Request::DoSerialize(jMsg);
 	}
 
-	int UnsubscribeRequest::DoDeserialize(const Json::Value& jMsg)
+	int UnsubscribeResourceRequest::DoDeserialize(const Json::Value& jMsg)
 	{
 		int iErrCode = Request::DoDeserialize(jMsg);
 		if (ERRNO_OK != iErrCode)
@@ -349,7 +349,7 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
-	bool UnsubscribeRequest::IsValid() const
+	bool UnsubscribeResourceRequest::IsValid() const
 	{
 		if (!Request::IsValid())
 			return false;

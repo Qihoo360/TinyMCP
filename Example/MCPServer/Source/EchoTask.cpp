@@ -2,10 +2,14 @@
 #include <Public/PublicDef.h>
 #include <Public/StringHelper.h>
 #include <fstream>
+#include <thread>
+#include <chrono>
 
 
 namespace Implementation
 {
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoTask
 	std::shared_ptr<MCP::CMCPTask> CEchoTask::Clone() const
 	{
 		auto spClone = std::make_shared<CEchoTask>(nullptr);
@@ -66,6 +70,8 @@ namespace Implementation
 		return iErrCode;
 	}
 
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoResourceReadTask
 	std::shared_ptr<MCP::CMCPTask> CEchoResourceReadTask::Clone() const
 	{
 		auto spClone = std::make_shared<CEchoResourceReadTask>(nullptr);
@@ -88,8 +94,6 @@ namespace Implementation
 		if (!IsValid())
 			return iErrCode;
 
-		Json::Value jArgument;
-		std::string strInput;
 		auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
 		if (!spReadResourceRequest)
 			goto PROC_END;
@@ -116,6 +120,64 @@ namespace Implementation
 			jErrData[MCP::MSG_KEY_URI] = spReadResourceRequest->strUri;
 			iErrCode = NotifyError(iErrCode, u8"Failed to read resource", jErrData);
 		}		
+
+		return iErrCode;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoResourceSubscribeTask
+	std::shared_ptr<MCP::CMCPTask> CEchoResourceSubscribeTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoResourceSubscribeTask>(nullptr);
+		if (spClone)
+		{
+			spClone->m_bCancelled = m_bCancelled;
+			spClone->m_bFinished = m_bFinished;
+			spClone->m_bNeedCancel = m_bNeedCancel ? true : false;
+			spClone->m_spRequest = m_spRequest;
+		}
+
+		return spClone;
+	}
+
+	int CEchoResourceSubscribeTask::Cancel()
+	{
+		m_bNeedCancel = true;
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoResourceSubscribeTask::Execute()
+	{
+		int iErrCode = MCP::ERRNO_INTERNAL_ERROR;
+		if (!IsValid())
+			return iErrCode;
+
+		auto spSubscribeResourceRequest = std::dynamic_pointer_cast<MCP::SubscribeResourceRequest>(m_spRequest);
+		if (!spSubscribeResourceRequest)
+			goto PROC_END;
+
+		iErrCode = MCP::ERRNO_OK;
+
+	PROC_END:
+		if (MCP::ERRNO_OK == iErrCode)
+		{
+			NotifyResult();
+
+			do
+			{
+				// Simulate resource update notification
+				std::this_thread::sleep_for(std::chrono::seconds(2));
+				NotifyUpdated();
+			} while (!m_bNeedCancel);
+
+			NotifyCancelled();
+		}
+		else
+		{
+			Json::Value jErrData(Json::objectValue);
+			jErrData[MCP::MSG_KEY_URI] = spSubscribeResourceRequest->strUri;
+			iErrCode = NotifyError(iErrCode, u8"Failed to subscribe resource", jErrData);
+		}
 
 		return iErrCode;
 	}

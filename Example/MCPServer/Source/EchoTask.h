@@ -3,6 +3,7 @@
 #include <Task/BasicTask.h>
 #include <Message/Request.h>
 #include <string>
+#include <atomic>
 
 
 namespace Implementation
@@ -44,5 +45,25 @@ namespace Implementation
 		int Execute() override;
 		// This method is used to cancel time-consuming asynchronous tasks.
 		int Cancel() override;
+	};
+
+	class CEchoResourceSubscribeTask : public MCP::ProcessSubscribeResourceRequest
+	{
+	public:
+		CEchoResourceSubscribeTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessSubscribeResourceRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		// If it's a time-consuming task, you need to start a thread to execute it asynchronously.
+		int Execute() override;
+		// This method is used to cancel time-consuming asynchronous tasks.
+		int Cancel() override;
+
+	private:
+		std::atomic_bool m_bNeedCancel{ false };
 	};
 }

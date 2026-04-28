@@ -282,7 +282,7 @@ namespace MCP
 			iErrCode = CommitAsyncTask(spNewProcessReadResourceRequest);
 
 		} break;
-		case MessageType_SubscribeRequest:
+		case MessageType_SubscribeResourceRequest:
 		{
 			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
 			{
@@ -290,17 +290,40 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessSubscribeRequest>(spRequest);
-			if (!spTask)
+			auto spSubscribeRequest = std::dynamic_pointer_cast<MCP::SubscribeResourceRequest>(spRequest);
+			if (!spSubscribeRequest)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
 				goto PROC_END;
 			}
-
-			iErrCode = spTask->Execute();
+			auto spProcessSubscribeResourceRequest = CMCPSession::GetInstance().GetServerSubscribeResourceTask(spSubscribeRequest->strUri);
+			if (!spProcessSubscribeResourceRequest)
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spNewTask = spProcessSubscribeResourceRequest->Clone();
+			if (!spNewTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spNewProcessSubscribeResourceRequest = std::dynamic_pointer_cast<MCP::ProcessSubscribeResourceRequest>(spNewTask);
+			if (!spNewProcessSubscribeResourceRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			spNewProcessSubscribeResourceRequest->SetRequest(spRequest);
+			iErrCode = CommitAsyncTask(spNewProcessSubscribeResourceRequest);
+			if (MCP::ERRNO_OK == iErrCode)
+			{
+				m_hashUri2SubscribeResourceTaskId[spSubscribeRequest->strUri] = spSubscribeRequest->requestId;
+			}
 
 		} break;
-		case MessageType_UnsubscribeRequest:
+		case MessageType_UnsubscribeResourceRequest:
 		{
 			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
 			{
@@ -308,7 +331,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessUnsubscribeRequest>(spRequest);
+			auto spTask = std::make_shared<ProcessUnsubscribeResourceRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -559,30 +582,28 @@ namespace MCP
 		}
 		else if (spRequest->strMethod.compare(METHOD_RESOURCES_SUBSCRIBE) == 0)
 		{
-			auto spSubscribeRequest = std::make_shared<MCP::SubscribeRequest>(true);
-			if (!spSubscribeRequest)
+			auto spSubscribeResourceRequest = std::make_shared<MCP::SubscribeResourceRequest>(true);
+			if (!spSubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
-			iErrCode = spSubscribeRequest->Deserialize(strMsg);
+			iErrCode = spSubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
 
-			spMsg = spSubscribeRequest;
-
+			spMsg = spSubscribeResourceRequest;
 			return ERRNO_OK;
 		}
 		else if (spRequest->strMethod.compare(METHOD_RESOURCES_UNSUBSCRIBE) == 0)
 		{
-			auto spUnsubscribeRequest = std::make_shared<MCP::UnsubscribeRequest>(true);
-			if (!spUnsubscribeRequest)
+			auto spUnsubscribeResourceRequest = std::make_shared<MCP::UnsubscribeResourceRequest>(true);
+			if (!spUnsubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
-			iErrCode = spUnsubscribeRequest->Deserialize(strMsg);
+			iErrCode = spUnsubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
 
-			spMsg = spUnsubscribeRequest;
-
+			spMsg = spUnsubscribeResourceRequest;
 			return ERRNO_OK;
 		}
 		else if (spRequest->strMethod.compare(METHOD_RESOURCES_TEMPLATES_LIST) == 0)
@@ -736,6 +757,11 @@ namespace MCP
 		m_hashReadResourceTasks = hashReadResourceTasks;
 	}
 
+	void CMCPSession::SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks)
+	{
+		m_hashSubscribeResourceTasks = hashSubscribeResourceTasks;
+	}
+
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
 		return m_serverInfo;
@@ -817,6 +843,14 @@ namespace MCP
 	{
 		if (m_hashReadResourceTasks.count(strResourceUri) > 0)
 			return m_hashReadResourceTasks[strResourceUri];
+
+		return nullptr;
+	}
+
+	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerSubscribeResourceTask(const std::string& strResourceUri)
+	{
+		if (m_hashSubscribeResourceTasks.count(strResourceUri) > 0)
+			return m_hashSubscribeResourceTasks[strResourceUri];
 
 		return nullptr;
 	}

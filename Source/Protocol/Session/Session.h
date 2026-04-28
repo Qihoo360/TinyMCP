@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -51,6 +51,7 @@ namespace MCP
 		void SetServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates);
 		void SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks);
 		void SetServerReadResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>>& hashReadResourceTasks);
+		void SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
@@ -63,6 +64,7 @@ namespace MCP
 		SessionState GetSessionState() const;
 		std::shared_ptr<MCP::ProcessRequest> GetServerCallToolsTask(const std::string& strToolName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerReadResourceTask(const std::string& strResourceUri);
+		std::shared_ptr<MCP::ProcessRequest> GetServerSubscribeResourceTask(const std::string& strResourceUri);
 
 	private:
 		CMCPSession() = default;
@@ -100,6 +102,8 @@ namespace MCP
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
+		std::unordered_map<std::string, MCP::RequestId> m_hashUri2SubscribeResourceTaskId;
 
 		// Asynchronous Task
 		std::unique_ptr<std::thread> m_upTaskThread;

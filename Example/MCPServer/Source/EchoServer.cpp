@@ -56,6 +56,11 @@ namespace Implementation
             return MCP::ERRNO_INTERNAL_ERROR;
 		RegisterReadResourceTasks(resource.strUri, spReadResourceTask);
 
+		auto spSubscribeResourceTask = std::make_shared<Implementation::CEchoResourceSubscribeTask>(nullptr);
+        if (!spSubscribeResourceTask)
+			return MCP::ERRNO_INTERNAL_ERROR;
+		RegisterSubscribeResourceTasks(resource.strUri, spSubscribeResourceTask);
+
         return MCP::ERRNO_OK;
     }
 

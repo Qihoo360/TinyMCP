@@ -615,23 +615,23 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
-	// ProcessSubscribeRequest
-	std::shared_ptr<CMCPTask> ProcessSubscribeRequest::Clone() const
+	// ProcessSubscribeResourceRequest
+	bool ProcessSubscribeResourceRequest::IsFinished() const
 	{
-		return nullptr;
+		return m_bFinished;
 	}
 
-	int ProcessSubscribeRequest::Execute()
+	bool ProcessSubscribeResourceRequest::IsCancelled() const
 	{
-		if (!IsValid())
-			return ERRNO_INTERNAL_ERROR;
+		return m_bCancelled;
+	}
 
+	int ProcessSubscribeResourceRequest::NotifyResult()
+	{
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
 		if (!spEmptyResponse)
 			return ERRNO_INTERNAL_ERROR;
 		spEmptyResponse->requestId = m_spRequest->requestId;
-
-		// TODO: 实现资源订阅逻辑
 
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
@@ -650,14 +650,77 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
+	int ProcessSubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
+	{
+		m_bFinished = true;
+
+		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+		if (!spErrorResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spErrorResponse->requestId = m_spRequest->requestId;
+		spErrorResponse->iCode = iCode;
+		spErrorResponse->strMesage = strMessage;
+		spErrorResponse->jErrorData = jErrData;
+
+		std::string strResponse;
+		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strResponse += "\r\n";
+#else
+		strResponse += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	int ProcessSubscribeResourceRequest::NotifyUpdated()
+	{
+		auto spResourceUpdatedNotification = std::make_shared<ResourceUpdatedNotification>(false);
+		if (!spResourceUpdatedNotification)
+			return ERRNO_INTERNAL_ERROR;
+		auto spSubscribeResourceRequest = std::dynamic_pointer_cast<MCP::SubscribeResourceRequest>(m_spRequest);
+		if (!spSubscribeResourceRequest)
+			return ERRNO_INTERNAL_ERROR;
+		spResourceUpdatedNotification->strMethod = MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED;
+		spResourceUpdatedNotification->strUri = spSubscribeResourceRequest->strUri;
+
+		std::string strNotification;
+		if (ERRNO_OK != spResourceUpdatedNotification->Serialize(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+#ifdef _WIN32
+		strNotification += "\r\n";
+#else
+		strNotification += "\n";
+#endif // _WIN32
+		if (ERRNO_OK != spTransport->Write(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	int ProcessSubscribeResourceRequest::NotifyCancelled()
+	{
+		m_bCancelled = true;
+		return ERRNO_OK;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
-	// ProcessUnsubscribeRequest
-	std::shared_ptr<CMCPTask> ProcessUnsubscribeRequest::Clone() const
+	// ProcessUnsubscribeResourceRequest
+	std::shared_ptr<CMCPTask> ProcessUnsubscribeResourceRequest::Clone() const
 	{
 		return nullptr;
 	}
 
-	int ProcessUnsubscribeRequest::Execute()
+	int ProcessUnsubscribeResourceRequest::Execute()
 	{
 		if (!IsValid())
 			return ERRNO_INTERNAL_ERROR;

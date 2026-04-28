@@ -147,23 +147,31 @@ namespace MCP
 		bool m_bCancelled{ false };
 	};
 
-	class ProcessSubscribeRequest : public ProcessRequest
+	class ProcessSubscribeResourceRequest : public ProcessRequest
 	{
 	public:
-		ProcessSubscribeRequest(const std::shared_ptr<MCP::Request>& spRequest)
+		ProcessSubscribeResourceRequest(const std::shared_ptr<MCP::Request>& spRequest)
 			: ProcessRequest(spRequest)
 		{
 
 		}
 
-		std::shared_ptr<CMCPTask> Clone() const override;
-		int Execute() override;
+		bool IsFinished() const override;
+		bool IsCancelled() const override;
+		int NotifyResult();
+		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
+		int NotifyUpdated();
+		int NotifyCancelled();
+
+	protected:
+		bool m_bFinished{ false };
+		bool m_bCancelled{ false };
 	};
 
-	class ProcessUnsubscribeRequest : public ProcessRequest
+	class ProcessUnsubscribeResourceRequest : public ProcessRequest
 	{
 	public:
-		ProcessUnsubscribeRequest(const std::shared_ptr<MCP::Request>& spRequest)
+		ProcessUnsubscribeResourceRequest(const std::shared_ptr<MCP::Request>& spRequest)
 			: ProcessRequest(spRequest)
 		{
 

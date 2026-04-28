@@ -122,11 +122,11 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
-	struct SubscribeRequest : public MCP::Request
+	struct SubscribeResourceRequest : public MCP::Request
 	{
 	public:
-		SubscribeRequest(bool bNeedIdentity)
-			: Request(MessageType_SubscribeRequest, bNeedIdentity)
+		SubscribeResourceRequest(bool bNeedIdentity)
+			: Request(MessageType_SubscribeResourceRequest, bNeedIdentity)
 		{
 
 		}
@@ -138,11 +138,11 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
-	struct UnsubscribeRequest : public MCP::Request
+	struct UnsubscribeResourceRequest : public MCP::Request
 	{
 	public:
-		UnsubscribeRequest(bool bNeedIdentity)
-			: Request(MessageType_UnsubscribeRequest, bNeedIdentity)
+		UnsubscribeResourceRequest(bool bNeedIdentity)
+			: Request(MessageType_UnsubscribeResourceRequest, bNeedIdentity)
 		{
 
 		}

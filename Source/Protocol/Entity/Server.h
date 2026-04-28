@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -73,6 +73,11 @@ namespace MCP
 			m_hashReadResourceTasks[strResourceUri] = spTask;
 		}
 
+		void RegisterSubscribeResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessSubscribeResourceRequest> spTask)
+		{
+			m_hashSubscribeResourceTasks[strResourceUri] = spTask;
+		}
+
 		virtual int Initialize() = 0;
 		virtual int Uninitialize() = 0;
 
@@ -83,6 +88,7 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerCapabilities(m_capabilities);
 			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);
 			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
+			MCP::CMCPSession::GetInstance().SetServerSubscribeResourceTasks(m_hashSubscribeResourceTasks);
 
 			int iErrCode = MCP::CMCPSession::GetInstance().Ready();
 			if (ERRNO_OK != iErrCode)
@@ -107,5 +113,6 @@ namespace MCP
 		MCP::ServerCapabilities m_capabilities;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
 	};
 }
