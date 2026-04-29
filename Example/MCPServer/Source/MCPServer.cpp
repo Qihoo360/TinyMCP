@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -14,13 +14,9 @@ int LaunchEchoServer()
     if (MCP::ERRNO_OK == iErrCode)
     {
         // 2. Start the Server.
-        iErrCode = server.Start();
-        if (MCP::ERRNO_OK == iErrCode)
-        {
-            // 3. Stop the Server.
-            server.Stop();
-        }
-
+        server.Start();
+        // 3. Stop the Server.
+        server.Stop();
         // 4. Deinitialization
         server.Uninitialize();
     }

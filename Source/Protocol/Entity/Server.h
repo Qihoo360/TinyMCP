@@ -94,16 +94,12 @@ namespace MCP
 			if (ERRNO_OK != iErrCode)
 				return iErrCode;
 
-			MCP::CMCPSession::GetInstance().Run();
-
-			return ERRNO_OK;
+			return MCP::CMCPSession::GetInstance().Run();
 		}
 
 		int Stop()
 		{
-			MCP::CMCPSession::GetInstance().Terminate();
-
-			return ERRNO_OK;
+			return MCP::CMCPSession::GetInstance().Terminate();
 		}
 
 	protected:
