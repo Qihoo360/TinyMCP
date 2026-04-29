@@ -68,4 +68,24 @@ namespace Implementation
 		std::atomic_bool m_bNeedCancel{ false };
 		std::unique_ptr<std::thread> m_upSubscribeThread;
 	};
+
+	class CEchoGetPromptTask : public MCP::ProcessGetPromptRequest
+	{
+	public:
+		static constexpr const char* PROMPT_CODE_REVIEW = "code_review";
+		static constexpr const char* PROMPT_EXPLAIN_CODE = "explain_code";
+
+		CEchoGetPromptTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessGetPromptRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		// If it's a time-consuming task, you need to start a thread to execute it asynchronously.
+		int Execute() override;
+		// This method is used to cancel time-consuming asynchronous tasks.
+		int Cancel() override;
+	};
 }

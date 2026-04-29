@@ -379,6 +379,61 @@ namespace MCP
 			iErrCode = spTask->Execute();
 
 		} break;
+		case MessageType_ListPromptsRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessListPromptsRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
+		case MessageType_GetPromptRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spGetPromptRequest = std::dynamic_pointer_cast<MCP::GetPromptRequest>(spRequest);
+			if (!spGetPromptRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spProcessGetPromptRequest = CMCPSession::GetInstance().GetServerGetPromptTask(spGetPromptRequest->strName);
+			if (!spProcessGetPromptRequest)
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spNewTask = spProcessGetPromptRequest->Clone();
+			if (!spNewTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spNewProcessGetPromptRequest = std::dynamic_pointer_cast<MCP::ProcessGetPromptRequest>(spNewTask);
+			if (!spNewProcessGetPromptRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			spNewProcessGetPromptRequest->SetRequest(spRequest);
+			iErrCode = CommitAsyncTask(spNewProcessGetPromptRequest);
+
+		} break;
 		default: break;
 		}
 
@@ -640,6 +695,34 @@ namespace MCP
 
 			return ERRNO_OK;
 		}
+		else if (spRequest->strMethod.compare(METHOD_PROMPTS_LIST) == 0)
+		{
+			auto spListPromptsRequest = std::make_shared<MCP::ListPromptsRequest>(true);
+			if (!spListPromptsRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spListPromptsRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spListPromptsRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_PROMPTS_GET) == 0)
+		{
+			auto spGetPromptRequest = std::make_shared<MCP::GetPromptRequest>(true);
+			if (!spGetPromptRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spGetPromptRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spGetPromptRequest;
+
+			return ERRNO_OK;
+		}
 
 		return ERRNO_INTERNAL_ERROR;
 	}
@@ -687,34 +770,6 @@ namespace MCP
 				return ERRNO_INVALID_NOTIFICATION;
 
 			spMsg = spCancelledNotification;
-
-			return ERRNO_OK;
-		}
-		else if (spNotification->strMethod.compare(METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED) == 0)
-		{
-			auto spResourceListChangedNotification = std::make_shared<MCP::ResourceListChangedNotification>(true);
-			if (!spResourceListChangedNotification)
-				return ERRNO_PARSE_ERROR;
-
-			iErrCode = spResourceListChangedNotification->Deserialize(strMsg);
-			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_NOTIFICATION;
-
-			spMsg = spResourceListChangedNotification;
-
-			return ERRNO_OK;
-		}
-		else if (spNotification->strMethod.compare(METHOD_NOTIFICATION_RESOURCES_UPDATED) == 0)
-		{
-			auto spResourceUpdatedNotification = std::make_shared<MCP::ResourceUpdatedNotification>(true);
-			if (!spResourceUpdatedNotification)
-				return ERRNO_PARSE_ERROR;
-
-			iErrCode = spResourceUpdatedNotification->Deserialize(strMsg);
-			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_NOTIFICATION;
-
-			spMsg = spResourceUpdatedNotification;
 
 			return ERRNO_OK;
 		}
@@ -767,6 +822,16 @@ namespace MCP
 		m_resourceTemplates = resourceTemplates;
 	}
 
+	void CMCPSession::SetServerPromptsPagination(bool bPagination)
+	{
+		m_bPromptsPagination = bPagination;
+	}
+
+	void CMCPSession::SetServerPrompts(const std::vector<MCP::Prompt>& prompts)
+	{
+		m_prompts = prompts;
+	}
+
 	void CMCPSession::SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks)
 	{
 		m_hashCallToolsTasks = hashCallToolsTasks;
@@ -780,6 +845,11 @@ namespace MCP
 	void CMCPSession::SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks)
 	{
 		m_hashSubscribeResourceTasks = hashSubscribeResourceTasks;
+	}
+
+	void CMCPSession::SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks)
+	{
+		m_hashGetPromptTasks = hashGetPromptTasks;
 	}
 
 	MCP::Implementation CMCPSession::GetServerInfo() const
@@ -820,6 +890,16 @@ namespace MCP
 	std::vector<MCP::ResourceTemplate> CMCPSession::GetServerResourceTemplates() const
 	{
 		return m_resourceTemplates;
+	}
+
+	bool CMCPSession::GetServerPromptsPagination() const
+	{
+		return m_bPromptsPagination;
+	}
+
+	std::vector<MCP::Prompt> CMCPSession::GetServerPrompts() const
+	{
+		return m_prompts;
 	}
 
 	std::shared_ptr<CMCPTransport> CMCPSession::GetTransport() const
@@ -871,6 +951,14 @@ namespace MCP
 	{
 		if (m_hashSubscribeResourceTasks.count(strResourceUri) > 0)
 			return m_hashSubscribeResourceTasks[strResourceUri];
+
+		return nullptr;
+	}
+
+	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerGetPromptTask(const std::string& strPromptName)
+	{
+		if (m_hashGetPromptTasks.count(strPromptName) > 0)
+			return m_hashGetPromptTasks[strPromptName];
 
 		return nullptr;
 	}

@@ -96,4 +96,16 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct PromptListChangedNotification : public MCP::Notification
+	{
+	public:
+		PromptListChangedNotification(bool bNeedIdentity)
+			: Notification(MessageType_PromptListChangedNotification, bNeedIdentity)
+		{
+
+		}
+
+		bool IsValid() const override;
+	};
 }

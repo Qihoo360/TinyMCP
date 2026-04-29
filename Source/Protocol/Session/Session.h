@@ -50,9 +50,12 @@ namespace MCP
 		void SetServerResources(const std::vector<MCP::Resource>& resources);
 		void SetServerResourceTemplatesPagination(bool bPagination);
 		void SetServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates);
+		void SetServerPromptsPagination(bool bPagination);
+		void SetServerPrompts(const std::vector<MCP::Prompt>& prompts);
 		void SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks);
 		void SetServerReadResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>>& hashReadResourceTasks);
 		void SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks);
+		void SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
@@ -61,11 +64,14 @@ namespace MCP
 		std::vector<MCP::Resource> GetServerResources() const;
 		bool GetServerResourceTemplatesPagination() const;
 		std::vector<MCP::ResourceTemplate> GetServerResourceTemplates() const;
+		bool GetServerPromptsPagination() const;
+		std::vector<MCP::Prompt> GetServerPrompts() const;
 		std::shared_ptr<CMCPTransport> GetTransport() const;
 		SessionState GetSessionState() const;
 		std::shared_ptr<MCP::ProcessRequest> GetServerCallToolsTask(const std::string& strToolName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerReadResourceTask(const std::string& strResourceUri);
 		std::shared_ptr<MCP::ProcessRequest> GetServerSubscribeResourceTask(const std::string& strResourceUri);
+		std::shared_ptr<MCP::ProcessRequest> GetServerGetPromptTask(const std::string& strPromptName);
 
 	private:
 		CMCPSession() = default;
@@ -96,15 +102,18 @@ namespace MCP
 		std::vector<MCP::Tool> m_tools;
 		std::vector<MCP::Resource> m_resources;
 		std::vector<MCP::ResourceTemplate> m_resourceTemplates;
+		std::vector<MCP::Prompt> m_prompts;
 		bool m_bToolsPagination{ false };
 		bool m_bResourcesPagination{ false };
 		bool m_bResourceTemplatesPagination{ false };
+		bool m_bPromptsPagination{ false };
 
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
 		std::unordered_map<std::string, MCP::RequestId> m_hashUri2SubscribeResourceTaskId;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
 
 		// Asynchronous Task
 		std::unique_ptr<std::thread> m_upTaskThread;

@@ -399,4 +399,84 @@ namespace MCP
 
 		return true;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ListPromptsRequest
+	int ListPromptsRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int ListPromptsRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Request::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (jMsg.isMember(MSG_KEY_PARAMS) && jMsg[MSG_KEY_PARAMS].isObject())
+		{
+			auto& jParams = jMsg[MSG_KEY_PARAMS];
+
+			if (jParams.isMember(MSG_KEY_CURSOR) && jParams[MSG_KEY_CURSOR].isString())
+			{
+				strCursor = jParams[MSG_KEY_CURSOR].asString();
+			}
+		}
+
+		return ERRNO_OK;
+	}
+
+	bool ListPromptsRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_PROMPTS_LIST) != 0)
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// GetPromptRequest
+	int GetPromptRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int GetPromptRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Request::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_INVALID_REQUEST;
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+
+		if (!jParams.isMember(MSG_KEY_NAME) || !jParams[MSG_KEY_NAME].isString())
+			return ERRNO_INVALID_REQUEST;
+		strName = jParams[MSG_KEY_NAME].asString();
+
+		if (jParams.isMember(MSG_KEY_ARGUMENTS) && jParams[MSG_KEY_ARGUMENTS].isObject())
+		{
+			jArguments = jParams[MSG_KEY_ARGUMENTS];
+		}
+
+		return ERRNO_OK;
+	}
+
+	bool GetPromptRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_PROMPTS_GET) != 0)
+			return false;
+
+		if (strName.empty())
+			return false;
+
+		return true;
+	}
 }

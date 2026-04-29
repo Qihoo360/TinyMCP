@@ -54,7 +54,13 @@ namespace MCP
 	static constexpr const char* MSG_KEY_SIZE = "size";
 	static constexpr const char* MSG_KEY_RESOURCE_TEMPLATES = "resourceTemplates";
 	static constexpr const char* MSG_KEY_URI_TEMPLATE = "uriTemplate";
+	static constexpr const char* MSG_KEY_PROMPTS_LIST = "prompts";
+	static constexpr const char* MSG_KEY_ROLE = "role";
+	static constexpr const char* MSG_KEY_MESSAGES = "messages";
+	static constexpr const char* MSG_KEY_REQUIRED = "required";
 	
+	static constexpr const char* CONST_USER = "user";
+	static constexpr const char* CONST_ASSISTANT = "assistant";
 
 	static constexpr const char* METHOD_PING = "ping";
 	static constexpr const char* METHOD_INITIALIZE = "initialize";
@@ -70,6 +76,9 @@ namespace MCP
 	static constexpr const char* METHOD_RESOURCES_TEMPLATES_LIST = "resources/templates/list";
 	static constexpr const char* METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
 	static constexpr const char* METHOD_NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
+	static constexpr const char* METHOD_PROMPTS_LIST = "prompts/list";
+	static constexpr const char* METHOD_PROMPTS_GET = "prompts/get";
+	static constexpr const char* METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
@@ -157,5 +166,13 @@ namespace MCP
 		MessageType_ResourceUpdatedNotification,
 		MessageType_Resource,
 		MessageType_ResourceTemplate,
+		MessageType_PromptArgument,
+		MessageType_Prompt,
+		MessageType_PromptMessage,
+		MessageType_ListPromptsRequest,
+		MessageType_ListPromptsResult,
+		MessageType_GetPromptRequest,
+		MessageType_GetPromptResult,
+		MessageType_PromptListChangedNotification,
 	};
 }

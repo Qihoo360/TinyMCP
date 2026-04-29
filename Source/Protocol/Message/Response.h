@@ -159,4 +159,38 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct ListPromptsResult : public MCP::Response
+	{
+	public:
+		ListPromptsResult(bool bNeedIdentity)
+			: Response(MessageType_ListPromptsResult, bNeedIdentity)
+		{
+
+		}
+
+		std::vector<MCP::Prompt> vecPrompts;
+		std::string strNextCursor;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct GetPromptResult : public MCP::Response
+	{
+	public:
+		GetPromptResult(bool bNeedIdentity)
+			: Response(MessageType_GetPromptResult, bNeedIdentity)
+		{
+
+		}
+
+		std::string strDescription;
+		std::vector<MCP::PromptMessage> vecMessages;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

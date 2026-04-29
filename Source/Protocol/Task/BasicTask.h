@@ -200,4 +200,39 @@ namespace MCP
 		std::shared_ptr<CMCPTask> Clone() const override;
 		int Execute() override;
 	};
+
+	class ProcessListPromptsRequest : public ProcessRequest
+	{
+	public:
+		ProcessListPromptsRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+	};
+
+	class ProcessGetPromptRequest : public ProcessRequest
+	{
+	public:
+		ProcessGetPromptRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		bool IsFinished() const override;
+		bool IsCancelled() const override;
+		std::shared_ptr<MCP::GetPromptResult> BuildResult();
+		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult);
+		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
+		int NotifyCancelled();
+
+	protected:
+		bool m_bFinished{ false };
+		bool m_bCancelled{ false };
+	};
 }

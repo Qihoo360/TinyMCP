@@ -63,6 +63,12 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerResourceTemplates(resourceTemplates);
 		}
 
+		void RegisterServerPrompts(const std::vector<MCP::Prompt>& prompts, bool bPagination)
+		{
+			MCP::CMCPSession::GetInstance().SetServerPromptsPagination(bPagination);
+			MCP::CMCPSession::GetInstance().SetServerPrompts(prompts);
+		}
+
 		void RegisterToolsTasks(const std::string& strToolName, std::shared_ptr<MCP::ProcessCallToolRequest> spTask)
 		{
 			m_hashCallToolsTasks[strToolName] = spTask;
@@ -78,6 +84,11 @@ namespace MCP
 			m_hashSubscribeResourceTasks[strResourceUri] = spTask;
 		}
 
+		void RegisterGetPromptTasks(const std::string& strPromptName, std::shared_ptr<MCP::ProcessGetPromptRequest> spTask)
+		{
+			m_hashGetPromptTasks[strPromptName] = spTask;
+		}
+
 		virtual int Initialize() = 0;
 		virtual int Uninitialize() = 0;
 
@@ -89,6 +100,7 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);
 			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
 			MCP::CMCPSession::GetInstance().SetServerSubscribeResourceTasks(m_hashSubscribeResourceTasks);
+			MCP::CMCPSession::GetInstance().SetServerGetPromptTasks(m_hashGetPromptTasks);
 
 			int iErrCode = MCP::CMCPSession::GetInstance().Ready();
 			if (ERRNO_OK != iErrCode)
@@ -110,5 +122,6 @@ namespace MCP
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
 	};
 }

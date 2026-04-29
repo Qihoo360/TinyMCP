@@ -169,4 +169,37 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct ListPromptsRequest : public MCP::Request
+	{
+	public:
+		ListPromptsRequest(bool bNeedIdentity)
+			: Request(MessageType_ListPromptsRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strCursor;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct GetPromptRequest : public MCP::Request
+	{
+	public:
+		GetPromptRequest(bool bNeedIdentity)
+			: Request(MessageType_GetPromptRequest, bNeedIdentity)
+		{
+
+		}
+
+		std::string strName;
+		Json::Value jArguments;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

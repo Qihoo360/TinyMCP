@@ -187,4 +187,100 @@ namespace Implementation
 
 		return iErrCode;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoGetPromptTask
+	std::shared_ptr<MCP::CMCPTask> CEchoGetPromptTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoGetPromptTask>(nullptr);
+		if (spClone)
+		{
+			*spClone = *this;
+		}
+
+		return spClone;
+	}
+
+	int CEchoGetPromptTask::Cancel()
+	{
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoGetPromptTask::Execute()
+	{
+		int iErrCode = MCP::ERRNO_INTERNAL_ERROR;
+		if (!IsValid())
+			return iErrCode;
+
+		auto spGetPromptRequest = std::dynamic_pointer_cast<MCP::GetPromptRequest>(m_spRequest);
+		if (!spGetPromptRequest)
+			goto PROC_END;
+
+		iErrCode = MCP::ERRNO_OK;
+
+	PROC_END:
+		if (MCP::ERRNO_OK == iErrCode)
+		{
+			auto spResult = BuildResult();
+			if (!spResult)
+				return MCP::ERRNO_INTERNAL_ERROR;
+
+			if (spGetPromptRequest->strName == PROMPT_CODE_REVIEW)
+			{
+				spResult->strDescription = "Code review prompt template";
+
+				MCP::PromptMessage msg;
+				msg.strRole = MCP::CONST_USER;
+				msg.strContentType = MCP::CONST_TEXT;
+
+				std::string strCode;
+				if (spGetPromptRequest->jArguments.isMember("code") && 
+					spGetPromptRequest->jArguments["code"].isString())
+				{
+					strCode = spGetPromptRequest->jArguments["code"].asString();
+				}
+
+				msg.textContent.strType = MCP::CONST_TEXT;
+				msg.textContent.strText = "Please review the following code and provide suggestions:\n\n";
+				msg.textContent.strText += strCode;
+
+				spResult->vecMessages.push_back(msg);
+			}
+			else if (spGetPromptRequest->strName == PROMPT_EXPLAIN_CODE)
+			{
+				spResult->strDescription = "Code explanation prompt template";
+
+				MCP::PromptMessage msg;
+				msg.strRole = MCP::CONST_USER;
+				msg.strContentType = MCP::CONST_TEXT;
+
+				std::string strCode;
+				if (spGetPromptRequest->jArguments.isMember("code") && 
+					spGetPromptRequest->jArguments["code"].isString())
+				{
+					strCode = spGetPromptRequest->jArguments["code"].asString();
+				}
+
+				msg.textContent.strType = MCP::CONST_TEXT;
+				msg.textContent.strText = "Please explain the following code in detail:\n\n";
+				msg.textContent.strText += strCode;
+
+				spResult->vecMessages.push_back(msg);
+			}
+			else
+			{
+				return NotifyError(MCP::ERRNO_INVALID_PARAMS, "Unknown prompt name", Json::Value());
+			}
+
+			iErrCode = NotifyResult(spResult);
+		}
+		else
+		{
+			Json::Value jErrData(Json::objectValue);
+			jErrData[MCP::MSG_KEY_NAME] = spGetPromptRequest->strName;
+			iErrCode = NotifyError(iErrCode, "Failed to get prompt", jErrData);
+		}
+
+		return iErrCode;
+	}
 }

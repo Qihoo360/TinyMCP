@@ -262,6 +262,59 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
+	struct PromptArgument : public MCP::Message
+	{
+		PromptArgument()
+			: Message(MessageType_PromptArgument, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strName;
+		std::string strDescription;
+		bool bRequired{ false };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct Prompt : public MCP::Message
+	{
+		Prompt()
+			: Message(MessageType_Prompt, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strName;
+		std::string strDescription;
+		std::vector<PromptArgument> vecArguments;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct PromptMessage : public MCP::Message
+	{
+		PromptMessage()
+			: Message(MessageType_PromptMessage, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strRole; // "user" or "assistant"
+		std::string strContentType; // "text", "image", or "resource"
+		TextContent textContent;
+		ImageContent imageContent;
+		EmbeddedResource embeddedResource;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct ProgressToken : public MCP::Message
 	{
 		ProgressToken()

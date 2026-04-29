@@ -339,4 +339,80 @@ namespace MCP
 	{
 		return true;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ListPromptsResult
+	int ListPromptsResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jPrompts(Json::arrayValue);
+		for (const auto& prompt : vecPrompts)
+		{
+			Json::Value jPrompt(Json::objectValue);
+			if (ERRNO_OK == prompt.DoSerialize(jPrompt))
+			{
+				jPrompts.append(jPrompt);
+			}
+		}
+		jResult[MSG_KEY_PROMPTS] = jPrompts;
+
+		if (!strNextCursor.empty())
+		{
+			Json::Value jNextCursor(strNextCursor);
+			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
+		}
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int ListPromptsResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool ListPromptsResult::IsValid() const
+	{
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// GetPromptResult
+	int GetPromptResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		if (!strDescription.empty())
+		{
+			Json::Value jDesc(strDescription);
+			jResult[MSG_KEY_DESCRIPTION] = jDesc;
+		}
+
+		Json::Value jMessages(Json::arrayValue);
+		for (const auto& msg : vecMessages)
+		{
+			Json::Value jMessage(Json::objectValue);
+			if (ERRNO_OK == msg.DoSerialize(jMessage))
+			{
+				jMessages.append(jMessage);
+			}
+		}
+		jResult[MSG_KEY_MESSAGES] = jMessages;
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int GetPromptResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool GetPromptResult::IsValid() const
+	{
+		return !vecMessages.empty();
+	}
 }

@@ -842,4 +842,229 @@ namespace MCP
 
 		return ERRNO_OK;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessListPromptsRequest
+	std::shared_ptr<CMCPTask> ProcessListPromptsRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessListPromptsRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spListPromptsRequest = std::dynamic_pointer_cast<ListPromptsRequest>(m_spRequest);
+		if (!spListPromptsRequest)
+			return ERRNO_INTERNAL_ERROR;
+		
+		std::shared_ptr<ListPromptsResult> spListPromptsResult = nullptr;
+		std::string strResponse;
+
+		bool bPagination = CMCPSession::GetInstance().GetServerPromptsPagination();
+		if (bPagination)
+		{
+			if (!spListPromptsRequest->strCursor.empty())
+			{
+				bool bValidCursor = true;
+				unsigned nCursor = 0;
+				try
+				{
+					nCursor = std::stoul(spListPromptsRequest->strCursor);
+				}
+				catch (const std::invalid_argument&)
+				{
+					bValidCursor = false;
+				}
+				catch (const std::out_of_range&)
+				{
+					bValidCursor = false;
+				}
+
+				auto vecServerPrompts = CMCPSession::GetInstance().GetServerPrompts();
+				if (bValidCursor)
+				{
+					if (nCursor >= vecServerPrompts.size())
+					{
+						bValidCursor = false;
+					}
+				}
+
+				if (!bValidCursor)
+				{
+					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+					if (!spErrorResponse)
+						return ERRNO_INTERNAL_ERROR;
+					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
+					spErrorResponse->strMesage = "invalid params";
+					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+						return ERRNO_INTERNAL_ERROR;
+				}
+				else
+				{
+					spListPromptsResult = std::make_shared<ListPromptsResult>(true);
+					if (!spListPromptsResult)
+						return ERRNO_INTERNAL_ERROR;
+					spListPromptsResult->requestId = spListPromptsRequest->requestId;
+					spListPromptsResult->vecPrompts.clear();
+					spListPromptsResult->vecPrompts.push_back(vecServerPrompts[nCursor]);
+					if (nCursor < vecServerPrompts.size() - 1)
+					{
+						spListPromptsResult->strNextCursor = std::to_string(nCursor + 1);
+					}
+				}
+			}
+			else
+			{
+				spListPromptsResult = std::make_shared<ListPromptsResult>(true);
+				if (!spListPromptsResult)
+					return ERRNO_INTERNAL_ERROR;
+				spListPromptsResult->requestId = spListPromptsRequest->requestId;
+				auto vecServerPrompts = CMCPSession::GetInstance().GetServerPrompts();
+				spListPromptsResult->vecPrompts.clear();
+				if (vecServerPrompts.size() > 0)
+					spListPromptsResult->vecPrompts.push_back(vecServerPrompts[0]);
+				if (vecServerPrompts.size() > 1)
+					spListPromptsResult->strNextCursor = std::to_string(1);
+			}
+		}
+		else
+		{
+			spListPromptsResult = std::make_shared<ListPromptsResult>(true);
+			if (!spListPromptsResult)
+				return ERRNO_INTERNAL_ERROR;
+			spListPromptsResult->requestId = spListPromptsRequest->requestId;
+			spListPromptsResult->vecPrompts = CMCPSession::GetInstance().GetServerPrompts();
+		}
+
+		if (spListPromptsResult)
+		{
+			if (ERRNO_OK != spListPromptsResult->Serialize(strResponse))
+				return ERRNO_INTERNAL_ERROR;
+		}
+
+		if (!strResponse.empty())
+		{
+			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			if (!spTransport)
+				return ERRNO_INTERNAL_ERROR;
+			if (ERRNO_OK != spTransport->Write(strResponse))
+				return ERRNO_INTERNAL_ERROR;
+		}
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessGetPromptRequest
+	bool ProcessGetPromptRequest::IsFinished() const
+	{
+		return m_bFinished;
+	}
+
+	bool ProcessGetPromptRequest::IsCancelled() const
+	{
+		return m_bCancelled;
+	}
+
+	std::shared_ptr<MCP::GetPromptResult> ProcessGetPromptRequest::BuildResult()
+	{
+		auto spResult = std::make_shared<GetPromptResult>(true);
+		if (!spResult)
+			return nullptr;
+
+		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
+		if (!spRequest)
+			return nullptr;
+
+		spResult->requestId = spRequest->requestId;
+		return spResult;
+	}
+
+	int ProcessGetPromptRequest::NotifyProgress(int iProgress, int iTotal)
+	{
+		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (!spRequest->progressToken.IsValid())
+			return ERRNO_OK;
+
+		auto spProgressNotification = std::make_shared<ProgressNotification>(false);
+		if (!spProgressNotification)
+			return ERRNO_INTERNAL_ERROR;
+
+		spProgressNotification->progressToken = spRequest->progressToken;
+		spProgressNotification->iProgress = iProgress;
+		spProgressNotification->iTotal = iTotal;
+
+		std::string strNotification;
+		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strNotification);
+	}
+
+	int ProcessGetPromptRequest::NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult)
+	{
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		m_bFinished = true;
+
+		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		spResult->requestId = spRequest->requestId;
+
+		std::string strResponse;
+		if (ERRNO_OK != spResult->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
+	}
+
+	int ProcessGetPromptRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
+	{
+		m_bFinished = true;
+
+		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+		if (!spErrorResponse)
+			return ERRNO_INTERNAL_ERROR;
+
+		spErrorResponse->requestId = spRequest->requestId;
+		spErrorResponse->iCode = iCode;
+		spErrorResponse->strMesage = strMessage;
+		spErrorResponse->jErrorData = jErrData;
+
+		std::string strResponse;
+		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
+	}
+
+	int ProcessGetPromptRequest::NotifyCancelled()
+	{
+		m_bCancelled = true;
+		return ERRNO_OK;
+	}
 }

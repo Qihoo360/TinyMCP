@@ -208,4 +208,17 @@ namespace MCP
 
 		return true;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// PromptListChangedNotification
+	bool PromptListChangedNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED) != 0)
+			return false;
+
+		return true;
+	}
 }
