@@ -66,11 +66,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -130,11 +125,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -181,11 +171,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -298,11 +283,6 @@ namespace MCP
 			auto spTransport = CMCPSession::GetInstance().GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-			strResponse += "\r\n";
-#else
-			strResponse += "\n";
-#endif // _WIN32
 			if (ERRNO_OK != spTransport->Write(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
@@ -354,11 +334,6 @@ namespace MCP
 			auto spTransport = CMCPSession::GetInstance().GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-			strNotification += "\r\n";
-#else
-			strNotification += "\n";
-#endif // _WIN32
 			if (ERRNO_OK != spTransport->Write(strNotification))
 				return ERRNO_INTERNAL_ERROR;
 		}
@@ -379,11 +354,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -502,11 +472,6 @@ namespace MCP
 			auto spTransport = CMCPSession::GetInstance().GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-			strResponse += "\r\n";
-#else
-			strResponse += "\n";
-#endif // _WIN32
 			if (ERRNO_OK != spTransport->Write(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
@@ -558,11 +523,6 @@ namespace MCP
 			auto spTransport = CMCPSession::GetInstance().GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-			strNotification += "\r\n";
-#else
-			strNotification += "\n";
-#endif // _WIN32
 			if (ERRNO_OK != spTransport->Write(strNotification))
 				return ERRNO_INTERNAL_ERROR;
 		}
@@ -583,11 +543,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -639,11 +594,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -668,11 +618,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -696,11 +641,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strNotification += "\r\n";
-#else
-		strNotification += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -733,11 +673,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -760,11 +695,6 @@ namespace MCP
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-		strResponse += "\r\n";
-#else
-		strResponse += "\n";
-#endif // _WIN32
 		if (ERRNO_OK != spTransport->Write(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
@@ -906,11 +836,6 @@ namespace MCP
 			auto spTransport = CMCPSession::GetInstance().GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
-#ifdef _WIN32
-			strResponse += "\r\n";
-#else
-			strResponse += "\n";
-#endif // _WIN32
 			if (ERRNO_OK != spTransport->Write(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
