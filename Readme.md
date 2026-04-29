@@ -44,11 +44,11 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Cancellation | Cancellation of in-progress requests through notification messages. | Yes | Yes |
 | Progress | Progress tracking for long-running operations through notification messages. | Yes | Yes |
 | Tools | Tools enable models to interact with external systems, such as querying databases, calling APIs, or performing computations. | Yes | Yes |
-| Resources | Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. | No | Yes |
+| Resources | Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. | Yes | Yes |
 | Pagination | Pagination allows servers to yield results in smaller chunks rather than all at once. | No | Yes |
 | Ping | Ping mechanism that allows either party to verify that their counterpart is still responsive and the connection is alive. | No | Yes |
 | Custom Notifications | JSON-RPC 2.0 notifications that are sent by an MCP Server or Client using custom method names, intended for transmitting arbitrary business data. | No | Yes |
-| Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | No | Not yet |
+| Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | No | Yes |
 | Transports | HTTP with Server-Sent Events (SSE) | No | Not yet |
 | Completion | A standardized way for servers to offer argument autocompletion suggestions for prompts and resource URIs. | No | Not yet |
 | Logging | A standardized way for servers to send structured log messages to clients. | No | Not yet |
