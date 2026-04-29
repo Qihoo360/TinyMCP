@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "NonConsoleStdioTransport.h"
 #include "../../Protocol/Public/StringHelper.h"
 #include <memory>
@@ -96,10 +96,24 @@ namespace Implementation
 
 	int CNonConsoleStdioTransport::Write(const std::string& strIn)
 	{
+		std::string strWrite = strIn;
+
+#ifdef _WIN32
+		if (strWrite.rfind("\r\n") != strWrite.length() - 2)
+		{
+			strWrite.append("\r\n");
+		}
+#else
+		if (strWrite.rfind("\n") != strWrite.length() - 1)
+		{
+			strWrite.append("\n");
+		}
+#endif // _WIN32
+
 		const std::lock_guard<std::recursive_mutex> _lock(m_mtxStdout);
 
 		DWORD cbWrite{ 0 };
-		if (!WriteFile(m_hStdOut, strIn.c_str(), strlen(strIn.c_str()) * sizeof(char), &cbWrite, nullptr))
+		if (!WriteFile(m_hStdOut, strWrite.c_str(), strlen(strWrite.c_str()) * sizeof(char), &cbWrite, nullptr))
 			return MCP::ERRNO_INTERNAL_OUTPUT_ERROR;
 
 #ifdef _DEBUG
@@ -109,7 +123,7 @@ namespace Implementation
 #endif // _DEBUG
 		{
 			CString strLog;
-			strLog.Format(L"[%s] <<<<<<send data to client=%s\r\n", __FUNCTIONW__, YY::UTF8ToUnicode(strIn.c_str()));
+			strLog.Format(L"[%s] <<<<<<send data to client=%s\r\n", __FUNCTIONW__, YY::UTF8ToUnicode(strWrite.c_str()));
 			OutputDebugString(strLog.GetString());
 		}
 
