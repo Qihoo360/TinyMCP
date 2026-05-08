@@ -283,4 +283,97 @@ namespace Implementation
 
 		return iErrCode;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoCompleteTask
+	std::shared_ptr<MCP::CMCPTask> CEchoCompleteTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoCompleteTask>(nullptr);
+		if (spClone)
+		{
+			*spClone = *this;
+		}
+
+		return spClone;
+	}
+
+	int CEchoCompleteTask::Cancel()
+	{
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoCompleteTask::Execute()
+	{
+		int iErrCode = MCP::ERRNO_INTERNAL_ERROR;
+		if (!IsValid())
+			return iErrCode;
+
+		auto spCompleteRequest = std::dynamic_pointer_cast<MCP::CompleteRequest>(m_spRequest);
+		if (!spCompleteRequest)
+			goto PROC_END;
+
+		iErrCode = MCP::ERRNO_OK;
+
+	PROC_END:
+		if (MCP::ERRNO_OK == iErrCode)
+		{
+			auto spResult = BuildResult();
+			if (!spResult)
+				return MCP::ERRNO_INTERNAL_ERROR;
+
+			if (spCompleteRequest->strRefType == MCP::CONST_REF_PROMPT)
+			{
+				if (spCompleteRequest->promptRef.strName == CEchoGetPromptTask::PROMPT_CODE_REVIEW)
+				{
+					if (spCompleteRequest->strArgumentName == "language")
+					{
+						spResult->vecValues = {
+							"python",
+							"javascript",
+							"typescript",
+							"rust",
+							"go",
+							"c++",
+							"java",
+							"c#"
+						};
+						spResult->iTotal = static_cast<int>(spResult->vecValues.size());
+						spResult->bHasMore = false;
+					}
+				}
+				else if (spCompleteRequest->promptRef.strName == CEchoGetPromptTask::PROMPT_EXPLAIN_CODE)
+				{
+					if (spCompleteRequest->strArgumentName == "code")
+					{
+						spResult->vecValues = {
+							"fn main() { ... }",
+							"class Example { ... }"
+						};
+						spResult->iTotal = static_cast<int>(spResult->vecValues.size());
+						spResult->bHasMore = false;
+					}
+				}
+			}
+			else if (spCompleteRequest->strRefType == MCP::CONST_REF_RESOURCE)
+			{
+				spResult->vecValues = {
+					"file:///project/src/main.rs",
+					"file:///project/src/lib.rs",
+					"file:///project/src/utils.rs"
+				};
+				spResult->iTotal = static_cast<int>(spResult->vecValues.size());
+				spResult->bHasMore = false;
+			}
+
+			iErrCode = NotifyResult(spResult);
+		}
+		else
+		{
+			Json::Value jErrData(Json::objectValue);
+			jErrData[MCP::MSG_KEY_REF] = spCompleteRequest->strRefType;
+			iErrCode = NotifyError(iErrCode, "Failed to complete", jErrData);
+		}
+
+		return iErrCode;
+	}
 }

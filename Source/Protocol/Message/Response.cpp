@@ -415,4 +415,46 @@ namespace MCP
 	{
 		return !vecMessages.empty();
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CompleteResult
+	int CompleteResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jCompletion(Json::objectValue);
+
+		Json::Value jValues(Json::arrayValue);
+		for (const auto& strValue : vecValues)
+		{
+			Json::Value jVal(strValue);
+			jValues.append(jVal);
+		}
+		jCompletion[MSG_KEY_VALUES] = jValues;
+
+		if (iTotal >= 0)
+		{
+			Json::Value jTotal(iTotal);
+			jCompletion[MSG_KEY_TOTAL] = jTotal;
+		}
+
+		Json::Value jHasMore(bHasMore);
+		jCompletion[MSG_KEY_HAS_MORE] = jHasMore;
+
+		jResult[MSG_KEY_COMPLETION] = jCompletion;
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int CompleteResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool CompleteResult::IsValid() const
+	{
+		return !vecValues.empty();
+	}
 }

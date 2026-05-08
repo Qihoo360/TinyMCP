@@ -58,6 +58,14 @@ namespace MCP
 	static constexpr const char* MSG_KEY_ROLE = "role";
 	static constexpr const char* MSG_KEY_MESSAGES = "messages";
 	static constexpr const char* MSG_KEY_REQUIRED = "required";
+	static constexpr const char* MSG_KEY_REF = "ref";
+	static constexpr const char* MSG_KEY_COMPLETION = "completion";
+	static constexpr const char* MSG_KEY_VALUES = "values";
+	static constexpr const char* MSG_KEY_HAS_MORE = "hasMore";
+	static constexpr const char* MSG_KEY_VALUE = "value";
+	static constexpr const char* MSG_KEY_ARGUMENT = "argument";
+	static constexpr const char* MSG_KEY_EXPERIMENTAL = "experimental";
+	static constexpr const char* MSG_KEY_SUPPORTS_STREAMING = "supportsStreaming";
 	
 	static constexpr const char* CONST_USER = "user";
 	static constexpr const char* CONST_ASSISTANT = "assistant";
@@ -79,10 +87,13 @@ namespace MCP
 	static constexpr const char* METHOD_PROMPTS_LIST = "prompts/list";
 	static constexpr const char* METHOD_PROMPTS_GET = "prompts/get";
 	static constexpr const char* METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
+	static constexpr const char* METHOD_COMPLETION_COMPLETE = "completion/complete";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
 	static constexpr const char* CONST_RESOURCE = "resource";
+	static constexpr const char* CONST_REF_PROMPT = "ref/prompt";
+	static constexpr const char* CONST_REF_RESOURCE = "ref/resource";
 
 	static constexpr const char* ERROR_MESSAGE_PARSE_ERROR = u8"parse error";
 	static constexpr const char* ERROR_MESSAGE_INVALID_REQUEST = u8"invalid request";
@@ -174,5 +185,11 @@ namespace MCP
 		MessageType_GetPromptRequest,
 		MessageType_GetPromptResult,
 		MessageType_PromptListChangedNotification,
+		MessageType_CompleteRequest,
+		MessageType_CompleteResult,
+		MessageType_PromptReference,
+		MessageType_ResourceReference,
+		MessageType_Completion,
+		MessageType_Experimental,
 	};
 }

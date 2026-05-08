@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -228,6 +228,28 @@ namespace MCP
 		std::shared_ptr<MCP::GetPromptResult> BuildResult();
 		int NotifyProgress(int iProgress, int iTotal);
 		int NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult);
+		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
+		int NotifyCancelled();
+
+	protected:
+		bool m_bFinished{ false };
+		bool m_bCancelled{ false };
+	};
+
+	class ProcessCompleteRequest : public ProcessRequest
+	{
+	public:
+		ProcessCompleteRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		bool IsFinished() const override;
+		bool IsCancelled() const override;
+		std::shared_ptr<MCP::CompleteResult> BuildResult();
+		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyResult(std::shared_ptr<MCP::CompleteResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
 

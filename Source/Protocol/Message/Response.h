@@ -193,4 +193,22 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct CompleteResult : public MCP::Response
+	{
+	public:
+		CompleteResult(bool bNeedIdentity)
+			: Response(MessageType_CompleteResult, bNeedIdentity)
+		{
+
+		}
+
+		std::vector<std::string> vecValues;
+		int iTotal{ -1 };
+		bool bHasMore{ false };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

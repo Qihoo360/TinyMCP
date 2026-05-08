@@ -202,4 +202,24 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct CompleteRequest : public MCP::Request
+	{
+	public:
+		CompleteRequest(bool bNeedIdentity)
+			: Request(MessageType_CompleteRequest, bNeedIdentity)
+		{
+
+		}
+
+		MCP::PromptReference promptRef;
+		MCP::ResourceReference resourceRef;
+		std::string strRefType;
+		std::string strArgumentName;
+		std::string strArgumentValue;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

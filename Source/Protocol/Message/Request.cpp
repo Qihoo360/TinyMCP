@@ -479,4 +479,78 @@ namespace MCP
 
 		return true;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CompleteRequest
+	int CompleteRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int CompleteRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Request::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_INVALID_REQUEST;
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+
+		if (!jParams.isMember(MSG_KEY_REF) || !jParams[MSG_KEY_REF].isObject())
+			return ERRNO_INVALID_REQUEST;
+		auto& jRef = jParams[MSG_KEY_REF];
+
+		if (!jRef.isMember(MSG_KEY_TYPE) || !jRef[MSG_KEY_TYPE].isString())
+			return ERRNO_INVALID_REQUEST;
+		strRefType = jRef[MSG_KEY_TYPE].asString();
+
+		if (strRefType == CONST_REF_PROMPT)
+		{
+			iErrCode = promptRef.DoDeserialize(jRef);
+			if (ERRNO_OK != iErrCode)
+				return iErrCode;
+		}
+		else if (strRefType == CONST_REF_RESOURCE)
+		{
+			iErrCode = resourceRef.DoDeserialize(jRef);
+			if (ERRNO_OK != iErrCode)
+				return iErrCode;
+		}
+		else
+		{
+			return ERRNO_INVALID_REQUEST;
+		}
+
+		if (!jParams.isMember(MSG_KEY_ARGUMENT) || !jParams[MSG_KEY_ARGUMENT].isObject())
+			return ERRNO_INVALID_REQUEST;
+		auto& jArgument = jParams[MSG_KEY_ARGUMENT];
+
+		if (!jArgument.isMember(MSG_KEY_NAME) || !jArgument[MSG_KEY_NAME].isString())
+			return ERRNO_INVALID_REQUEST;
+		strArgumentName = jArgument[MSG_KEY_NAME].asString();
+
+		if (!jArgument.isMember(MSG_KEY_VALUE) || !jArgument[MSG_KEY_VALUE].isString())
+			return ERRNO_INVALID_REQUEST;
+		strArgumentValue = jArgument[MSG_KEY_VALUE].asString();
+
+		return ERRNO_OK;
+	}
+
+	bool CompleteRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_COMPLETION_COMPLETE) != 0)
+			return false;
+
+		if (strRefType != CONST_REF_PROMPT && strRefType != CONST_REF_RESOURCE)
+			return false;
+
+		if (strArgumentName.empty())
+			return false;
+
+		return true;
+	}
 }

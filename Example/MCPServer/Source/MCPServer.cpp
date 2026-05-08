@@ -33,5 +33,7 @@ int main(int argc, char* argv[])
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
+    //std::this_thread::sleep_for(std::chrono::seconds(10));
+
     return LaunchEchoServer();
 }

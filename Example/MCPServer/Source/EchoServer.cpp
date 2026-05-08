@@ -21,6 +21,9 @@ namespace Implementation
         MCP::Prompts prompts;
         prompts.bListChanged = true;
         RegisterServerPromptsCapabilities(prompts);
+		MCP::Experimental experimental;
+        experimental.bCompletion = true;
+		RegisterServerExperimentalCapabilities(experimental);
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
         MCP::Tool tool;
@@ -87,6 +90,13 @@ namespace Implementation
             return MCP::ERRNO_INTERNAL_ERROR;
         RegisterGetPromptTasks(Implementation::CEchoGetPromptTask::PROMPT_CODE_REVIEW, spGetPromptTask);        
         RegisterGetPromptTasks(Implementation::CEchoGetPromptTask::PROMPT_EXPLAIN_CODE, spGetPromptTask);
+
+        auto spCompleteTask = std::make_shared<Implementation::CEchoCompleteTask>(nullptr);
+        if (!spCompleteTask)
+            return MCP::ERRNO_INTERNAL_ERROR;
+        RegisterCompleteTasks(std::string(MCP::CONST_REF_PROMPT) + ":" + Implementation::CEchoGetPromptTask::PROMPT_CODE_REVIEW, spCompleteTask);
+        RegisterCompleteTasks(std::string(MCP::CONST_REF_PROMPT) + ":" + Implementation::CEchoGetPromptTask::PROMPT_EXPLAIN_CODE, spCompleteTask);
+        RegisterCompleteTasks(std::string(MCP::CONST_REF_RESOURCE) + ":" + resource.strUri, spCompleteTask);
 
         return MCP::ERRNO_OK;
     }

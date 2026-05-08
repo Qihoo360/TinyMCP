@@ -434,6 +434,58 @@ namespace MCP
 			iErrCode = CommitAsyncTask(spNewProcessGetPromptRequest);
 
 		} break;
+		case MessageType_CompleteRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spCompleteRequest = std::dynamic_pointer_cast<MCP::CompleteRequest>(spRequest);
+			if (!spCompleteRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			std::string strTaskKey = spCompleteRequest->strRefType + ":";
+			if (spCompleteRequest->strRefType == CONST_REF_PROMPT)
+			{
+				strTaskKey += spCompleteRequest->promptRef.strName;
+			}
+			else if (spCompleteRequest->strRefType == CONST_REF_RESOURCE)
+			{
+				strTaskKey += spCompleteRequest->resourceRef.strUri;
+			}
+			else
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spProcessCompleteRequest = CMCPSession::GetInstance().GetServerCompleteTask(strTaskKey);
+			if (!spProcessCompleteRequest)
+			{
+				strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+				iErrCode = ERRNO_INVALID_PARAMS;
+				goto PROC_END;
+			}
+			auto spNewTask = spProcessCompleteRequest->Clone();
+			if (!spNewTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			auto spNewProcessCompleteRequest = std::dynamic_pointer_cast<MCP::ProcessCompleteRequest>(spNewTask);
+			if (!spNewProcessCompleteRequest)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+			spNewProcessCompleteRequest->SetRequest(spRequest);
+			iErrCode = CommitAsyncTask(spNewProcessCompleteRequest);
+
+		} break;
 		default: break;
 		}
 
@@ -723,6 +775,20 @@ namespace MCP
 
 			return ERRNO_OK;
 		}
+		else if (spRequest->strMethod.compare(METHOD_COMPLETION_COMPLETE) == 0)
+		{
+			auto spCompleteRequest = std::make_shared<MCP::CompleteRequest>(true);
+			if (!spCompleteRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spCompleteRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spCompleteRequest;
+
+			return ERRNO_OK;
+		}
 
 		return ERRNO_INTERNAL_ERROR;
 	}
@@ -852,6 +918,11 @@ namespace MCP
 		m_hashGetPromptTasks = hashGetPromptTasks;
 	}
 
+	void CMCPSession::SetServerCompleteTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>>& hashCompleteTasks)
+	{
+		m_hashCompleteTasks = hashCompleteTasks;
+	}
+
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
 		return m_serverInfo;
@@ -959,6 +1030,14 @@ namespace MCP
 	{
 		if (m_hashGetPromptTasks.count(strPromptName) > 0)
 			return m_hashGetPromptTasks[strPromptName];
+
+		return nullptr;
+	}
+
+	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerCompleteTask(const std::string& strTaskKey)
+	{
+		if (m_hashCompleteTasks.count(strTaskKey) > 0)
+			return m_hashCompleteTasks[strTaskKey];
 
 		return nullptr;
 	}

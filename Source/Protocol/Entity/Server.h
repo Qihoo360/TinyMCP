@@ -45,6 +45,11 @@ namespace MCP
 			m_capabilities.prompts = prompts;
 		}
 
+		void RegisterServerExperimentalCapabilities(const MCP::Experimental& experimental)
+		{
+			m_capabilities.experimental = experimental;
+		}
+
 		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)
 		{
 			MCP::CMCPSession::GetInstance().SetServerToolsPagination(bPagination);
@@ -89,6 +94,11 @@ namespace MCP
 			m_hashGetPromptTasks[strPromptName] = spTask;
 		}
 
+		void RegisterCompleteTasks(const std::string& strTaskKey, std::shared_ptr<MCP::ProcessCompleteRequest> spTask)
+		{
+			m_hashCompleteTasks[strTaskKey] = spTask;
+		}
+
 		virtual int Initialize() = 0;
 		virtual int Uninitialize() = 0;
 
@@ -101,6 +111,7 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
 			MCP::CMCPSession::GetInstance().SetServerSubscribeResourceTasks(m_hashSubscribeResourceTasks);
 			MCP::CMCPSession::GetInstance().SetServerGetPromptTasks(m_hashGetPromptTasks);
+			MCP::CMCPSession::GetInstance().SetServerCompleteTasks(m_hashCompleteTasks);
 
 			int iErrCode = MCP::CMCPSession::GetInstance().Ready();
 			if (ERRNO_OK != iErrCode)
@@ -123,5 +134,6 @@ namespace MCP
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>> m_hashCompleteTasks;
 	};
 }

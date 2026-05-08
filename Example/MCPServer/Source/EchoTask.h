@@ -88,4 +88,21 @@ namespace Implementation
 		// This method is used to cancel time-consuming asynchronous tasks.
 		int Cancel() override;
 	};
+
+	class CEchoCompleteTask : public MCP::ProcessCompleteRequest
+	{
+	public:
+		CEchoCompleteTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessCompleteRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		// If it's a time-consuming task, you need to start a thread to execute it asynchronously.
+		int Execute() override;
+		// This method is used to cancel time-consuming asynchronous tasks.
+		int Cancel() override;
+	};
 }

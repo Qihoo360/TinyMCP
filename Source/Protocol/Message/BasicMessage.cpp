@@ -166,6 +166,29 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// Experimental
+	int Experimental::DoSerialize(Json::Value& jMsg) const
+	{
+		if (bCompletion)
+		{
+			Json::Value jCompletion(Json::objectValue);
+			jMsg[MSG_KEY_COMPLETION] = jCompletion;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int Experimental::DoDeserialize(const Json::Value& jMsg)
+	{
+		return ERRNO_OK;
+	}
+
+	bool Experimental::IsValid() const
+	{
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// ServerCapabilities
 	int ServerCapabilities::DoSerialize(Json::Value& jMsg) const
 	{
@@ -184,6 +207,7 @@ namespace MCP
 		fnSerializeMember(prompts, MSG_KEY_PROMPTS);
 		fnSerializeMember(resources, MSG_KEY_RESOURCES);
 		fnSerializeMember(tools, MSG_KEY_TOOLS);
+		fnSerializeMember(experimental, MSG_KEY_EXPERIMENTAL);
 
 		return ERRNO_OK;
 	}
@@ -203,6 +227,7 @@ namespace MCP
 		fnDeserializeMember(prompts, MSG_KEY_PROMPTS);
 		fnDeserializeMember(resources, MSG_KEY_RESOURCES);
 		fnDeserializeMember(tools, MSG_KEY_TOOLS);
+		fnDeserializeMember(experimental, MSG_KEY_EXPERIMENTAL);
 
 		return ERRNO_OK;
 	}
@@ -771,5 +796,65 @@ namespace MCP
 	bool PromptMessage::IsValid() const
 	{
 		return (strRole == CONST_USER || strRole == CONST_ASSISTANT) && !strContentType.empty();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// PromptReference
+	int PromptReference::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jType(strType);
+		jMsg[MSG_KEY_TYPE] = jType;
+		Json::Value jName(strName);
+		jMsg[MSG_KEY_NAME] = jName;
+
+		return ERRNO_OK;
+	}
+
+	int PromptReference::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isMember(MSG_KEY_TYPE) || !jMsg[MSG_KEY_TYPE].isString())
+			return ERRNO_PARSE_ERROR;
+		strType = jMsg[MSG_KEY_TYPE].asString();
+
+		if (!jMsg.isMember(MSG_KEY_NAME) || !jMsg[MSG_KEY_NAME].isString())
+			return ERRNO_PARSE_ERROR;
+		strName = jMsg[MSG_KEY_NAME].asString();
+
+		return ERRNO_OK;
+	}
+
+	bool PromptReference::IsValid() const
+	{
+		return strType == CONST_REF_PROMPT && !strName.empty();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ResourceReference
+	int ResourceReference::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jType(strType);
+		jMsg[MSG_KEY_TYPE] = jType;
+		Json::Value jUri(strUri);
+		jMsg[MSG_KEY_URI] = jUri;
+
+		return ERRNO_OK;
+	}
+
+	int ResourceReference::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isMember(MSG_KEY_TYPE) || !jMsg[MSG_KEY_TYPE].isString())
+			return ERRNO_PARSE_ERROR;
+		strType = jMsg[MSG_KEY_TYPE].asString();
+
+		if (!jMsg.isMember(MSG_KEY_URI) || !jMsg[MSG_KEY_URI].isString())
+			return ERRNO_PARSE_ERROR;
+		strUri = jMsg[MSG_KEY_URI].asString();
+
+		return ERRNO_OK;
+	}
+
+	bool ResourceReference::IsValid() const
+	{
+		return strType == CONST_REF_RESOURCE && !strUri.empty();
 	}
 }

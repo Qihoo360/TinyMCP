@@ -104,6 +104,20 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
+	struct Experimental : public MCP::Message
+	{
+		Experimental()
+			: Message(MessageType_Experimental, MessageCategory_Basic, false)
+		{
+		}
+
+		bool bCompletion{ false };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct ServerCapabilities : public MCP::Message
 	{
 	public:
@@ -118,6 +132,7 @@ namespace MCP
 		MCP::Prompts prompts;
 		MCP::Resources resources;
 		MCP::Tools tools;
+		MCP::Experimental experimental;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
@@ -337,5 +352,37 @@ namespace MCP
 				&& iToken == rhs.iToken
 				&& strToken == rhs.strToken;
 		}
+	};
+
+	struct PromptReference : public MCP::Message
+	{
+		PromptReference()
+			: Message(MessageType_PromptReference, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strType;
+		std::string strName;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ResourceReference : public MCP::Message
+	{
+		ResourceReference()
+			: Message(MessageType_ResourceReference, MessageCategory_Basic, false)
+		{
+
+		}
+
+		std::string strType;
+		std::string strUri;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 }

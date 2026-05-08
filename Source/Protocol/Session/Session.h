@@ -56,6 +56,7 @@ namespace MCP
 		void SetServerReadResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>>& hashReadResourceTasks);
 		void SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks);
 		void SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks);
+		void SetServerCompleteTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>>& hashCompleteTasks);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
@@ -72,6 +73,7 @@ namespace MCP
 		std::shared_ptr<MCP::ProcessRequest> GetServerReadResourceTask(const std::string& strResourceUri);
 		std::shared_ptr<MCP::ProcessRequest> GetServerSubscribeResourceTask(const std::string& strResourceUri);
 		std::shared_ptr<MCP::ProcessRequest> GetServerGetPromptTask(const std::string& strPromptName);
+		std::shared_ptr<MCP::ProcessRequest> GetServerCompleteTask(const std::string& strTaskKey);
 
 	private:
 		CMCPSession() = default;
@@ -114,6 +116,7 @@ namespace MCP
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
 		std::unordered_map<std::string, MCP::RequestId> m_hashUri2SubscribeResourceTaskId;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
+		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>> m_hashCompleteTasks;
 
 		// Asynchronous Task
 		std::unique_ptr<std::thread> m_upTaskThread;

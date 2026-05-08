@@ -1067,4 +1067,116 @@ namespace MCP
 		m_bCancelled = true;
 		return ERRNO_OK;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessCompleteRequest
+	bool ProcessCompleteRequest::IsFinished() const
+	{
+		return m_bFinished;
+	}
+
+	bool ProcessCompleteRequest::IsCancelled() const
+	{
+		return m_bCancelled;
+	}
+
+	std::shared_ptr<MCP::CompleteResult> ProcessCompleteRequest::BuildResult()
+	{
+		auto spResult = std::make_shared<CompleteResult>(true);
+		if (!spResult)
+			return nullptr;
+
+		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
+		if (!spRequest)
+			return nullptr;
+
+		spResult->requestId = spRequest->requestId;
+		return spResult;
+	}
+
+	int ProcessCompleteRequest::NotifyProgress(int iProgress, int iTotal)
+	{
+		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (!spRequest->progressToken.IsValid())
+			return ERRNO_OK;
+
+		auto spProgressNotification = std::make_shared<ProgressNotification>(false);
+		if (!spProgressNotification)
+			return ERRNO_INTERNAL_ERROR;
+
+		spProgressNotification->progressToken = spRequest->progressToken;
+		spProgressNotification->iProgress = iProgress;
+		spProgressNotification->iTotal = iTotal;
+
+		std::string strNotification;
+		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strNotification);
+	}
+
+	int ProcessCompleteRequest::NotifyResult(std::shared_ptr<MCP::CompleteResult> spResult)
+	{
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		m_bFinished = true;
+
+		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		spResult->requestId = spRequest->requestId;
+
+		std::string strResponse;
+		if (ERRNO_OK != spResult->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
+	}
+
+	int ProcessCompleteRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
+	{
+		m_bFinished = true;
+
+		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+		if (!spErrorResponse)
+			return ERRNO_INTERNAL_ERROR;
+
+		spErrorResponse->requestId = spRequest->requestId;
+		spErrorResponse->iCode = iCode;
+		spErrorResponse->strMesage = strMessage;
+		spErrorResponse->jErrorData = jErrData;
+
+		std::string strResponse;
+		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
+	}
+
+	int ProcessCompleteRequest::NotifyCancelled()
+	{
+		m_bCancelled = true;
+		return ERRNO_OK;
+	}
 }
