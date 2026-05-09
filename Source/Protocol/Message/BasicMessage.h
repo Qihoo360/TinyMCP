@@ -118,6 +118,32 @@ namespace MCP
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
+	struct LoggingLevel : public MCP::Message
+	{
+		LoggingLevel()
+			: Message(MessageType_LoggingLevel, MessageCategory_Basic, false)
+		{
+		}
+
+		LoggingLevelValue eLevel{ LoggingLevelValue::LoggingLevel_Unknown };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct Logging : public MCP::Message
+	{
+		Logging()
+			: Message(MessageType_Logging, MessageCategory_Basic, false)
+		{
+		}
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct ServerCapabilities : public MCP::Message
 	{
 	public:
@@ -127,12 +153,14 @@ namespace MCP
 			prompts.bExist = false;
 			resources.bExist = false;
 			tools.bExist = false;
+			logging.bExist = false;
 		}
 
 		MCP::Prompts prompts;
 		MCP::Resources resources;
 		MCP::Tools tools;
 		MCP::Experimental experimental;
+		MCP::Logging logging;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

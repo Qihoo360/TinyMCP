@@ -108,4 +108,22 @@ namespace MCP
 
 		bool IsValid() const override;
 	};
+
+	struct LoggingMessageNotification : public MCP::Notification
+	{
+	public:
+		LoggingMessageNotification(bool bNeedIdentity)
+			: Notification(MessageType_LoggingMessageNotification, bNeedIdentity)
+		{
+
+		}
+
+		MCP::LoggingLevel level;
+		std::string strLogger;
+		Json::Value jData;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

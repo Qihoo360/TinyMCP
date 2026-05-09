@@ -486,6 +486,24 @@ namespace MCP
 			iErrCode = CommitAsyncTask(spNewProcessCompleteRequest);
 
 		} break;
+		case MessageType_SetLevelRequest:
+		{
+			if (CMCPSession::SessionState_Initialized != CMCPSession::GetInstance().GetSessionState())
+			{
+				iErrCode = ERRNO_INVALID_REQUEST;
+				goto PROC_END;
+			}
+
+			auto spTask = std::make_shared<ProcessSetLevelRequest>(spRequest);
+			if (!spTask)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				goto PROC_END;
+			}
+
+			iErrCode = spTask->Execute();
+
+		} break;
 		default: break;
 		}
 
@@ -789,6 +807,20 @@ namespace MCP
 
 			return ERRNO_OK;
 		}
+		else if (spRequest->strMethod.compare(METHOD_LOGGING_SET_LEVEL) == 0)
+		{
+			auto spSetLevelRequest = std::make_shared<MCP::SetLevelRequest>(true);
+			if (!spSetLevelRequest)
+				return ERRNO_PARSE_ERROR;
+
+			iErrCode = spSetLevelRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spSetLevelRequest;
+
+			return ERRNO_OK;
+		}
 
 		return ERRNO_INTERNAL_ERROR;
 	}
@@ -1040,6 +1072,40 @@ namespace MCP
 			return m_hashCompleteTasks[strTaskKey];
 
 		return nullptr;
+	}
+
+	void CMCPSession::SetLoggingLevel(const MCP::LoggingLevel& level)
+	{
+		m_loggingLevel = level;
+	}
+
+	MCP::LoggingLevel CMCPSession::GetLoggingLevel() const
+	{
+		return m_loggingLevel;
+	}
+
+	int CMCPSession::SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData)
+	{
+		if (!m_spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto currentLevel = GetLoggingLevel();
+		if (level.eLevel < currentLevel.eLevel)
+		{
+			return ERRNO_OK;
+		}
+
+		MCP::LoggingMessageNotification notification(false);
+		notification.strMethod = METHOD_NOTIFICATION_MESSAGE;
+		notification.level = level;
+		notification.strLogger = strLogger;
+		notification.jData = jData;
+
+		std::string strNotification;
+		if (ERRNO_OK != notification.Serialize(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+
+		return m_spTransport->Write(strNotification);
 	}
 
 	int CMCPSession::CommitAsyncTask(const std::shared_ptr<MCP::CMCPTask>& spTask)

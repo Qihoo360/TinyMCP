@@ -24,6 +24,7 @@ namespace Implementation
 		MCP::Experimental experimental;
         experimental.bCompletion = true;
 		RegisterServerExperimentalCapabilities(experimental);
+        RegisterServerLoggingCapabilities();
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
         MCP::Tool tool;

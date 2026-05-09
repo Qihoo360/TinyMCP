@@ -75,6 +75,10 @@ namespace MCP
 		std::shared_ptr<MCP::ProcessRequest> GetServerGetPromptTask(const std::string& strPromptName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerCompleteTask(const std::string& strTaskKey);
 
+		void SetLoggingLevel(const MCP::LoggingLevel& level);
+		MCP::LoggingLevel GetLoggingLevel() const;
+		int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+
 	private:
 		CMCPSession() = default;
 		int ParseMessage(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
@@ -109,6 +113,7 @@ namespace MCP
 		bool m_bResourcesPagination{ false };
 		bool m_bResourceTemplatesPagination{ false };
 		bool m_bPromptsPagination{ false };
+		MCP::LoggingLevel m_loggingLevel;
 
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;

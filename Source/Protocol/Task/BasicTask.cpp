@@ -44,6 +44,13 @@ namespace MCP
 		return m_spRequest;
 	}
 
+	int ProcessRequest::NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData)
+	{
+		MCP::LoggingLevel level;
+		level.eLevel = eLevel;
+		return MCP::CMCPSession::GetInstance().SendLogMessage(level, strLogger, jData);
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessPingRequest
 	std::shared_ptr<CMCPTask> ProcessPingRequest::Clone() const
@@ -1178,5 +1185,39 @@ namespace MCP
 	{
 		m_bCancelled = true;
 		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessSetLevelRequest
+	std::shared_ptr<CMCPTask> ProcessSetLevelRequest::Clone() const
+	{
+		return nullptr;
+	}
+
+	int ProcessSetLevelRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spSetLevelRequest = std::dynamic_pointer_cast<SetLevelRequest>(m_spRequest);
+		if (!spSetLevelRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		CMCPSession::GetInstance().SetLoggingLevel(spSetLevelRequest->level);
+
+		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
+		if (!spEmptyResponse)
+			return ERRNO_INTERNAL_ERROR;
+		spEmptyResponse->requestId = m_spRequest->requestId;
+
+		std::string strResponse;
+		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
 	}
 }

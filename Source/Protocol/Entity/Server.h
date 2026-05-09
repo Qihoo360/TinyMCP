@@ -50,6 +50,11 @@ namespace MCP
 			m_capabilities.experimental = experimental;
 		}
 
+		void RegisterServerLoggingCapabilities()
+		{
+			m_capabilities.logging.bExist = true;
+		}
+
 		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)
 		{
 			MCP::CMCPSession::GetInstance().SetServerToolsPagination(bPagination);

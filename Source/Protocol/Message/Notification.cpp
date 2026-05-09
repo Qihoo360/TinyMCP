@@ -1,4 +1,4 @@
-#include "Notification.h"
+﻿#include "Notification.h"
 #include <string>
 
 namespace MCP
@@ -217,6 +217,49 @@ namespace MCP
 			return false;
 
 		if (strMethod.compare(METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED) != 0)
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// LoggingMessageNotification
+	int LoggingMessageNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		level.DoSerialize(jParams);
+		if (!strLogger.empty())
+		{
+			Json::Value jLogger(strLogger);
+			jParams[MSG_KEY_LOGGER] = jLogger;
+		}
+		if (!jData.isNull())
+		{
+			jParams[MSG_KEY_DATA] = jData;
+		}
+		jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
+	}
+
+	int LoggingMessageNotification::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Notification::DoDeserialize(jMsg);
+	}
+
+	bool LoggingMessageNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_NOTIFICATION_MESSAGE) != 0)
+			return false;
+
+		if (!level.IsValid())
 			return false;
 
 		return true;

@@ -208,6 +208,7 @@ namespace MCP
 		fnSerializeMember(resources, MSG_KEY_RESOURCES);
 		fnSerializeMember(tools, MSG_KEY_TOOLS);
 		fnSerializeMember(experimental, MSG_KEY_EXPERIMENTAL);
+		fnSerializeMember(logging, MSG_KEY_LOGGING);
 
 		return ERRNO_OK;
 	}
@@ -228,6 +229,7 @@ namespace MCP
 		fnDeserializeMember(resources, MSG_KEY_RESOURCES);
 		fnDeserializeMember(tools, MSG_KEY_TOOLS);
 		fnDeserializeMember(experimental, MSG_KEY_EXPERIMENTAL);
+		fnDeserializeMember(logging, MSG_KEY_LOGGING);
 
 		return ERRNO_OK;
 	}
@@ -856,5 +858,98 @@ namespace MCP
 	bool ResourceReference::IsValid() const
 	{
 		return strType == CONST_REF_RESOURCE && !strUri.empty();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// LoggingLevel
+	int LoggingLevel::DoSerialize(Json::Value& jMsg) const
+	{
+		std::string strLevel;
+		if (eLevel != LoggingLevelValue::LoggingLevel_Unknown)
+		{
+			switch (eLevel)
+			{
+				case LoggingLevelValue::LoggingLevel_Debug:
+					strLevel = LOGGING_LEVEL_DEBUG;
+					break;
+				case LoggingLevelValue::LoggingLevel_Info:
+					strLevel = LOGGING_LEVEL_INFO;
+					break;
+				case LoggingLevelValue::LoggingLevel_Notice:
+					strLevel = LOGGING_LEVEL_NOTICE;
+					break;
+				case LoggingLevelValue::LoggingLevel_Warning:
+					strLevel = LOGGING_LEVEL_WARNING;
+					break;
+				case LoggingLevelValue::LoggingLevel_Error:
+					strLevel = LOGGING_LEVEL_ERROR;
+					break;
+				case LoggingLevelValue::LoggingLevel_Critical:
+					strLevel = LOGGING_LEVEL_CRITICAL;
+					break;
+				case LoggingLevelValue::LoggingLevel_Alert:
+					strLevel = LOGGING_LEVEL_ALERT;
+					break;
+				case LoggingLevelValue::LoggingLevel_Emergency:
+					strLevel = LOGGING_LEVEL_EMERGENCY;
+					break;
+				default:
+					break;
+			}
+		}
+		Json::Value jLevel(strLevel);
+		jMsg[MSG_KEY_LEVEL] = jLevel;
+
+		return ERRNO_OK;
+	}
+
+	int LoggingLevel::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isMember(MSG_KEY_LEVEL) || !jMsg[MSG_KEY_LEVEL].isString())
+			return ERRNO_PARSE_ERROR;
+		std::string strLevel = jMsg[MSG_KEY_LEVEL].asString();
+
+		if (strLevel == LOGGING_LEVEL_DEBUG)
+			eLevel = LoggingLevelValue::LoggingLevel_Debug;
+		else if (strLevel == LOGGING_LEVEL_INFO)
+			eLevel = LoggingLevelValue::LoggingLevel_Info;
+		else if (strLevel == LOGGING_LEVEL_NOTICE)
+			eLevel = LoggingLevelValue::LoggingLevel_Notice;
+		else if (strLevel == LOGGING_LEVEL_WARNING)
+			eLevel = LoggingLevelValue::LoggingLevel_Warning;
+		else if (strLevel == LOGGING_LEVEL_ERROR)
+			eLevel = LoggingLevelValue::LoggingLevel_Error;
+		else if (strLevel == LOGGING_LEVEL_CRITICAL)
+			eLevel = LoggingLevelValue::LoggingLevel_Critical;
+		else if (strLevel == LOGGING_LEVEL_ALERT)
+			eLevel = LoggingLevelValue::LoggingLevel_Alert;
+		else if (strLevel == LOGGING_LEVEL_EMERGENCY)
+			eLevel = LoggingLevelValue::LoggingLevel_Emergency;
+		else
+			return ERRNO_PARSE_ERROR;
+
+		return ERRNO_OK;
+	}
+
+	bool LoggingLevel::IsValid() const
+	{
+		return eLevel != LoggingLevelValue::LoggingLevel_Unknown;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// Logging
+	int Logging::DoSerialize(Json::Value& jMsg) const
+	{
+		return ERRNO_OK;
+	}
+
+	int Logging::DoDeserialize(const Json::Value& jMsg)
+	{
+		return ERRNO_OK;
+	}
+
+	bool Logging::IsValid() const
+	{
+		return true;
 	}
 }

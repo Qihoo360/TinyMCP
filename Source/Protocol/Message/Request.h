@@ -222,4 +222,20 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
+
+	struct SetLevelRequest : public MCP::Request
+	{
+	public:
+		SetLevelRequest(bool bNeedIdentity)
+			: Request(MessageType_SetLevelRequest, bNeedIdentity)
+		{
+
+		}
+
+		MCP::LoggingLevel level;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
 }

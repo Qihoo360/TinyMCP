@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -25,6 +25,7 @@ namespace MCP
 
 		void SetRequest(const std::shared_ptr<MCP::Request>& spRequest);
 		std::shared_ptr<MCP::Request> GetRequest() const;
+		int NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData);
 
 	protected:
 		std::shared_ptr<MCP::Request> m_spRequest;
@@ -256,5 +257,18 @@ namespace MCP
 	protected:
 		bool m_bFinished{ false };
 		bool m_bCancelled{ false };
+	};
+
+	class ProcessSetLevelRequest : public ProcessRequest
+	{
+	public:
+		ProcessSetLevelRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
 	};
 }

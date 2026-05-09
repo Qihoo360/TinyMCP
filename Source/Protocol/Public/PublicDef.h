@@ -66,6 +66,18 @@ namespace MCP
 	static constexpr const char* MSG_KEY_ARGUMENT = "argument";
 	static constexpr const char* MSG_KEY_EXPERIMENTAL = "experimental";
 	static constexpr const char* MSG_KEY_SUPPORTS_STREAMING = "supportsStreaming";
+	static constexpr const char* MSG_KEY_LOGGING = "logging";
+	static constexpr const char* MSG_KEY_LEVEL = "level";
+	static constexpr const char* MSG_KEY_LOGGER = "logger";
+	
+	static constexpr const char* LOGGING_LEVEL_DEBUG = "debug";
+	static constexpr const char* LOGGING_LEVEL_INFO = "info";
+	static constexpr const char* LOGGING_LEVEL_NOTICE = "notice";
+	static constexpr const char* LOGGING_LEVEL_WARNING = "warning";
+	static constexpr const char* LOGGING_LEVEL_ERROR = "error";
+	static constexpr const char* LOGGING_LEVEL_CRITICAL = "critical";
+	static constexpr const char* LOGGING_LEVEL_ALERT = "alert";
+	static constexpr const char* LOGGING_LEVEL_EMERGENCY = "emergency";
 	
 	static constexpr const char* CONST_USER = "user";
 	static constexpr const char* CONST_ASSISTANT = "assistant";
@@ -88,6 +100,8 @@ namespace MCP
 	static constexpr const char* METHOD_PROMPTS_GET = "prompts/get";
 	static constexpr const char* METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
 	static constexpr const char* METHOD_COMPLETION_COMPLETE = "completion/complete";
+	static constexpr const char* METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
+	static constexpr const char* METHOD_NOTIFICATION_MESSAGE = "notifications/message";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
@@ -191,5 +205,22 @@ namespace MCP
 		MessageType_ResourceReference,
 		MessageType_Completion,
 		MessageType_Experimental,
+		MessageType_SetLevelRequest,
+		MessageType_LoggingLevel,
+		MessageType_Logging,
+		MessageType_LoggingMessageNotification,
+	};
+
+	enum class LoggingLevelValue
+	{
+		LoggingLevel_Unknown,
+		LoggingLevel_Debug,
+		LoggingLevel_Info,
+		LoggingLevel_Notice,
+		LoggingLevel_Warning,
+		LoggingLevel_Error,
+		LoggingLevel_Critical,
+		LoggingLevel_Alert,
+		LoggingLevel_Emergency,
 	};
 }

@@ -50,8 +50,8 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Custom Notifications | JSON-RPC 2.0 notifications that are sent by an MCP Server or Client using custom method names, intended for transmitting arbitrary business data. | No | Yes |
 | Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | No | Yes |
 | Completion | A standardized way for servers to offer argument autocompletion suggestions for prompts and resource URIs. | No | Yes |
+| Logging | A standardized way for servers to send structured log messages to clients. | No | Yes |
 | Transports | HTTP with Server-Sent Events (SSE) | No | Not yet |
-| Logging | A standardized way for servers to send structured log messages to clients. | No | Not yet |
 
 ## LICENSE
 TinyMCP is licensed under the MIT License - see the LICENSE file for details.

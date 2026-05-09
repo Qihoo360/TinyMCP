@@ -28,6 +28,8 @@ namespace Implementation
 
 	int CEchoTask::Execute()
 	{
+		NotifyLogMessage(MCP::LoggingLevelValue::LoggingLevel_Info, "CEchoTask", Json::Value("Execution started"));
+
 		int iErrCode = MCP::ERRNO_INTERNAL_ERROR;
 		if (!IsValid())
 			return iErrCode;

@@ -553,4 +553,38 @@ namespace MCP
 
 		return true;
 	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// SetLevelRequest
+	int SetLevelRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int SetLevelRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Request::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_INVALID_REQUEST;
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+
+		return level.DoDeserialize(jParams);
+	}
+
+	bool SetLevelRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_LOGGING_SET_LEVEL) != 0)
+			return false;
+
+		if (!level.IsValid())
+			return false;
+
+		return true;
+	}
 }
