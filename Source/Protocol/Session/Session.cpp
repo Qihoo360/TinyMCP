@@ -85,6 +85,53 @@ namespace MCP
 		return CancelAsyncTask(requestId);
 	}
 
+	int CMCPSession::ResetForNewClient()
+	{
+		// Stop and join the async task thread that was spawned for the previous client's
+		// `notifications/initialized`. AsyncThreadProc's exit path already cancels every
+		// task still sitting in m_vecAsyncTasksCache (see the `!m_bRunAsyncTask` branch),
+		// so we do NOT re-cancel them here to avoid double-emitting cancellation side
+		// effects from user-supplied tool implementations.
+		if (m_upTaskThread)
+		{
+			StopAsyncTaskThread();
+			if (m_upTaskThread->joinable())
+				m_upTaskThread->join();
+			m_upTaskThread.reset();
+		}
+
+		// After join(), the async thread no longer touches any of the members below.
+		// The reader thread (single caller of ResetForNewClient) is the only owner of
+		// m_hashMessage / m_hashUri2SubscribeResourceTaskId / m_eSessionState, so no
+		// lock is needed for those. The async-thread-private containers are cleared
+		// under m_mtxAsyncThread purely for contract cleanliness -- there is no live
+		// contender at this point.
+		{
+			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
+			m_deqAsyncTasks.clear();
+			m_vecCancelledTaskIds.clear();
+			m_vecAsyncTasksCache.clear();
+		}
+
+		// Roll back the MCP protocol state machine to the pre-handshake state so the next
+		// client's `initialize` request is accepted (see ProcessRequest / SwitchState).
+		m_eSessionState = SessionState_Original;
+
+		// Drop cached per-connection message history and subscription bookkeeping. The
+		// server-side static registrations (tools/resources/prompts/handlers/capabilities)
+		// remain untouched -- they were populated at server start and are not per-client.
+		m_hashMessage.clear();
+		m_hashUri2SubscribeResourceTaskId.clear();
+		m_loggingLevel = MCP::LoggingLevel{};
+
+		// Re-arm the async task flag LAST so that CommitAsyncTask/CancelAsyncTask can
+		// never observe m_bRunAsyncTask == true while m_upTaskThread is still null
+		// (which would silently drop tasks into a deque that no worker consumes).
+		m_bRunAsyncTask.store(true);
+
+		return ERRNO_OK;
+	}
+
 	int CMCPSession::ProcessMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg)
 	{
 		if (!spMsg || !spMsg->IsValid())

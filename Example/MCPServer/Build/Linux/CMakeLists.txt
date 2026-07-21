@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+﻿cmake_minimum_required(VERSION 3.10)
 
 project(MCPServer VERSION 1.0.0.1001)
 
@@ -19,4 +19,8 @@ target_include_directories(MCPServer PRIVATE
     ../../Source
     ../../../../Source/Protocol
     ../../../../Source/External/jsoncpp/include
+    ../../../../Source/External/cpp-httplib
 )
+
+find_package(Threads REQUIRED)
+target_link_libraries(MCPServer PRIVATE Threads::Threads)

@@ -1,29 +1,29 @@
-﻿# TinyMCP
+﻿# TinyMCP 🧩
 
-## What is TinyMCP?
+## 📖 What is TinyMCP?
 TinyMCP is a lightweight C++ SDK for implementing the MCP Server.
 
-## What is MCP?
+## 🤔 What is MCP?
 MCP is an open protocol that standardizes how applications provide context to LLMs. Think of MCP like a USB-C port for AI applications. Just as USB-C provides a standardized way to connect your devices to various peripherals and accessories, MCP provides a standardized way to connect AI models to different data sources and tools.
-> [Reference for details](https://modelcontextprotocol.io/introduction)
+> 🔗 [Reference for details](https://modelcontextprotocol.io/introduction)
 
-## TinyMCP supported system platforms
+## 💻 TinyMCP supported system platforms
 * Windows
 * Linux
 * MacOS
 * Android
 * Other platforms that support standart c++...
 
-## Usage Guide
+## 🚀 Usage Guide
 Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more information.
 
-## Dependencies
+## 📦 Dependencies
 [jsoncpp 1.9.5](https://github.com/open-source-parsers/jsoncpp)
 
-## MCP protocol version
+## 📌 MCP protocol version
 [MCP Specification 2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/index)
 
-## Code structure brief
+## 🗂️ Code structure brief
 | directory | brief |
 | --- | --- |
 | Public | SDK public directory, used to store global type definitions, global constant resources, helper classes, etc. |
@@ -33,14 +33,15 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Task | Definition and implementation of various MCP tasks, such as the three - way handshake and capability negotiation task during the initialization phase, and the processing tasks for major requests like Prompts, Resources, Tools, etc. Time - consuming tasks are executed asynchronously, while ordinary tasks are executed synchronously. |
 | Entity | Definition of various protocol entity classes for MCP, mainly including the base class of the Server following the Singleton pattern. |
 
-## Feature support brief
-> Although not all features of the MCP protocol have been implemented, it is more than sufficient for you to implement your own MCP Server.
+## ✅ Feature support brief
+> 🎉 All features defined by the [MCP 2024-11-05 specification](https://modelcontextprotocol.io/specification/2024-11-05/index) are fully implemented.
 
 | Feature | Remarks | Essential Features | Supported or not |
 | --- | --- | --- | --- |
 | Base Protocol | Core JSON-RPC message types | Yes | Yes |
 | Lifecycle Management | Connection initialization, capability negotiation, and session control | Yes | Yes |
 | Transports | stdio | Yes | Yes |
+| Transports | HTTP with Server-Sent Events (SSE) | Yes | Yes |
 | Cancellation | Cancellation of in-progress requests through notification messages. | Yes | Yes |
 | Progress | Progress tracking for long-running operations through notification messages. | Yes | Yes |
 | Tools | Tools enable models to interact with external systems, such as querying databases, calling APIs, or performing computations. | Yes | Yes |
@@ -51,7 +52,6 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Prompts | Prompts allow servers to provide structured messages and instructions for interacting with language models. | No | Yes |
 | Completion | A standardized way for servers to offer argument autocompletion suggestions for prompts and resource URIs. | No | Yes |
 | Logging | A standardized way for servers to send structured log messages to clients. | No | Yes |
-| Transports | HTTP with Server-Sent Events (SSE) | No | Not yet |
 
-## LICENSE
+## 📄 LICENSE
 TinyMCP is licensed under the MIT License - see the LICENSE file for details.

@@ -41,6 +41,13 @@ namespace MCP
 		int Terminate();
 		int CancelTask(const MCP::RequestId& requestId);
 
+		// Reset per-connection MCP session state so that a new client (after the previous
+		// transport-level connection dropped) can re-issue `initialize` cleanly. This
+		// preserves server-side static registrations (tools/resources/prompts/handlers and
+		// server capabilities) while clearing the state machine, cached in-flight messages
+		// and the async task thread that belonged to the departed client.
+		int ResetForNewClient();
+
 		void SetTransport(const std::shared_ptr<CMCPTransport>& spTransport);
 		void SetServerInfo(const MCP::Implementation& impl);
 		void SetServerCapabilities(const MCP::ServerCapabilities& capabilities);

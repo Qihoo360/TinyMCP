@@ -51,6 +51,9 @@
     <Filter Include="MCP\External\jsoncpp\src\lib_json">
       <UniqueIdentifier>{3bf11345-bc1b-411d-a23b-810f9b05d41f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="MCP\External\cpp-httplib">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-4789-abcd-1234567890ab}</UniqueIdentifier>
+    </Filter>
     <Filter Include="IMPL">
       <UniqueIdentifier>{429476e9-ee37-446f-960c-ff0f5a4c9733}</UniqueIdentifier>
     </Filter>
@@ -96,6 +99,9 @@
       <Filter>MCP\Protocol\Task</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\Source\Protocol\Transport\Transport.cpp">
+      <Filter>MCP\Protocol\Transport</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\Source\Protocol\Transport\SSETransport.cpp">
       <Filter>MCP\Protocol\Transport</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\MCPServer.cpp">
@@ -177,6 +183,12 @@
     </ClInclude>
     <ClInclude Include="..\..\..\..\Source\Protocol\Transport\Transport.h">
       <Filter>MCP\Protocol\Transport</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\Protocol\Transport\SSETransport.h">
+      <Filter>MCP\Protocol\Transport</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\External\cpp-httplib\httplib.h">
+      <Filter>MCP\External\cpp-httplib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
