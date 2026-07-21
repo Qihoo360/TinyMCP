@@ -18,7 +18,8 @@ MCP is an open protocol that standardizes how applications provide context to LL
 Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more information.
 
 ## 📦 Dependencies
-[jsoncpp 1.9.5](https://github.com/open-source-parsers/jsoncpp)
+* [jsoncpp 1.9.5](https://github.com/open-source-parsers/jsoncpp/tree/1.9.5)
+* [cpp-httplib v0.44.0](https://github.com/yhirose/cpp-httplib/tree/v0.44.0)
 
 ## 📌 MCP protocol version
 [MCP Specification 2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/index)
@@ -29,7 +30,7 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Public | SDK public directory, used to store global type definitions, global constant resources, helper classes, etc. |
 | Message | Definition and implementation of the basic data structures of the MCP protocol, mainly including the implementation of protocol data such as standard requests, responses, and notifications that follow the JSON-RPC 2.0 protocol. |
 | Session | Definition and implementation of MCP protocol interaction sessions, mainly including the implementation of stateful sessions based on the C/S architecture and the maintenance of the complete MCP session lifecycle (initialization phase, running phase, and closing phase). |
-| Transport | Definition of data transmission channels between various endpoints based on the C/S architecture, which also includes an implementation of a default stdio transmission channel. |
+| Transport | Definition of data transmission channels between various endpoints based on the C/S architecture, including an implementation scheme for the default standard stdio transmission channel and an optional SEE transmission channel. |
 | Task | Definition and implementation of various MCP tasks, such as the three - way handshake and capability negotiation task during the initialization phase, and the processing tasks for major requests like Prompts, Resources, Tools, etc. Time - consuming tasks are executed asynchronously, while ordinary tasks are executed synchronously. |
 | Entity | Definition of various protocol entity classes for MCP, mainly including the base class of the Server following the Singleton pattern. |
 
@@ -41,11 +42,11 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | Base Protocol | Core JSON-RPC message types | Yes | Yes |
 | Lifecycle Management | Connection initialization, capability negotiation, and session control | Yes | Yes |
 | Transports | stdio | Yes | Yes |
-| Transports | HTTP with Server-Sent Events (SSE) | Yes | Yes |
 | Cancellation | Cancellation of in-progress requests through notification messages. | Yes | Yes |
 | Progress | Progress tracking for long-running operations through notification messages. | Yes | Yes |
 | Tools | Tools enable models to interact with external systems, such as querying databases, calling APIs, or performing computations. | Yes | Yes |
 | Resources | Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. | Yes | Yes |
+| Transports | HTTP with Server-Sent Events (SSE) | No | Yes |
 | Pagination | Pagination allows servers to yield results in smaller chunks rather than all at once. | No | Yes |
 | Ping | Ping mechanism that allows either party to verify that their counterpart is still responsive and the connection is alive. | No | Yes |
 | Custom Notifications | JSON-RPC 2.0 notifications that are sent by an MCP Server or Client using custom method names, intended for transmitting arbitrary business data. | No | Yes |
