@@ -365,3 +365,14 @@ FodyWeavers.xsd
 *.ui
 *.exp
 
+)
+CMakeCache.txt
+CMakeFiles/
+MCPServer
+Makefile
+cmake_install.cmake
+tests/CMakeCache.txt
+tests/CMakeFiles/
+tests/Makefile
+tests/cmake_install.cmake
+build/
