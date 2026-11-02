@@ -25,6 +25,12 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerInfo(serverInfo);
 		}
 
+		// Optional text for the client's model on how to use this server; sent as InitializeResult.instructions
+		void SetServerInstructions(const std::string& strInstructions)
+		{
+			MCP::CMCPSession::GetInstance().SetServerInstructions(strInstructions);
+		}
+
 		void SetTransport(const std::shared_ptr<MCP::CMCPTransport>& spTransport)
 		{
 			MCP::CMCPSession::GetInstance().SetTransport(spTransport);
