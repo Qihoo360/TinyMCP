@@ -172,6 +172,7 @@ namespace MCP
 		spInitializeResult->strProtocolVersion = PROTOCOL_VER;
 		spInitializeResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
 		spInitializeResult->implServerInfo = CMCPSession::GetInstance().GetServerInfo();
+		spInitializeResult->strInstructions = CMCPSession::GetInstance().GetServerInstructions();
 		std::string strResponse;
 		if (ERRNO_OK != spInitializeResult->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;

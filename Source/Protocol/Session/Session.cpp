@@ -932,6 +932,11 @@ namespace MCP
 		m_serverInfo = impl;
 	}
 
+	void CMCPSession::SetServerInstructions(const std::string& strInstructions)
+	{
+		m_strInstructions = strInstructions;
+	}
+
 	void CMCPSession::SetServerCapabilities(const MCP::ServerCapabilities& capabilities)
 	{
 		m_capabilities = capabilities;
@@ -1005,6 +1010,11 @@ namespace MCP
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
 		return m_serverInfo;
+	}
+
+	std::string CMCPSession::GetServerInstructions() const
+	{
+		return m_strInstructions;
 	}
 
 	MCP::ServerCapabilities CMCPSession::GetServerCapabilities() const

@@ -67,6 +67,7 @@ namespace MCP
 		std::string strProtocolVersion;
 		MCP::ServerCapabilities capabilities;
 		MCP::Implementation implServerInfo;
+		std::string strInstructions;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

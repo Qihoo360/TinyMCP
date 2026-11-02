@@ -118,6 +118,10 @@ namespace MCP
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
+		// Optional: a hint to the client's model about how to use the server (MCP InitializeResult.instructions)
+		if (!strInstructions.empty())
+			jResult[MSG_KEY_INSTRUCTIONS] = Json::Value(strInstructions);
+
 		iErrCode = Response::DoSerialize(jMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;

@@ -26,6 +26,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_VERSION = "version";
 	static constexpr const char* MSG_KEY_SERVER_INFO = "serverInfo";
 	static constexpr const char* MSG_KEY_CAPABILITIES = "capabilities";
+	static constexpr const char* MSG_KEY_INSTRUCTIONS = "instructions";
 	static constexpr const char* MSG_KEY_PROMPTS = "prompts";
 	static constexpr const char* MSG_KEY_RESOURCES = "resources";
 	static constexpr const char* MSG_KEY_TOOLS = "tools";

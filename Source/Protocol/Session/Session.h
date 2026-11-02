@@ -50,6 +50,7 @@ namespace MCP
 
 		void SetTransport(const std::shared_ptr<CMCPTransport>& spTransport);
 		void SetServerInfo(const MCP::Implementation& impl);
+		void SetServerInstructions(const std::string& strInstructions);
 		void SetServerCapabilities(const MCP::ServerCapabilities& capabilities);
 		void SetServerToolsPagination(bool bPagination);
 		void SetServerTools(const std::vector<MCP::Tool>& tools);
@@ -65,6 +66,7 @@ namespace MCP
 		void SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks);
 		void SetServerCompleteTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>>& hashCompleteTasks);
 		MCP::Implementation GetServerInfo() const;
+		std::string GetServerInstructions() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
 		std::vector<MCP::Tool> GetServerTools() const;
@@ -111,6 +113,7 @@ namespace MCP
 		std::shared_ptr<CMCPTransport> m_spTransport;
 
 		MCP::Implementation m_serverInfo;
+		std::string m_strInstructions;
 		MCP::ServerCapabilities m_capabilities;
 		std::vector<MCP::Tool> m_tools;
 		std::vector<MCP::Resource> m_resources;
