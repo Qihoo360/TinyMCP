@@ -90,6 +90,10 @@ namespace MCP
 		std::vector<MCP::Prompt> GetServerPrompts() const;
 		std::shared_ptr<CMCPTransport> GetTransport() const;
 		SessionState GetSessionState() const;
+
+		// Read-only diagnostics. Only the legacy handshake path records message
+		// history, so a stateless request must not change these counters.
+		size_t GetMessageCount(MessageCategory eCategory) const;
 		std::shared_ptr<MCP::ProcessRequest> GetServerCallToolsTask(const std::string& strToolName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerReadResourceTask(const std::string& strResourceUri);
 		std::shared_ptr<MCP::ProcessRequest> GetServerSubscribeResourceTask(const std::string& strResourceUri);

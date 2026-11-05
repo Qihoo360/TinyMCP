@@ -84,6 +84,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_CACHE_SCOPE = "cacheScope";
 	static constexpr const char* MSG_KEY_SUPPORTED_VERSIONS = "supportedVersions";
 	static constexpr const char* MSG_KEY_SUPPORTED = "supported";
+	static constexpr const char* MSG_KEY_REQUESTED = "requested";
 	static constexpr const char* MSG_KEY_INSTRUCTIONS = "instructions";
 	static constexpr const char* MSG_KEY_NOTIFICATIONS = "notifications";
 	static constexpr const char* MSG_KEY_TOOLS_LIST_CHANGED = "toolsListChanged";

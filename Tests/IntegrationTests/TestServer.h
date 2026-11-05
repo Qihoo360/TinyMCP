@@ -18,6 +18,13 @@ namespace MCP
 			static constexpr const char* RESOURCE_URI = "test://echo/resource";
 			static constexpr const char* MISSING_RESOURCE_URI = "test://echo/missing";
 			static constexpr const char* PROMPT_NAME = "echo_prompt";
+			static constexpr const char* APP_TOOL_NAME = "echo_app";
+			static constexpr const char* UI_RESOURCE_URI = "ui://echo/app.html";
+			static constexpr const char* MRTR_RESOURCE_URI = "test://echo/mrtr";
+
+			// Registers the extra modern fixtures (app tool/UI resource/extra read
+			// task). Off by default so the legacy registration stays byte-identical.
+			static void SetRegisterModernFixtures(bool bRegister);
 
 			int Initialize() override;
 			int Uninitialize() override;

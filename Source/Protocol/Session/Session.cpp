@@ -1261,6 +1261,15 @@ namespace MCP
 		return m_eSessionState;
 	}
 
+	size_t CMCPSession::GetMessageCount(MessageCategory eCategory) const
+	{
+		auto it = m_hashMessage.find(eCategory);
+		if (it == m_hashMessage.end())
+			return 0;
+
+		return it->second.size();
+	}
+
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerCallToolsTask(const std::string& strToolName)
 	{
 		if (m_hashCallToolsTasks.count(strToolName) > 0)
@@ -1512,6 +1521,7 @@ namespace MCP
 					jSupported.append(strVersion);
 
 				jErrorData[MSG_KEY_SUPPORTED] = jSupported;
+				jErrorData[MSG_KEY_REQUESTED] = spRequest->meta.strProtocolVersion;
 				strMessage = ERROR_MESSAGE_UNSUPPORTED_PROTOCOL_VERSION;
 			}
 
@@ -2000,6 +2010,12 @@ namespace MCP
 
 	int CMCPSession::StartAsyncTaskThread()
 	{
+		// Stateless requests may spawn the worker before the legacy handshake
+		// completes. Reuse it instead of replacing a joinable thread, which would
+		// call std::terminate through the thread move assignment.
+		if (m_upTaskThread && m_upTaskThread->joinable())
+			return ERRNO_OK;
+
 		m_upTaskThread = std::make_unique<std::thread>(&CMCPSession::AsyncThreadProc, this);
 		if (!m_upTaskThread)
 			return ERRNO_INTERNAL_ERROR;

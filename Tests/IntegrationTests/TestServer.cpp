@@ -11,6 +11,24 @@ namespace MCP
 	{
 		namespace
 		{
+			bool s_bRegisterModernFixtures = false;
+
+			Json::Value MakeElicitationInputRequests()
+			{
+				Json::Value jParams(Json::objectValue);
+				jParams[MCP::MSG_KEY_MODE] = MCP::MSG_KEY_FORM;
+				jParams[MCP::MSG_KEY_MESSAGE] = "Confirm the echo?";
+
+				Json::Value jConfirm(Json::objectValue);
+				jConfirm[MCP::MSG_KEY_METHOD] = MCP::METHOD_ELICITATION_CREATE;
+				jConfirm[MCP::MSG_KEY_PARAMS] = jParams;
+
+				Json::Value jInputRequests(Json::objectValue);
+				jInputRequests["confirm"] = jConfirm;
+
+				return jInputRequests;
+			}
+
 			class CTestEchoTask : public MCP::ProcessCallToolRequest
 			{
 			public:
@@ -44,22 +62,12 @@ namespace MCP
 					// MRTR probe: an "action":"confirm" call asks the client for an
 					// elicitation round trip before echoing. The legacy echo path is
 					// untouched because action-less calls keep the old behaviour.
-					if ("confirm" == strAction)
+					if ("confirm" == strAction || "confirm_input_only" == strAction)
 					{
 						if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
 						{
-							Json::Value jParams(Json::objectValue);
-							jParams[MCP::MSG_KEY_MODE] = MCP::MSG_KEY_FORM;
-							jParams["message"] = "Confirm the echo?";
-
-							Json::Value jConfirm(Json::objectValue);
-							jConfirm[MCP::MSG_KEY_METHOD] = MCP::METHOD_ELICITATION_CREATE;
-							jConfirm[MCP::MSG_KEY_PARAMS] = jParams;
-
-							Json::Value jInputRequests(Json::objectValue);
-							jInputRequests["confirm"] = jConfirm;
-
-							int iErrCode = NotifyInputRequired(jInputRequests, "echo-confirm-state");
+							int iErrCode = NotifyInputRequired(MakeElicitationInputRequests(),
+								("confirm" == strAction) ? "echo-confirm-state" : std::string());
 							if (MCP::ERRNO_OK == iErrCode)
 								return MCP::ERRNO_OK;
 
@@ -79,7 +87,7 @@ namespace MCP
 
 						MCP::TextContent confirmedContent;
 						confirmedContent.strType = MCP::CONST_TEXT;
-						confirmedContent.strText = "confirmed";
+						confirmedContent.strText = ("confirm" == strAction) ? "confirmed" : "input-only-confirmed";
 						spConfirmedResult->vecTextContent.push_back(confirmedContent);
 						spConfirmedResult->bIsError = false;
 
@@ -91,6 +99,168 @@ namespace MCP
 						// Exercises the SDK guard that refuses an MRTR result with
 						// neither inputRequests nor requestState.
 						return NotifyInputRequired(Json::Value(), std::string());
+					}
+
+					// Load shedding without inputRequests: the client only needs to
+					// retry with the opaque requestState.
+					if ("confirm_state_only" == strAction || "confirm_tamper" == strAction)
+					{
+						const bool bTamper = ("confirm_tamper" == strAction);
+						const std::string strExpectedState = bTamper ? "echo-tamper-state" : "echo-shed-state";
+
+						if (m_spRequest->strRequestState.empty())
+							return NotifyInputRequired(Json::Value(), strExpectedState);
+
+						if (m_spRequest->strRequestState != strExpectedState)
+						{
+							auto spRejectedResult = BuildResult();
+							if (!spRejectedResult)
+								return MCP::ERRNO_INTERNAL_ERROR;
+
+							MCP::TextContent rejectedContent;
+							rejectedContent.strType = MCP::CONST_TEXT;
+							rejectedContent.strText = "tampered state rejected";
+							spRejectedResult->vecTextContent.push_back(rejectedContent);
+							spRejectedResult->bIsError = true;
+
+							return NotifyResult(spRejectedResult);
+						}
+
+						auto spStateResult = BuildResult();
+						if (!spStateResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent stateContent;
+						stateContent.strType = MCP::CONST_TEXT;
+						stateContent.strText = bTamper ? "state-verified" : "state-only-ok";
+						spStateResult->vecTextContent.push_back(stateContent);
+						spStateResult->bIsError = false;
+
+						return NotifyResult(spStateResult);
+					}
+
+					// Rich content surface used by integration.modern_core.
+					if ("rich" == strAction)
+					{
+						auto spRichResult = BuildResult();
+						if (!spRichResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent richText;
+						richText.strType = MCP::CONST_TEXT;
+						richText.strText = "rich";
+						spRichResult->vecTextContent.push_back(richText);
+
+						MCP::ImageContent richImage;
+						richImage.strType = MCP::CONST_IMAGE;
+						richImage.strMimeType = "image/png";
+						richImage.strData = "aW1n";
+						spRichResult->vecImageContent.push_back(richImage);
+
+						MCP::AudioContent richAudio;
+						richAudio.strType = MCP::CONST_AUDIO;
+						richAudio.strMimeType = "audio/wav";
+						richAudio.strData = "YXVkaW8=";
+						spRichResult->vecAudioContent.push_back(richAudio);
+
+						MCP::ResourceLink richLink;
+						richLink.strType = MCP::CONST_RESOURCE_LINK;
+						richLink.strName = "echo.txt";
+						richLink.strUri = CTestServer::RESOURCE_URI;
+						spRichResult->vecResourceLinkContent.push_back(richLink);
+
+						MCP::ToolUseContent richToolUse;
+						richToolUse.strType = MCP::CONST_TOOL_USE;
+						richToolUse.strId = "call-1";
+						richToolUse.strName = CTestServer::TOOL_NAME;
+						richToolUse.jInput["input"] = "nested";
+						spRichResult->vecToolUseContent.push_back(richToolUse);
+
+						MCP::ToolResultContent richToolResult;
+						richToolResult.strType = MCP::CONST_TOOL_RESULT;
+						richToolResult.strToolUseId = "call-1";
+						Json::Value jNestedText(Json::objectValue);
+						jNestedText[MCP::MSG_KEY_TYPE] = MCP::CONST_TEXT;
+						jNestedText[MCP::MSG_KEY_TEXT] = "nested";
+						richToolResult.jContent.append(jNestedText);
+						richToolResult.bHasIsError = true;
+						richToolResult.bIsError = false;
+						spRichResult->vecToolResultContent.push_back(richToolResult);
+
+						spRichResult->bIsError = false;
+
+						return NotifyResult(spRichResult);
+					}
+
+					// Result level _meta reserved key handling.
+					if ("meta" == strAction)
+					{
+						auto spMetaResult = BuildResult();
+						if (!spMetaResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent metaContent;
+						metaContent.strType = MCP::CONST_TEXT;
+						metaContent.strText = "meta";
+						spMetaResult->vecTextContent.push_back(metaContent);
+						spMetaResult->jResultMeta["example.com/custom"] = "keep";
+						spMetaResult->jResultMeta[MCP::META_KEY_SERVER_INFO][MCP::MSG_KEY_NAME] = "evil";
+						spMetaResult->jResultMeta[MCP::META_KEY_SUBSCRIPTION_ID] = "evil";
+
+						return NotifyResult(spMetaResult);
+					}
+
+					// Client capabilities and custom _meta passthrough.
+					if ("caps" == strAction)
+					{
+						bool bHasUiExtension = m_spRequest->meta.clientCapabilities.SupportsExtension(MCP::EXTENSION_MCP_APPS_UI);
+
+						std::string strMimeType;
+						const Json::Value& jRawCapabilities = m_spRequest->meta.clientCapabilities.jRaw;
+						if (jRawCapabilities.isMember(MCP::MSG_KEY_EXTENSIONS)
+							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS].isObject()
+							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS].isMember(MCP::EXTENSION_MCP_APPS_UI)
+							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS][MCP::EXTENSION_MCP_APPS_UI].isObject())
+						{
+							const Json::Value& jUi = jRawCapabilities[MCP::MSG_KEY_EXTENSIONS][MCP::EXTENSION_MCP_APPS_UI];
+							if (jUi.isMember("mimeTypes") && jUi["mimeTypes"].isArray() && jUi["mimeTypes"].size() > 0)
+								strMimeType = jUi["mimeTypes"][0].asString();
+						}
+
+						bool bHasCustomKey = m_spRequest->meta.jExtra.isObject()
+							&& m_spRequest->meta.jExtra.isMember("example.com/custom");
+
+						auto spCapsResult = BuildResult();
+						if (!spCapsResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent capsContent;
+						capsContent.strType = MCP::CONST_TEXT;
+						capsContent.strText = std::string("caps:") + (bHasUiExtension ? "1" : "0")
+							+ ";" + strMimeType + ";" + (bHasCustomKey ? "1" : "0");
+						spCapsResult->vecTextContent.push_back(capsContent);
+
+						return NotifyResult(spCapsResult);
+					}
+
+					// Logging probe: the request level logLevel decides whether the
+					// notification is written (see ProcessRequest::NotifyLogMessage).
+					if ("log" == strAction)
+					{
+						Json::Value jLogData(Json::objectValue);
+						jLogData[MCP::MSG_KEY_MESSAGE] = "echo log";
+						NotifyLogMessage(MCP::LoggingLevelValue::LoggingLevel_Info, "echo", jLogData);
+
+						auto spLogResult = BuildResult();
+						if (!spLogResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent logContent;
+						logContent.strType = MCP::CONST_TEXT;
+						logContent.strText = "logged";
+						spLogResult->vecTextContent.push_back(logContent);
+
+						return NotifyResult(spLogResult);
 					}
 
 					auto spResult = BuildResult();
@@ -150,6 +320,104 @@ namespace MCP
 					textResource.strUri = spReadResourceRequest->strUri;
 					textResource.strMimeType = "text/plain";
 					textResource.strText = "legacy resource payload";
+					spResult->vecTextResourceContents.push_back(textResource);
+
+					return NotifyResult(spResult);
+				}
+
+				int Cancel() override
+				{
+					return MCP::ERRNO_OK;
+				}
+			};
+
+			// Serves the MCP Apps UI resource declared by the modern fixture set.
+			class CTestReadUiResourceTask : public MCP::ProcessReadResourceRequest
+			{
+			public:
+				CTestReadUiResourceTask(const std::shared_ptr<MCP::Request>& spRequest)
+					: ProcessReadResourceRequest(spRequest)
+				{
+				}
+
+				std::shared_ptr<MCP::CMCPTask> Clone() const override
+				{
+					auto spClone = std::make_shared<CTestReadUiResourceTask>(nullptr);
+					if (spClone)
+						*spClone = *this;
+
+					return spClone;
+				}
+
+				int Execute() override
+				{
+					if (!IsValid())
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
+					if (!spReadResourceRequest)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					auto spResult = BuildResult();
+					if (!spResult)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					MCP::TextResourceContents textResource;
+					textResource.strUri = spReadResourceRequest->strUri;
+					textResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+					textResource.strText = "<html><body>Echo App</body></html>";
+					textResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_CSP]["connectDomains"].append("https://example.com");
+					textResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_PERMISSIONS]["clipboardWrite"] = true;
+					spResult->vecTextResourceContents.push_back(textResource);
+
+					return NotifyResult(spResult);
+				}
+
+				int Cancel() override
+				{
+					return MCP::ERRNO_OK;
+				}
+			};
+
+			// MRTR probe for a cacheable resources/read result.
+			class CTestReadMrtrResourceTask : public MCP::ProcessReadResourceRequest
+			{
+			public:
+				CTestReadMrtrResourceTask(const std::shared_ptr<MCP::Request>& spRequest)
+					: ProcessReadResourceRequest(spRequest)
+				{
+				}
+
+				std::shared_ptr<MCP::CMCPTask> Clone() const override
+				{
+					auto spClone = std::make_shared<CTestReadMrtrResourceTask>(nullptr);
+					if (spClone)
+						*spClone = *this;
+
+					return spClone;
+				}
+
+				int Execute() override
+				{
+					if (!IsValid())
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
+					if (!spReadResourceRequest)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					bool bHasInputResponses = m_spRequest->jInputResponses.isObject() && !m_spRequest->jInputResponses.empty();
+					if (!bHasInputResponses && m_spRequest->strRequestState.empty())
+						return NotifyInputRequired(Json::Value(), "echo-read-state");
+
+					auto spResult = BuildResult();
+					if (!spResult)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					MCP::TextResourceContents textResource;
+					textResource.strUri = spReadResourceRequest->strUri;
+					textResource.strMimeType = "text/plain";
+					textResource.strText = "mrtr-read-complete";
 					spResult->vecTextResourceContents.push_back(textResource);
 
 					return NotifyResult(spResult);
@@ -358,14 +626,44 @@ namespace MCP
 			if (!reader.parse("{\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"]}", jInputSchema) || !jInputSchema.isObject())
 				return MCP::ERRNO_PARSE_ERROR;
 			tool.jInputSchema = jInputSchema;
-			RegisterServerTools({ tool }, false);
+
+			std::vector<MCP::Tool> vecTools;
+			vecTools.push_back(tool);
+
+			if (s_bRegisterModernFixtures)
+			{
+				MCP::Tool appTool;
+				appTool.strName = CTestServer::APP_TOOL_NAME;
+				appTool.strDescription = "MCP App entry point.";
+				appTool.jInputSchema = jInputSchema;
+				appTool.SetUiResourceUri(CTestServer::UI_RESOURCE_URI);
+				vecTools.push_back(appTool);
+			}
+
+			RegisterServerTools(vecTools, false);
 
 			MCP::Resource resource;
 			resource.strName = "echo.txt";
 			resource.strUri = CTestServer::RESOURCE_URI;
 			resource.strDescription = "Legacy test resource";
 			resource.strMimeType = "text/plain";
-			RegisterServerResources({ resource }, false);
+
+			std::vector<MCP::Resource> vecResources;
+			vecResources.push_back(resource);
+
+			if (s_bRegisterModernFixtures)
+			{
+				MCP::Resource uiResource;
+				uiResource.strName = "Echo App";
+				uiResource.strUri = CTestServer::UI_RESOURCE_URI;
+				uiResource.strDescription = "MCP App UI resource";
+				uiResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+				uiResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_CSP]["connectDomains"].append("https://example.com");
+				uiResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_PERMISSIONS]["clipboardWrite"] = true;
+				vecResources.push_back(uiResource);
+			}
+
+			RegisterServerResources(vecResources, false);
 
 			MCP::ResourceTemplate resourceTemplate;
 			resourceTemplate.strName = "Echo files";
@@ -389,6 +687,21 @@ namespace MCP
 			if (!spEchoTask)
 				return MCP::ERRNO_INTERNAL_ERROR;
 			RegisterToolsTasks(CTestServer::TOOL_NAME, spEchoTask);
+
+			if (s_bRegisterModernFixtures)
+			{
+				RegisterToolsTasks(CTestServer::APP_TOOL_NAME, spEchoTask);
+
+				auto spReadUiResourceTask = std::make_shared<CTestReadUiResourceTask>(nullptr);
+				if (!spReadUiResourceTask)
+					return MCP::ERRNO_INTERNAL_ERROR;
+				RegisterReadResourceTasks(CTestServer::UI_RESOURCE_URI, spReadUiResourceTask);
+
+				auto spReadMrtrResourceTask = std::make_shared<CTestReadMrtrResourceTask>(nullptr);
+				if (!spReadMrtrResourceTask)
+					return MCP::ERRNO_INTERNAL_ERROR;
+				RegisterReadResourceTasks(CTestServer::MRTR_RESOURCE_URI, spReadMrtrResourceTask);
+			}
 
 			auto spReadResourceTask = std::make_shared<CTestReadResourceTask>(nullptr);
 			if (!spReadResourceTask)
@@ -417,6 +730,11 @@ namespace MCP
 			RegisterCompleteTasks(std::string(MCP::CONST_REF_RESOURCE) + ":" + CTestServer::RESOURCE_URI, spCompleteTask);
 
 			return MCP::ERRNO_OK;
+		}
+
+		void CTestServer::SetRegisterModernFixtures(bool bRegister)
+		{
+			s_bRegisterModernFixtures = bRegister;
 		}
 
 		int CTestServer::Uninitialize()

@@ -117,7 +117,11 @@ namespace MCP
 		bool bIsError{ false };
 		std::vector<MCP::TextContent> vecTextContent;
 		std::vector<MCP::ImageContent> vecImageContent;
+		std::vector<MCP::AudioContent> vecAudioContent;
+		std::vector<MCP::ResourceLink> vecResourceLinkContent;
 		std::vector<MCP::EmbeddedResource> vecEmbeddedResource;
+		std::vector<MCP::ToolUseContent> vecToolUseContent;
+		std::vector<MCP::ToolResultContent> vecToolResultContent;
 		Json::Value jStructuredContent;
 
 		bool IsValid() const override;

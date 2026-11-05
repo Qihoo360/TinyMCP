@@ -73,7 +73,17 @@ namespace MCP
 
 		Json::Value jMeta(Json::objectValue);
 		if (jResultMeta.isObject())
-			jMeta = jResultMeta;
+		{
+			// Reserved keys are SDK owned: drop application supplied values so the
+			// existing result keys and the SDK serverInfo always win.
+			for (auto it = jResultMeta.begin(); it != jResultMeta.end(); ++it)
+			{
+				if (it.name() == META_KEY_SERVER_INFO || it.name() == META_KEY_SUBSCRIPTION_ID)
+					continue;
+
+				jMeta[it.name()] = *it;
+			}
+		}
 
 		// Merge with whatever reserved keys the result already produced and let
 		// the SDK owned serverInfo win over application supplied values.
@@ -284,6 +294,30 @@ namespace MCP
 				jContent.append(jImageContent);
 			}
 		}
+		if (ctxProtocol.Supports(Feature_ContentAudio))
+		{
+			for (auto& audio : vecAudioContent)
+			{
+				Json::Value jAudioContent(Json::objectValue);
+				if (ERRNO_OK == audio.DoSerialize(jAudioContent))
+				{
+					audio.DoSerializeVersionExtras(jAudioContent, ctxProtocol);
+					jContent.append(jAudioContent);
+				}
+			}
+		}
+		if (ctxProtocol.Supports(Feature_ContentResourceLink))
+		{
+			for (auto& link : vecResourceLinkContent)
+			{
+				Json::Value jResourceLink(Json::objectValue);
+				if (ERRNO_OK == link.DoSerialize(jResourceLink))
+				{
+					link.DoSerializeVersionExtras(jResourceLink, ctxProtocol);
+					jContent.append(jResourceLink);
+				}
+			}
+		}
 		for (auto& embedded : vecEmbeddedResource)
 		{
 			Json::Value jEmbedded(Json::objectValue);
@@ -291,6 +325,27 @@ namespace MCP
 			{
 				embedded.DoSerializeVersionExtras(jEmbedded, ctxProtocol);
 				jContent.append(jEmbedded);
+			}
+		}
+		if (ctxProtocol.Supports(Feature_ContentToolUse))
+		{
+			for (auto& toolUse : vecToolUseContent)
+			{
+				Json::Value jToolUse(Json::objectValue);
+				if (ERRNO_OK == toolUse.DoSerialize(jToolUse))
+				{
+					toolUse.DoSerializeVersionExtras(jToolUse, ctxProtocol);
+					jContent.append(jToolUse);
+				}
+			}
+			for (auto& toolResult : vecToolResultContent)
+			{
+				Json::Value jToolResult(Json::objectValue);
+				if (ERRNO_OK == toolResult.DoSerialize(jToolResult))
+				{
+					toolResult.DoSerializeVersionExtras(jToolResult, ctxProtocol);
+					jContent.append(jToolResult);
+				}
 			}
 		}
 		jResult[MSG_KEY_CONTENT] = jContent;
@@ -316,7 +371,13 @@ namespace MCP
 		if (RESULT_TYPE_INPUT_REQUIRED == strResultType)
 			return requestId.IsValid();
 
-		if (vecTextContent.empty() && vecImageContent.empty() && vecEmbeddedResource.empty())
+		if (vecTextContent.empty()
+			&& vecImageContent.empty()
+			&& vecAudioContent.empty()
+			&& vecResourceLinkContent.empty()
+			&& vecEmbeddedResource.empty()
+			&& vecToolUseContent.empty()
+			&& vecToolResultContent.empty())
 			return false;
 
 		return true;

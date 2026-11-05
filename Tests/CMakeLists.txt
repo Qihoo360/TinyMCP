@@ -22,12 +22,14 @@ add_executable(TinyMCPTests
 	UnitTests/TestRequest.cpp
 	UnitTests/TestResponse.cpp
 	UnitTests/TestNotification.cpp
+	UnitTests/TestLegacyCompat.cpp
 	IntegrationTests/MemoryTransport.cpp
 	IntegrationTests/TestServer.cpp
 	IntegrationTests/Driver.cpp
 	IntegrationTests/Cases/TestLegacyCase.cpp
 	IntegrationTests/Cases/TestSessionCase.cpp
 	IntegrationTests/Cases/TestModernCase.cpp
+	IntegrationTests/Cases/TestProtocolCase.cpp
 	${TINYMCP_PROTOCOL_SOURCES}
 	${TINYMCP_JSONCPP_SOURCES}
 )
@@ -54,8 +56,26 @@ add_test(NAME unit.meta COMMAND TinyMCPTests --unit meta)
 add_test(NAME unit.request COMMAND TinyMCPTests --unit request)
 add_test(NAME unit.response COMMAND TinyMCPTests --unit response)
 add_test(NAME unit.notification COMMAND TinyMCPTests --unit notification)
+add_test(NAME unit.legacy_compat COMMAND TinyMCPTests --unit legacy_compat)
+set_tests_properties(unit.legacy_compat PROPERTIES TIMEOUT 30)
 add_test(NAME integration.legacy COMMAND TinyMCPTests --case legacy)
 set_tests_properties(integration.legacy PROPERTIES TIMEOUT 30)
+add_test(NAME integration.discover COMMAND TinyMCPTests --case discover)
+set_tests_properties(integration.discover PROPERTIES TIMEOUT 30)
+add_test(NAME integration.version_fallback COMMAND TinyMCPTests --case version_fallback)
+set_tests_properties(integration.version_fallback PROPERTIES TIMEOUT 30)
+add_test(NAME integration.version_extensibility COMMAND TinyMCPTests --case version_extensibility)
+set_tests_properties(integration.version_extensibility PROPERTIES TIMEOUT 30)
+add_test(NAME integration.modern_core COMMAND TinyMCPTests --case modern_core)
+set_tests_properties(integration.modern_core PROPERTIES TIMEOUT 30)
+add_test(NAME integration.mrtr COMMAND TinyMCPTests --case mrtr)
+set_tests_properties(integration.mrtr PROPERTIES TIMEOUT 30)
+add_test(NAME integration.subscriptions COMMAND TinyMCPTests --case subscriptions)
+set_tests_properties(integration.subscriptions PROPERTIES TIMEOUT 30)
+add_test(NAME integration.apps COMMAND TinyMCPTests --case apps)
+set_tests_properties(integration.apps PROPERTIES TIMEOUT 30)
+add_test(NAME integration.dual_era COMMAND TinyMCPTests --case dual_era)
+set_tests_properties(integration.dual_era PROPERTIES TIMEOUT 30)
 add_test(NAME unit.session COMMAND TinyMCPTests --unit session)
 set_tests_properties(unit.session PROPERTIES TIMEOUT 30)
 add_test(NAME unit.tasks COMMAND TinyMCPTests --unit tasks)
