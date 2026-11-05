@@ -6,6 +6,7 @@
 #include <Public/PublicDef.h>
 #include <Session/Session.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -351,4 +352,89 @@ TEST_CASE("unit.subscriptions")
 	CHECK_EQ(std::string(RESULT_TYPE_COMPLETE), jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
 	CHECK(jResponse[MSG_KEY_RESULT][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].isString());
 	CHECK_EQ(std::string("listen-str"), jResponse[MSG_KEY_RESULT][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asString());
+}
+
+TEST_CASE("unit.capabilities")
+{
+	// Register the modern capability surface before the server starts.
+	CTestServer::s_Instance.RegisterServerCompletionsCapability();
+	std::map<std::string, Json::Value> mapExtensions;
+	mapExtensions["example/echo"] = Json::Value(Json::objectValue);
+	CTestServer::s_Instance.RegisterServerExtensionsCapabilities(mapExtensions);
+	CTestServer::s_Instance.RegisterServerAppsCapabilities();
+	CTestServer::s_Instance.RegisterServerInstructions("discover instructions");
+	CTestServer::s_Instance.SetServerCacheOptions(60, CACHE_SCOPE_PUBLIC);
+
+	CDriver driver;
+	if (!StartServer(driver))
+		return;
+
+	// Legacy initialize passes the explicit extensions through unchanged.
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeLegacyInitialize(40), jResponse));
+	CHECK(jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS]["example/echo"].isObject());
+	CHECK(jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS][EXTENSION_MCP_APPS_UI].isObject());
+	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_COMPLETIONS));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	// Modern discover publishes completions, extensions, and caching options.
+	CMCPSession::GetInstance().SetModernProtocolSupported(true);
+	CHECK(ExpectResponse(driver, MakeRequest(41, METHOD_SERVER_DISCOVER, MakeModernParams()), jResponse));
+
+	const Json::Value& jCapabilities = jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES];
+	CHECK(jCapabilities[MSG_KEY_COMPLETIONS].isObject());
+	CHECK(jCapabilities[MSG_KEY_EXTENSIONS]["example/echo"].isObject());
+	CHECK(jCapabilities[MSG_KEY_EXTENSIONS][EXTENSION_MCP_APPS_UI].isObject());
+	CHECK(!jCapabilities.isMember(MSG_KEY_EXPERIMENTAL));
+	CHECK_EQ(60, jResponse[MSG_KEY_RESULT][MSG_KEY_TTL_MS].asInt());
+	CHECK_EQ(std::string(CACHE_SCOPE_PUBLIC), jResponse[MSG_KEY_RESULT][MSG_KEY_CACHE_SCOPE].asString());
+	CHECK_EQ(std::string("discover instructions"), jResponse[MSG_KEY_RESULT][MSG_KEY_INSTRUCTIONS].asString());
+
+	CTestServer::s_Instance.SetServerCacheOptions(0, CACHE_SCOPE_PRIVATE);
+	CTestServer::s_Instance.RegisterServerInstructions(std::string());
+
+	driver.Stop();
+}
+
+TEST_CASE("unit.apps")
+{
+	const ProtocolProfile* pModernProfile = CMCPSession::GetInstance().GetProtocolRegistry().Find(PROTOCOL_VER_2026_07_28);
+	CHECK(pModernProfile != nullptr);
+	if (!pModernProfile)
+		return;
+
+	ProtocolContext ctxModern;
+	ctxModern.strVersion = pModernProfile->strVersion;
+	ctxModern.pProfile = pModernProfile;
+
+	Tool tool;
+	tool.strName = "echo_app";
+	tool.jInputSchema = Json::Value(Json::objectValue);
+	tool.SetUiResourceUri("ui://echo/app.html");
+
+	Json::Value jTool;
+	CHECK_EQ(ERRNO_OK, tool.DoSerialize(jTool));
+	tool.DoSerializeVersionExtras(jTool, ctxModern);
+	CHECK_EQ(std::string("ui://echo/app.html"),
+		jTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+
+	Resource resource;
+	resource.strName = "Echo App";
+	resource.strUri = "ui://echo/app.html";
+	resource.strMimeType = "text/html;profile=mcp-app";
+	resource.jMeta[MSG_KEY_UI][MSG_KEY_PERMISSIONS]["clipboardWrite"] = true;
+
+	Json::Value jResource;
+	CHECK_EQ(ERRNO_OK, resource.DoSerialize(jResource));
+	CHECK_EQ(std::string("ui://echo/app.html"), jResource[MSG_KEY_URI].asString());
+	CHECK_EQ(std::string("text/html;profile=mcp-app"), jResource[MSG_KEY_MIMETYPE].asString());
+	resource.DoSerializeVersionExtras(jResource, ctxModern);
+	CHECK(jResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS]["clipboardWrite"].asBool());
+
+	// Legacy serialization must not grow the UI metadata.
+	ProtocolContext ctxLegacy;
+	Json::Value jLegacyResource;
+	CHECK_EQ(ERRNO_OK, resource.DoSerialize(jLegacyResource));
+	resource.DoSerializeVersionExtras(jLegacyResource, ctxLegacy);
+	CHECK(!jLegacyResource.isMember(MSG_KEY_META));
 }

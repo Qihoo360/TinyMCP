@@ -55,6 +55,46 @@ namespace MCP
 			m_capabilities.logging.bExist = true;
 		}
 
+		// Advertises the stateless-era completions capability. Legacy handshake
+		// output keeps using RegisterServerExperimentalCapabilities.
+		void RegisterServerCompletionsCapability()
+		{
+			m_capabilities.bCompletions = true;
+		}
+
+		void RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>& mapExtensions)
+		{
+			for (const auto& pair : mapExtensions)
+				m_capabilities.mapExtensions[pair.first] = pair.second;
+
+			if (!mapExtensions.empty())
+				m_capabilities.bExtensionPassthrough = true;
+		}
+
+		// MCP Apps is opt-in; the extension is advertised only after this call.
+		void RegisterServerAppsCapabilities()
+		{
+			m_capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+			m_capabilities.bExtensionPassthrough = true;
+		}
+
+		void RegisterServerInstructions(const std::string& strInstructions)
+		{
+			MCP::CMCPSession::GetInstance().SetServerInstructions(strInstructions);
+		}
+
+		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
+		{
+			MCP::CMCPSession::GetInstance().SetServerCacheOptions(iTtlMs, strCacheScope);
+		}
+
+		// Convenience wrapper for UI resources; the UI metadata travels in
+		// Resource::jMeta unchanged.
+		void RegisterServerUiResources(const std::vector<MCP::Resource>& resources, bool bPagination)
+		{
+			RegisterServerResources(resources, bPagination);
+		}
+
 		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)
 		{
 			MCP::CMCPSession::GetInstance().SetServerToolsPagination(bPagination);

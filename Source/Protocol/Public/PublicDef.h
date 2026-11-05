@@ -95,6 +95,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_LOG_LEVEL = "logLevel";
 	static constexpr const char* MSG_KEY_MODE = "mode";
 	static constexpr const char* MSG_KEY_REQUIRED_CAPABILITIES = "requiredCapabilities";
+	static constexpr const char* EXTENSION_MCP_APPS_UI = "io.modelcontextprotocol/ui";
 	static constexpr const char* MSG_KEY_TITLE = "title";
 	static constexpr const char* MSG_KEY_ICONS = "icons";
 	static constexpr const char* MSG_KEY_WEBSITE_URL = "websiteUrl";
