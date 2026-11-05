@@ -1,0 +1,201 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://modelcontextprotocol.io/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Enterprise-Managed Authorization
+
+> Centralized access control for MCP in enterprise environments via identity providers
+
+The Enterprise-Managed Authorization extension (`io.modelcontextprotocol/enterprise-managed-authorization`) enables organizations to control MCP server access centrally through their existing identity provider (IdP). Instead of each employee authorizing each MCP server individually, the organization's IT or security team manages access policies in one place.
+
+> [card] [Specification](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/stable/enterprise-managed-authorization/2026-07-28/enterprise-managed-authorization.mdx)
+>
+> Full technical specification for the Enterprise-Managed Authorization
+> extension.
+
+## What it is
+
+In a standard MCP deployment, each user independently authorizes an MCP client to access each MCP server. For consumer applications, this user-driven model is ideal — it gives individuals control over what accesses their data.
+
+In enterprise environments, this model creates friction and security gaps:
+
+* Employees shouldn't need to understand the authorization details of every MCP server their organization uses
+* Security teams can't enforce consistent access policies if each user authorizes independently
+* Onboarding new employees requires them to manually authorize dozens of services
+* Offboarding requires revoking access across every service individually
+
+Enterprise-Managed Authorization solves this by introducing the organization's IdP as the authoritative decision-maker. The IdP controls which MCP servers employees can access, and under what conditions. Employees authenticate with their corporate identity — the same credentials they use for email, Slack, and other work tools — and the IdP grants or denies MCP server access based on organizational policy.
+
+## When to use it
+
+Use Enterprise-Managed Authorization when:
+
+* **Deploying MCP in a corporate environment** where IT manages access to all business applications
+* **Enforcing organizational access policies** — you need to ensure only authorized employees access specific MCP servers
+* **Centralizing access control** — you want to add or revoke access to MCP servers from a single admin console
+* **Meeting compliance requirements** — your organization needs an auditable authorization trail for all MCP server access
+* **Simplifying employee experience** — employees should access MCP tools with their existing corporate SSO credentials, without per-service authorization flows
+
+## How it works
+
+The extension establishes a delegated authorization flow where the enterprise IdP acts as an intermediary between the MCP client and the MCP server. The MCP Client requests a special type of token from the enterprise IdP called an Identity Assertion JWT Authorization Grant, or ID-JAG. The MCP Client then exchanges the ID-JAG for an access token from the MCP server's Authorization Server:
+
+```mermaid theme={null}
+sequenceDiagram
+    participant UA as Browser
+    participant C as MCP Client
+    participant IdP as Enterprise IdP
+    participant MAS as MCP Authorization Server
+    participant MRS as MCP Resource Server
+
+    C-->>UA: Redirect to IdP
+    UA->>IdP: Redirect to IdP
+    Note over IdP: User Logs In
+    IdP-->>UA: IdP Authorization Code
+    UA->>C: IdP Authorization Code
+    C->>IdP: Token Request with IdP Authorization Code
+    IdP-->>C: ID Token
+
+    note over C: User is logged<br/>in to MCP Client.<br/>Client stores ID Token.
+
+    C->>IdP: Exchange ID Token for ID-JAG
+    note over IdP: Evaluate Policy
+    IdP-->>C: Responds with ID-JAG
+    C->>MAS: Token Request with ID-JAG
+    note over MAS: Validate ID-JAG
+    MAS-->>C: MCP Access Token
+
+    loop
+    C->>MRS: Call MCP API with Access Token
+    MRS-->>C: MCP Response with Data
+    end
+
+```
+
+Key aspects of the flow:
+
+1. **Centralized policy**: The enterprise IdP maintains a registry of approved MCP servers and the access policies for each. Administrators configure these in their existing identity management tools.
+
+2. **Single sign-on**: Employees authenticate with their corporate credentials once. The IdP issues tokens that grant access to approved MCP servers without additional per-server authorization prompts.
+
+3. **Policy enforcement**: The IdP evaluates access policies (group membership, role assignments, conditional access rules) before issuing tokens. Employees who lack authorization receive an appropriate error — the MCP client never receives a token for unauthorized servers.
+
+4. **Centralized revocation**: Revoking an employee's access to MCP servers happens at the IdP level, taking effect immediately across all MCP clients. No per-client, per-server revocation needed.
+
+## Implementation guide
+
+### For MCP clients
+
+To support Enterprise-Managed Authorization, your client must:
+
+1. **Declare support** in its per-request capabilities:
+
+```jsonc theme={null}
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "...",
+  "params": {
+    // Other fields...
+    "_meta": {
+      // Other fields...
+      "io.modelcontextprotocol/clientCapabilities": {
+        "extensions": {
+          "io.modelcontextprotocol/enterprise-managed-authorization": {},
+        },
+      },
+    },
+  },
+}
+```
+
+2. **Support SSO** — users should authenticate to the MCP Client using the enterprise IdP. Save the Identity Assertion (either an OpenID ID Token or SAML assertion) issued during login for later use.
+
+3. **Handle ID-JAGs** — when the server indicates that enterprise-managed auth is required, request an ID-JAG token from the enterprise IdP's authorization endpoint using the previously obtained Identity Assertion. Exchange this ID-JAG for an access token from the MCP Authorization Server. Do not redirect the user to the MCP Authorization Server's authorization endpoint.
+
+4. **Support organization configuration** — allow administrators to configure the enterprise IdP's endpoints, typically via organization-level settings rather than per-user settings.
+
+5. **Respect token scopes** — tokens issued by enterprise IdPs may have scope restrictions that differ from standard MCP authorization. Handle scope errors gracefully.
+
+### For MCP servers
+
+To require enterprise-managed authorization:
+
+1. **Declare the extension** in your server's authorization metadata, indicating that clients must use the enterprise-managed flow.
+
+2. **Integrate with IdP admin APIs** (optional) — publish your server's resource descriptor so enterprise administrators can configure access policies in their IdP admin console.
+
+### For MCP Authorization Servers
+
+1. **Validate ID-JAGs** issued by the enterprise IdP. This typically means validating JWT signatures against the IdP's JWKS endpoint and checking the token's audience, issuer, and expiration.
+
+2. **Map IdP claims to permissions** — ID-JAG tokens carry claims (scope and resource information) that your server uses to determine who the employee is and what the employee can access. Define your authorization logic based on these claims.
+
+3. **Handle Account Linking** - ID-JAG tokens will always contain a subject claim and may additionally contain an email claim that can be used to link the enterprise identity to an existing account in your system. Use the subject claim as the primary stable identifier for the user, and fall back to the email claim for matching against pre-existing accounts that were created before enterprise-managed authorization was configured.
+
+## Client support
+
+> [!NOTE]
+>
+> Support for this extension varies by client. Extensions are opt-in and never active by default.
+
+Check the [client matrix](https://modelcontextprotocol.io/extensions/client-matrix.md) for current implementation status across MCP clients. Enterprise-Managed Authorization typically requires client-level support from the organization's IT team in addition to the MCP client application.
+
+## Implementation support
+
+> [!NOTE]
+>
+> This list is not comprehensive. It records documented support only, so a missing product or an empty cell does not mean that a role is unsupported.
+
+Two products take part in the flow besides the MCP client: the enterprise IdP that issues the
+ID-JAG, and the MCP server's authorization server that accepts it and returns an access token. One
+product can fill both roles. The table lists products with public documentation for at least one
+role and uses the vendor's own release label: **Available** (in a production release with no
+pre-release label), **Early access** (gated by plan, environment, or request), and **Experimental**
+(the vendor's pre-release label).
+
+The IETF OAuth working group defines ID-JAG in
+[draft-ietf-oauth-identity-assertion-authz-grant](https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/).
+Implementations track different draft revisions, so check each vendor's documentation for the
+revision it targets.
+
+| Product | Issues ID-JAGs | Accepts ID-JAGs | Notes |
+| - | - | - | - |
+| [Athenz](https://github.com/AthenZ/athenz/blob/master/docs/zts_token_exchange_requirements.md) | Available | Available | Open source. ZTS issues ID-JAGs through token exchange and accepts them through the JWT bearer grant. |
+| [Auth0](https://auth0.com/docs/ai-agents-mcp/cross-app-access) | | Early access | Cross App Access for Resource Apps, early access on Enterprise, B2B Pro, and B2B Essential plans. Auth0 validates ID-JAGs from an external OIDC or SAML enterprise connection. |
+| [AuthPlane](https://github.com/authplane/authserver/blob/main/docs/guides/federation/enterprise-managed-auth-xaa.md) | | Available | Self-hosted authorization server for MCP. Accepts ID-JAGs through the JWT bearer grant, enabled by default since v0.2.0. |
+| [Descope](https://docs.descope.com/agentic-identity-hub/enterprise-managed-authorization/validate-id-jags) | Available | Available | Agentic Identity Hub [issues ID-JAGs](https://docs.descope.com/agentic-identity-hub/enterprise-managed-authorization/issue-id-jags) for agents through token exchange. As the MCP server's authorization server, Descope validates ID-JAGs against per-tenant trusted issuers and returns Descope access tokens. |
+| [Janssen Project](https://docs.jans.io/stable/janssen-server/auth-server/endpoints/identity-assertion-authz-grant/) | Available | Available | Since 2.2.0, off by default behind the `identity_assertion_authz_grant` feature flag, targeting draft revision 04. |
+| [Keycloak](https://www.keycloak.org/securing-apps/identity-assertion-jwt-authorization-grant) | | Experimental | Accepting role since 26.7.0 behind the `identity-assertion-jwt` feature flag. The guide targets draft revision 01. |
+| [Okta](https://developer.okta.com/docs/concepts/xaa/) | Available | Available | Cross App Access (XAA). [Issuing](https://developer.okta.com/docs/guides/xaa-agent-to-app/main/) is included in Okta SSO for Identity Engine orgs, capped at 250 ID-JAGs per user per resource app per month. Higher volume requires Okta for AI Agents. [Custom authorization servers](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/) accept Okta-issued ID-JAGs through the JWT bearer grant with Okta for AI Agents. |
+| [Ping Identity](https://docs.pingidentity.com/pingfederate/13.1/release_notes/pf_release_notes_131.html#identity-assertion-jwt-authorization-grant-id-jag) | Available | Available | PingFederate 13.1 and later. Issues ID-JAGs through token exchange on an SP connection and [accepts them](https://docs.pingidentity.com/pingfederate/13.1/administrators_reference_guide/pf_configuring_oauth_assertion_grant_idp_connection.html) on an OAuth assertion grant IdP connection. |
+| [Scalekit](https://docs.scalekit.com/mcp/auth-methods/xaa/) | | Early access | Enterprise plan. Scalekit enables XAA per workspace on request. |
+| [Stytch](https://stytch.com/docs/connected-apps/guides/cross-app-access) | | Available | Connected Apps in B2B projects exchange an ID-JAG from an external workforce IdP for a Stytch access token through the JWT bearer grant. |
+| [ThunderID](https://thunderid.dev/docs/use-cases/ai-agents/mcp-authorization/enterprise-managed-authorization/) | Available | Available | Open-source IAM project of LF Decentralized Trust, 1.0 and later. Ships a dedicated Enterprise-Managed Authorization guide covering both roles. |
+| [WorkOS AuthKit](https://workos.com/docs/authkit/mcp#cross-app-access) | | Early access | WorkOS enables Cross App Access per environment on request, with no server code changes needed after that. Not supported with Standalone MCP Auth. |
+
+Server frameworks that accept ID-JAGs include Cloudflare's
+[`workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider) (experimental
+`enterpriseManagedAuthorization` option since 0.7.0) and
+[FastMCP](https://gofastmcp.com/servers/auth/oauth-proxy#identity-assertion-sep-990) 4.0 and later
+(beta). The [Cross-App Access directory on oauth.net](https://oauth.net/cross-app-access/)
+is a community list that also covers requesting applications. For MCP client support, see the
+[client matrix](https://modelcontextprotocol.io/extensions/client-matrix.md).
+
+## Related resources
+
+> [card] [ext-auth repository](https://github.com/modelcontextprotocol/ext-auth)
+>
+> Source code and reference implementations
+
+> [card] [Full specification](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/stable/enterprise-managed-authorization/2026-07-28/enterprise-managed-authorization.mdx)
+>
+> Technical specification with normative requirements
+
+> [card] [SEP-990](https://modelcontextprotocol.io/seps/990-enable-enterprise-idp-policy-controls-during-mcp-o.md)
+>
+> Original proposal: Enable Enterprise IdP Policy Controls
+
+> [card] [MCP Authorization](https://modelcontextprotocol.io/specification/latest/basic/authorization.md)
+>
+> Core MCP authorization specification
