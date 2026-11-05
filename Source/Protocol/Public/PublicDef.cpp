@@ -8,14 +8,11 @@ namespace MCP
 		{
 			profile.setSupportedMethods.insert(METHOD_SERVER_DISCOVER);
 			profile.setSupportedMethods.insert(METHOD_SUBSCRIPTIONS_LISTEN);
-			profile.setSupportedMethods.insert(METHOD_PING);
 			profile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
 			profile.setSupportedMethods.insert(METHOD_TOOLS_CALL);
 			profile.setSupportedMethods.insert(METHOD_RESOURCES_LIST);
 			profile.setSupportedMethods.insert(METHOD_RESOURCES_READ);
 			profile.setSupportedMethods.insert(METHOD_RESOURCES_TEMPLATES_LIST);
-			profile.setSupportedMethods.insert(METHOD_RESOURCES_SUBSCRIBE);
-			profile.setSupportedMethods.insert(METHOD_RESOURCES_UNSUBSCRIBE);
 			profile.setSupportedMethods.insert(METHOD_PROMPTS_LIST);
 			profile.setSupportedMethods.insert(METHOD_PROMPTS_GET);
 			profile.setSupportedMethods.insert(METHOD_COMPLETION_COMPLETE);

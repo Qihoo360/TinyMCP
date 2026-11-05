@@ -181,6 +181,20 @@ namespace MCP
 		return true;
 	}
 
+	int ResourceListChangedNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		WriteVersionParamsMeta(jParams, ctxProtocol);
+		if (!jParams.empty())
+			jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ResourceUpdatedNotification
 	int ResourceUpdatedNotification::DoSerialize(Json::Value& jMsg) const
@@ -241,6 +255,20 @@ namespace MCP
 		return true;
 	}
 
+	int PromptListChangedNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		WriteVersionParamsMeta(jParams, ctxProtocol);
+		if (!jParams.empty())
+			jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ToolListChangedNotification
 	bool ToolListChangedNotification::IsValid() const
@@ -252,6 +280,20 @@ namespace MCP
 			return false;
 
 		return true;
+	}
+
+	int ToolListChangedNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		WriteVersionParamsMeta(jParams, ctxProtocol);
+		if (!jParams.empty())
+			jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

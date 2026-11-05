@@ -13,6 +13,52 @@
 
 namespace MCP
 {
+	namespace
+	{
+		const char* CONST_META_PREFIX = "io.modelcontextprotocol/";
+
+		ProtocolContext MakeProfileContext(const ProtocolProfile* pProfile)
+		{
+			ProtocolContext ctxProtocol;
+			if (pProfile)
+			{
+				ctxProtocol.strVersion = pProfile->strVersion;
+				ctxProtocol.pProfile = pProfile;
+			}
+			else
+			{
+				ctxProtocol.strVersion.clear();
+				ctxProtocol.pProfile = nullptr;
+			}
+			return ctxProtocol;
+		}
+
+		bool HasModernMetaKeys(const Json::Value& jMeta)
+		{
+			if (!jMeta.isObject())
+				return false;
+
+			std::string strPrefix(CONST_META_PREFIX);
+			for (auto it = jMeta.begin(); it != jMeta.end(); ++it)
+			{
+				if (0 == it.name().compare(0, strPrefix.size(), strPrefix))
+					return true;
+			}
+
+			return false;
+		}
+
+		Json::Value MakeRequestIdJson(const RequestId& requestId)
+		{
+			Json::Value jId(Json::objectValue);
+			requestId.DoSerialize(jId);
+			if (jId.isMember(MSG_KEY_ID))
+				return jId[MSG_KEY_ID];
+
+			return Json::Value();
+		}
+	}
+
 	CMCPSession CMCPSession::s_Instance;
 
 	CMCPSession& CMCPSession::GetInstance()
@@ -69,6 +115,10 @@ namespace MCP
 		if (m_upTaskThread && m_upTaskThread->joinable())
 			m_upTaskThread->join();
 
+		// Close every live subscription before the transport goes away so the
+		// client still observes a complete result for its listen request.
+		CloseSubscriptions();
+
 		if (!m_spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -124,6 +174,11 @@ namespace MCP
 		m_hashUri2SubscribeResourceTaskId.clear();
 		m_loggingLevel = MCP::LoggingLevel{};
 
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			m_hashSubscriptions.clear();
+		}
+
 		// Re-arm the async task flag LAST so that CommitAsyncTask/CancelAsyncTask can
 		// never observe m_bRunAsyncTask == true while m_upTaskThread is still null
 		// (which would silently drop tasks into a deque that no worker consumes).
@@ -136,6 +191,27 @@ namespace MCP
 	{
 		if (!spMsg || !spMsg->IsValid())
 			return ERRNO_INTERNAL_ERROR;
+
+		// Messages are split by era before the legacy switch runs. A request that
+		// carries modern _meta but cannot resolve a profile must still produce a
+		// JSON-RPC error, so it also enters the modern path.
+		if (MessageCategory_Request == spMsg->eMessageCategory)
+		{
+			if (!spMsg->ctxProtocol.IsValid() || spMsg->ctxProtocol.IsStateless())
+				return ProcessModernMessage(iErrCode, spMsg);
+		}
+		else if (MessageCategory_Notification == spMsg->eMessageCategory)
+		{
+			if (!spMsg->ctxProtocol.IsValid() || spMsg->ctxProtocol.IsStateless())
+			{
+				if (!spMsg->ctxProtocol.IsStateless() || !m_bModernSupported)
+					return ERRNO_OK;
+
+				return ProcessModernNotification(
+					spMsg->ctxProtocol,
+					std::dynamic_pointer_cast<MCP::Notification>(spMsg));
+			}
+		}
 
 		switch (spMsg->eMessageCategory)
 		{
@@ -551,7 +627,17 @@ namespace MCP
 			iErrCode = spTask->Execute();
 
 		} break;
-		default: break;
+		default:
+		{
+			// A handshake client probing the stateless discovery method receives the
+			// standard method-not-found error instead of a silent drop.
+			if (spRequest->strMethod.compare(METHOD_SERVER_DISCOVER) == 0)
+			{
+				strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
+				iErrCode = ERRNO_METHOD_NOT_FOUND;
+			}
+
+		} break;
 		}
 
 	PROC_END:
@@ -655,11 +741,26 @@ namespace MCP
 		if (MessageCategory_Unknown == eCategory)
 			return ERRNO_PARSE_ERROR;
 
+		std::string strMethod;
+		if (jVal.isMember(MSG_KEY_METHOD) && jVal[MSG_KEY_METHOD].isString())
+			strMethod = jVal[MSG_KEY_METHOD].asString();
+
+		Json::Value jMeta(Json::objectValue);
+		if (jVal.isMember(MSG_KEY_PARAMS) && jVal[MSG_KEY_PARAMS].isObject()
+			&& jVal[MSG_KEY_PARAMS].isMember(MSG_KEY_META))
+		{
+			jMeta = jVal[MSG_KEY_PARAMS][MSG_KEY_META];
+		}
+
+		// The era must be resolved from the raw message before the typed parse so
+		// version gated fields such as params._meta.logLevel survive deserialization.
+		ProtocolContext ctxProtocol = ResolveProtocolContext(strMethod, jMeta);
+
 		switch (eCategory)
 		{
 			case MessageCategory_Request:
 			{
-				return ParseRequest(strMsg, spMsg);
+				return ParseRequest(strMsg, ctxProtocol, spMsg);
 			} break;
 			case MessageCategory_Response:
 			{
@@ -667,7 +768,7 @@ namespace MCP
 			} break;
 			case MessageCategory_Notification:
 			{
-				return ParseNotification(strMsg, spMsg);
+				return ParseNotification(strMsg, ctxProtocol, spMsg);
 			} break;
 			default: break;
 		}
@@ -675,13 +776,14 @@ namespace MCP
 		return ERRNO_INTERNAL_ERROR;
 	}
 
-	int CMCPSession::ParseRequest(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg)
+	int CMCPSession::ParseRequest(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg)
 	{
 		auto spRequest = std::make_shared<MCP::Request>(MessageType_Unknown, false);
 		if (!spRequest)
 			return ERRNO_PARSE_ERROR;
 
 		int iErrCode = ERRNO_OK;
+		spRequest->ctxProtocol = ctxProtocol;
 		iErrCode = spRequest->Deserialize(strMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
@@ -694,6 +796,7 @@ namespace MCP
 			if (!spInitializeRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spInitializeRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spInitializeRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -708,6 +811,7 @@ namespace MCP
 			if (!spListToolsRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spListToolsRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spListToolsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -722,6 +826,7 @@ namespace MCP
 			if (!spCallToolRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spCallToolRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spCallToolRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -736,6 +841,7 @@ namespace MCP
 			if (!spPingRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spPingRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spPingRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -750,6 +856,7 @@ namespace MCP
 			if (!spListResourcesRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spListResourcesRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spListResourcesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -764,6 +871,7 @@ namespace MCP
 			if (!spReadResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spReadResourceRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spReadResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -778,6 +886,7 @@ namespace MCP
 			if (!spSubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spSubscribeResourceRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spSubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -791,6 +900,7 @@ namespace MCP
 			if (!spUnsubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spUnsubscribeResourceRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spUnsubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -804,6 +914,7 @@ namespace MCP
 			if (!spListResourceTemplatesRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spListResourceTemplatesRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spListResourceTemplatesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -818,6 +929,7 @@ namespace MCP
 			if (!spListPromptsRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spListPromptsRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spListPromptsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -832,6 +944,7 @@ namespace MCP
 			if (!spGetPromptRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spGetPromptRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spGetPromptRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -846,6 +959,7 @@ namespace MCP
 			if (!spCompleteRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spCompleteRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spCompleteRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -860,11 +974,61 @@ namespace MCP
 			if (!spSetLevelRequest)
 				return ERRNO_PARSE_ERROR;
 
+			spSetLevelRequest->ctxProtocol = ctxProtocol;
 			iErrCode = spSetLevelRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
 
 			spMsg = spSetLevelRequest;
+
+			return ERRNO_OK;
+		}
+		else if (spRequest->strMethod.compare(METHOD_SERVER_DISCOVER) == 0)
+		{
+			// Discovery only exists in the stateless era. A handshake client probing
+			// it keeps the legacy path and receives method-not-found.
+			if (ctxProtocol.IsStateless())
+			{
+				auto spDiscoverRequest = std::make_shared<MCP::DiscoverRequest>(true);
+				if (!spDiscoverRequest)
+					return ERRNO_PARSE_ERROR;
+
+				spDiscoverRequest->ctxProtocol = ctxProtocol;
+				iErrCode = spDiscoverRequest->Deserialize(strMsg);
+				if (ERRNO_OK != iErrCode)
+					return ERRNO_INVALID_REQUEST;
+
+				spMsg = spDiscoverRequest;
+
+				return ERRNO_OK;
+			}
+		}
+		else if (spRequest->strMethod.compare(METHOD_SUBSCRIPTIONS_LISTEN) == 0)
+		{
+			if (!ctxProtocol.IsStateless())
+				return ERRNO_INTERNAL_ERROR;
+
+			auto spListenRequest = std::make_shared<MCP::SubscriptionsListenRequest>(true);
+			if (!spListenRequest)
+				return ERRNO_PARSE_ERROR;
+
+			spListenRequest->ctxProtocol = ctxProtocol;
+			iErrCode = spListenRequest->Deserialize(strMsg);
+			if (ERRNO_OK != iErrCode)
+				return ERRNO_INVALID_REQUEST;
+
+			spMsg = spListenRequest;
+
+			return ERRNO_OK;
+		}
+
+		// An unresolved or stateless request with an unknown method must still
+		// produce a JSON-RPC error, so the generic request is handed back. The
+		// handshake discover probe follows the same path to receive -32601.
+		if (ctxProtocol.IsStateless() || !ctxProtocol.IsValid()
+			|| METHOD_SERVER_DISCOVER == spRequest->strMethod)
+		{
+			spMsg = spRequest;
 
 			return ERRNO_OK;
 		}
@@ -877,13 +1041,14 @@ namespace MCP
 		return ERRNO_INTERNAL_ERROR;
 	}
 
-	int CMCPSession::ParseNotification(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg)
+	int CMCPSession::ParseNotification(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg)
 	{
 		auto spNotification = std::make_shared<MCP::Notification>(MessageType_Unknown, false);
 		if (!spNotification)
 			return ERRNO_PARSE_ERROR;
 
 		int iErrCode = ERRNO_OK;
+		spNotification->ctxProtocol = ctxProtocol;
 		iErrCode = spNotification->Deserialize(strMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
@@ -896,6 +1061,7 @@ namespace MCP
 			if (!spInitializedNotification)
 				return ERRNO_PARSE_ERROR;
 
+			spInitializedNotification->ctxProtocol = ctxProtocol;
 			iErrCode = spInitializedNotification->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_NOTIFICATION;
@@ -910,6 +1076,7 @@ namespace MCP
 			if (!spCancelledNotification)
 				return ERRNO_PARSE_ERROR;
 
+			spCancelledNotification->ctxProtocol = ctxProtocol;
 			iErrCode = spCancelledNotification->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_NOTIFICATION;
@@ -1133,14 +1300,19 @@ namespace MCP
 
 	int CMCPSession::SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData)
 	{
-		if (!m_spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
 		auto currentLevel = GetLoggingLevel();
 		if (level.eLevel < currentLevel.eLevel)
 		{
 			return ERRNO_OK;
 		}
+
+		return WriteLogNotification(level, strLogger, jData);
+	}
+
+	int CMCPSession::WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData)
+	{
+		if (!m_spTransport)
+			return ERRNO_INTERNAL_ERROR;
 
 		MCP::LoggingMessageNotification notification(false);
 		notification.strMethod = METHOD_NOTIFICATION_MESSAGE;
@@ -1153,6 +1325,503 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		return m_spTransport->Write(strNotification);
+	}
+
+	void CMCPSession::SetProtocolRegistry(const CProtocolRegistry* pRegistry)
+	{
+		m_pRegistry = pRegistry;
+	}
+
+	const CProtocolRegistry& CMCPSession::GetProtocolRegistry() const
+	{
+		if (m_pRegistry)
+			return *m_pRegistry;
+
+		return CProtocolRegistry::GetGlobalRegistry();
+	}
+
+	void CMCPSession::SetModernProtocolSupported(bool bSupported)
+	{
+		m_bModernSupported = bSupported;
+	}
+
+	bool CMCPSession::GetModernProtocolSupported() const
+	{
+		return m_bModernSupported;
+	}
+
+	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
+	{
+		m_iCacheTtlMs = iTtlMs;
+		m_strCacheScope = strCacheScope.empty() ? CACHE_SCOPE_PRIVATE : strCacheScope;
+	}
+
+	int CMCPSession::GetServerCacheTtlMs() const
+	{
+		return m_iCacheTtlMs;
+	}
+
+	std::string CMCPSession::GetServerCacheScope() const
+	{
+		return m_strCacheScope;
+	}
+
+	ProtocolContext CMCPSession::ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta) const
+	{
+		const CProtocolRegistry& registry = GetProtocolRegistry();
+
+		// initialize is always negotiated through the handshake profile.
+		if (METHOD_INITIALIZE == strMethod)
+			return MakeProfileContext(registry.GetDefaultHandshakeProfile());
+
+		// No io.modelcontextprotocol/* key keeps the legacy handshake flow. Only
+		// progressToken/toolCallId style metadata stays in that era.
+		if (!HasModernMetaKeys(jMeta))
+			return MakeProfileContext(registry.GetDefaultHandshakeProfile());
+
+		std::string strVersion;
+		if (jMeta.isMember(META_KEY_PROTOCOL_VERSION) && jMeta[META_KEY_PROTOCOL_VERSION].isString())
+			strVersion = jMeta[META_KEY_PROTOCOL_VERSION].asString();
+
+		if (strVersion.empty())
+			return ProtocolContext::Invalid(strVersion);
+
+		const ProtocolProfile* pProfile = registry.Find(strVersion);
+		if (!pProfile)
+			return ProtocolContext::Invalid(strVersion);
+
+		return MakeProfileContext(pProfile);
+	}
+
+	ProtocolContext CMCPSession::ResolveProtocolContext(const std::shared_ptr<MCP::Message>& spMsg) const
+	{
+		auto spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
+		if (!spRequest)
+			return MakeProfileContext(GetProtocolRegistry().GetDefaultHandshakeProfile());
+
+		Json::Value jMeta(Json::objectValue);
+		spRequest->meta.DoSerialize(jMeta);
+
+		return ResolveProtocolContext(spRequest->strMethod, jMeta);
+	}
+
+	int CMCPSession::ValidateProtocolContext(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest)
+	{
+		if (!spRequest)
+			return ERRNO_INVALID_REQUEST;
+
+		if (!ctxProtocol.IsValid())
+		{
+			// A missing version must not silently fall back to a default.
+			if (spRequest->meta.strProtocolVersion.empty())
+				return ERRNO_INVALID_PARAMS;
+
+			return ERRNO_UNSUPPORTED_PROTOCOL_VERSION;
+		}
+
+		if (!ctxProtocol.IsStateless())
+			return ERRNO_OK;
+
+		if (spRequest->meta.strProtocolVersion.empty() || !spRequest->meta.bHasClientCapabilities)
+			return ERRNO_INVALID_PARAMS;
+
+		return ERRNO_OK;
+	}
+
+	void CMCPSession::PrepareResult(const std::shared_ptr<MCP::Request>& spRequest, const std::shared_ptr<MCP::Response>& spResponse)
+	{
+		if (!spRequest || !spResponse)
+			return;
+
+		spResponse->ctxProtocol = spRequest->ctxProtocol;
+		spResponse->bMrtrRetry = spRequest->jInputResponses.isObject() || !spRequest->strRequestState.empty();
+
+		if (spResponse->IsCacheableResult())
+		{
+			if (spResponse->iTtlMs < 0)
+				spResponse->iTtlMs = m_iCacheTtlMs;
+
+			if (spResponse->strCacheScope.empty())
+				spResponse->strCacheScope = m_strCacheScope;
+		}
+
+		Json::Value jServerInfo(Json::objectValue);
+		m_serverInfo.DoSerialize(jServerInfo);
+		m_serverInfo.DoSerializeVersionExtras(jServerInfo, spResponse->ctxProtocol);
+		spResponse->jServerInfo = jServerInfo;
+	}
+
+	int CMCPSession::SendErrorResponse(const std::shared_ptr<MCP::Request>& spRequest, int iErrCode, const std::string& strMessage, const Json::Value& jErrorData)
+	{
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTask = std::make_shared<ProcessErrorRequest>(spRequest);
+		if (!spTask)
+			return ERRNO_INTERNAL_ERROR;
+
+		spTask->SetErrorCode(iErrCode);
+		spTask->SetErrorMessage(strMessage);
+		spTask->SetErrorData(jErrorData);
+
+		return spTask->Execute();
+	}
+
+	int CMCPSession::ProcessModernMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg)
+	{
+		auto spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (!m_bModernSupported)
+			return SendErrorResponse(spRequest, ERRNO_INVALID_REQUEST, ERROR_MESSAGE_INVALID_REQUEST);
+
+		int iValidate = ValidateProtocolContext(spRequest->ctxProtocol, spRequest);
+		if (ERRNO_OK != iValidate)
+		{
+			Json::Value jErrorData;
+			std::string strMessage = ERROR_MESSAGE_INVALID_PARAMS;
+			if (ERRNO_UNSUPPORTED_PROTOCOL_VERSION == iValidate)
+			{
+				Json::Value jSupported(Json::arrayValue);
+				std::vector<std::string> vecVersions = GetProtocolRegistry().GetSupportedVersions();
+				for (auto& strVersion : vecVersions)
+					jSupported.append(strVersion);
+
+				jErrorData[MSG_KEY_SUPPORTED] = jSupported;
+				strMessage = ERROR_MESSAGE_UNSUPPORTED_PROTOCOL_VERSION;
+			}
+
+			return SendErrorResponse(spRequest, iValidate, strMessage, jErrorData);
+		}
+
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		return ProcessModernRequest(spRequest->ctxProtocol, spRequest);
+	}
+
+	int CMCPSession::ProcessModernRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest)
+	{
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		const ProtocolProfile* pProfile = ctxProtocol.pProfile;
+		if (!pProfile || !pProfile->SupportsMethod(spRequest->strMethod))
+			return SendErrorResponse(spRequest, ERRNO_METHOD_NOT_FOUND, ERROR_MESSAGE_METHOD_NOT_FOUND);
+
+		EnsureAsyncTaskThread();
+
+		auto DispatchAsyncTask = [this](const std::shared_ptr<MCP::ProcessRequest>& spPrototype,
+			const std::shared_ptr<MCP::Request>& spRequest) -> int
+		{
+			if (!spPrototype)
+				return ERRNO_INTERNAL_ERROR;
+
+			std::shared_ptr<MCP::CMCPTask> spNewTask = spPrototype->Clone();
+			if (!spNewTask)
+				return ERRNO_INTERNAL_ERROR;
+
+			auto spNewProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spNewTask);
+			if (!spNewProcessTask)
+				return ERRNO_INTERNAL_ERROR;
+
+			spNewProcessTask->SetRequest(spRequest);
+
+			return CommitAsyncTask(spNewProcessTask);
+		};
+
+		switch (spRequest->eMessageType)
+		{
+			case MessageType_ListToolsRequest:
+			case MessageType_ListResourcesRequest:
+			case MessageType_ListResourceTemplatesRequest:
+			case MessageType_ListPromptsRequest:
+			{
+				std::shared_ptr<MCP::ProcessRequest> spTask;
+				if (MessageType_ListToolsRequest == spRequest->eMessageType)
+					spTask = std::make_shared<ProcessListToolsRequest>(spRequest);
+				else if (MessageType_ListResourcesRequest == spRequest->eMessageType)
+					spTask = std::make_shared<ProcessListResourcesRequest>(spRequest);
+				else if (MessageType_ListResourceTemplatesRequest == spRequest->eMessageType)
+					spTask = std::make_shared<ProcessListResourceTemplatesRequest>(spRequest);
+				else
+					spTask = std::make_shared<ProcessListPromptsRequest>(spRequest);
+
+				if (!spTask)
+					return ERRNO_INTERNAL_ERROR;
+
+				return spTask->Execute();
+			} break;
+			case MessageType_CallToolRequest:
+			{
+				auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(spRequest);
+				if (!spCallToolRequest)
+					return ERRNO_INTERNAL_ERROR;
+
+				auto spPrototype = GetServerCallToolsTask(spCallToolRequest->strName);
+				if (!spPrototype)
+					return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+
+				return DispatchAsyncTask(spPrototype, spRequest);
+			} break;
+			case MessageType_ReadResourceRequest:
+			{
+				auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(spRequest);
+				if (!spReadResourceRequest)
+					return ERRNO_INTERNAL_ERROR;
+
+				auto spPrototype = GetServerReadResourceTask(spReadResourceRequest->strUri);
+				if (!spPrototype)
+					return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+
+				return DispatchAsyncTask(spPrototype, spRequest);
+			} break;
+			case MessageType_GetPromptRequest:
+			{
+				auto spGetPromptRequest = std::dynamic_pointer_cast<MCP::GetPromptRequest>(spRequest);
+				if (!spGetPromptRequest)
+					return ERRNO_INTERNAL_ERROR;
+
+				auto spPrototype = GetServerGetPromptTask(spGetPromptRequest->strName);
+				if (!spPrototype)
+					return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+
+				return DispatchAsyncTask(spPrototype, spRequest);
+			} break;
+			case MessageType_CompleteRequest:
+			{
+				auto spCompleteRequest = std::dynamic_pointer_cast<MCP::CompleteRequest>(spRequest);
+				if (!spCompleteRequest)
+					return ERRNO_INTERNAL_ERROR;
+
+				std::string strTaskKey = spCompleteRequest->strRefType + ":";
+				if (CONST_REF_PROMPT == spCompleteRequest->strRefType)
+					strTaskKey += spCompleteRequest->promptRef.strName;
+				else if (CONST_REF_RESOURCE == spCompleteRequest->strRefType)
+					strTaskKey += spCompleteRequest->resourceRef.strUri;
+
+				auto spPrototype = strTaskKey.empty() ? std::shared_ptr<MCP::ProcessRequest>() : GetServerCompleteTask(strTaskKey);
+				if (!spPrototype)
+					return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+
+				return DispatchAsyncTask(spPrototype, spRequest);
+			} break;
+			default:
+				break;
+		}
+
+		return SendErrorResponse(spRequest, ERRNO_METHOD_NOT_FOUND, ERROR_MESSAGE_METHOD_NOT_FOUND);
+	}
+
+	int CMCPSession::ProcessModernNotification(const ProtocolContext&, const std::shared_ptr<MCP::Notification>& spNotification)
+	{
+		if (!spNotification)
+			return ERRNO_OK;
+
+		if (MessageType_CancelledNotification == spNotification->eMessageType)
+		{
+			auto spCancelledNotification = std::dynamic_pointer_cast<MCP::CancelledNotification>(spNotification);
+			if (spCancelledNotification && spCancelledNotification->IsValid())
+			{
+				RemoveSubscription(spCancelledNotification->requestId);
+
+				return CancelAsyncTask(spCancelledNotification->requestId);
+			}
+		}
+
+		// Other stateless notifications carry no session state.
+		return ERRNO_OK;
+	}
+
+	int CMCPSession::EnsureAsyncTaskThread()
+	{
+		if (m_upTaskThread)
+			return ERRNO_OK;
+
+		if (!m_bRunAsyncTask.load())
+			m_bRunAsyncTask.store(true);
+
+		return StartAsyncTaskThread();
+	}
+
+	int CMCPSession::SendToolListChanged()
+	{
+		return SendListChangedNotification(MessageType_ToolListChangedNotification, METHOD_NOTIFICATION_TOOLS_LIST_CHANGED);
+	}
+
+	int CMCPSession::SendPromptListChanged()
+	{
+		return SendListChangedNotification(MessageType_PromptListChangedNotification, METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED);
+	}
+
+	int CMCPSession::SendResourceListChanged()
+	{
+		return SendListChangedNotification(MessageType_ResourceListChangedNotification, METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED);
+	}
+
+	int CMCPSession::SendListChangedNotification(MessageType eMessageType, const std::string& strMethod)
+	{
+		if (!m_spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		bool bHasSubscriptions = false;
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			bHasSubscriptions = !m_hashSubscriptions.empty();
+		}
+
+		if (bHasSubscriptions)
+			return SendSubscriptionNotification(strMethod, Json::Value());
+
+		std::shared_ptr<MCP::Notification> spNotification;
+		if (MessageType_ToolListChangedNotification == eMessageType)
+			spNotification = std::make_shared<ToolListChangedNotification>(false);
+		else if (MessageType_PromptListChangedNotification == eMessageType)
+			spNotification = std::make_shared<PromptListChangedNotification>(false);
+		else
+			spNotification = std::make_shared<ResourceListChangedNotification>(false);
+
+		if (!spNotification)
+			return ERRNO_INTERNAL_ERROR;
+
+		spNotification->strMethod = strMethod;
+
+		std::string strNotification;
+		if (ERRNO_OK != spNotification->Serialize(strNotification))
+			return ERRNO_INTERNAL_ERROR;
+
+		return m_spTransport->Write(strNotification);
+	}
+
+	int CMCPSession::SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri)
+	{
+		if (!m_spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		std::vector<SubscriptionState> vecTargets;
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			for (auto& pair : m_hashSubscriptions)
+			{
+				const SubscriptionState& subscription = pair.second;
+				if (!subscription.bActive)
+					continue;
+
+				bool bMatch = false;
+				if (METHOD_NOTIFICATION_TOOLS_LIST_CHANGED == strMethod)
+					bMatch = subscription.bToolsListChanged;
+				else if (METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED == strMethod)
+					bMatch = subscription.bPromptsListChanged;
+				else if (METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED == strMethod)
+					bMatch = subscription.bResourcesListChanged;
+				else if (METHOD_NOTIFICATION_RESOURCES_UPDATED == strMethod)
+					bMatch = subscription.setResourceSubscriptions.find(strMatchUri) != subscription.setResourceSubscriptions.end();
+
+				if (bMatch)
+					vecTargets.push_back(subscription);
+			}
+		}
+
+		int iErrCode = ERRNO_OK;
+		for (auto& subscription : vecTargets)
+		{
+			std::shared_ptr<MCP::Notification> spNotification;
+			if (METHOD_NOTIFICATION_RESOURCES_UPDATED == strMethod)
+			{
+				auto spUpdatedNotification = std::make_shared<ResourceUpdatedNotification>(false);
+				if (jParams.isObject() && jParams.isMember(MSG_KEY_URI))
+					spUpdatedNotification->strUri = jParams[MSG_KEY_URI].asString();
+
+				spNotification = spUpdatedNotification;
+			}
+			else if (METHOD_NOTIFICATION_TOOLS_LIST_CHANGED == strMethod)
+				spNotification = std::make_shared<ToolListChangedNotification>(false);
+			else if (METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED == strMethod)
+				spNotification = std::make_shared<PromptListChangedNotification>(false);
+			else if (METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED == strMethod)
+				spNotification = std::make_shared<ResourceListChangedNotification>(false);
+
+			if (!spNotification)
+				continue;
+
+			spNotification->strMethod = strMethod;
+			spNotification->ctxProtocol = subscription.ctxProtocol;
+			spNotification->bHasSubscriptionId = true;
+			spNotification->jSubscriptionId = MakeRequestIdJson(subscription.requestId);
+
+			std::string strNotification;
+			if (ERRNO_OK != spNotification->Serialize(strNotification))
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				continue;
+			}
+
+			if (ERRNO_OK != m_spTransport->Write(strNotification))
+				iErrCode = ERRNO_INTERNAL_ERROR;
+		}
+
+		return iErrCode;
+	}
+
+	int CMCPSession::RemoveSubscription(const MCP::RequestId& requestId)
+	{
+		std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+		for (auto it = m_hashSubscriptions.begin(); it != m_hashSubscriptions.end(); ++it)
+		{
+			if (it->second.requestId.IsEqual(requestId))
+			{
+				m_hashSubscriptions.erase(it);
+				break;
+			}
+		}
+
+		return ERRNO_OK;
+	}
+
+	int CMCPSession::CloseSubscriptions()
+	{
+		std::vector<SubscriptionState> vecStates;
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			for (auto& pair : m_hashSubscriptions)
+				vecStates.push_back(pair.second);
+
+			m_hashSubscriptions.clear();
+		}
+
+		if (!m_spTransport)
+			return ERRNO_OK;
+
+		int iErrCode = ERRNO_OK;
+		for (auto& subscription : vecStates)
+		{
+			if (!subscription.bActive || !subscription.spListenRequest)
+				continue;
+
+			auto spResult = std::make_shared<SubscriptionsListenResult>(true);
+			if (!spResult)
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				continue;
+			}
+
+			spResult->requestId = subscription.requestId;
+			spResult->jSubscriptionId = MakeRequestIdJson(subscription.requestId);
+			PrepareResult(subscription.spListenRequest, spResult);
+
+			std::string strResult;
+			if (ERRNO_OK != spResult->Serialize(strResult))
+			{
+				iErrCode = ERRNO_INTERNAL_ERROR;
+				continue;
+			}
+
+			if (ERRNO_OK != m_spTransport->Write(strResult))
+				iErrCode = ERRNO_INTERNAL_ERROR;
+		}
+
+		return iErrCode;
 	}
 
 	int CMCPSession::CommitAsyncTask(const std::shared_ptr<MCP::CMCPTask>& spTask)

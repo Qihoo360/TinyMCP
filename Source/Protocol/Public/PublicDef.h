@@ -83,6 +83,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_TTL_MS = "ttlMs";
 	static constexpr const char* MSG_KEY_CACHE_SCOPE = "cacheScope";
 	static constexpr const char* MSG_KEY_SUPPORTED_VERSIONS = "supportedVersions";
+	static constexpr const char* MSG_KEY_SUPPORTED = "supported";
 	static constexpr const char* MSG_KEY_INSTRUCTIONS = "instructions";
 	static constexpr const char* MSG_KEY_NOTIFICATIONS = "notifications";
 	static constexpr const char* MSG_KEY_TOOLS_LIST_CHANGED = "toolsListChanged";
@@ -190,6 +191,7 @@ namespace MCP
 	static constexpr const char* ERROR_MESSAGE_METHOD_NOT_FOUND = u8"method not found";
 	static constexpr const char* ERROR_MESSAGE_INVALID_PARAMS = u8"invalid params";
 	static constexpr const char* ERROR_MESSAGE_INTERNAL_ERROR = u8"internal error";
+	static constexpr const char* ERROR_MESSAGE_UNSUPPORTED_PROTOCOL_VERSION = u8"unsupported protocol version";
 
 
 	// JSON-RPC 2.0 Standard Error Codes

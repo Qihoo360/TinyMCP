@@ -28,6 +28,10 @@ namespace MCP
 		int NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData);
 
 	protected:
+		// Copies the request era onto the result and applies server defaults
+		// before the result is serialized.
+		int SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse);
+
 		std::shared_ptr<MCP::Request> m_spRequest;
 	};
 

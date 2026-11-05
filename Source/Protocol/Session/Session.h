@@ -13,6 +13,8 @@
 #include <mutex>
 #include "../Public/PublicDef.h"
 #include "../Message/Request.h"
+#include "../Message/Response.h"
+#include "../Message/Notification.h"
 #include "../Message/BasicMessage.h"
 #include "../Transport/Transport.h"
 #include "../Task/BasicTask.h"
@@ -40,6 +42,16 @@ namespace MCP
 		int Run();
 		int Terminate();
 		int CancelTask(const MCP::RequestId& requestId);
+
+		// Stateless era support. The stdio entry enables it explicitly; transports
+		// that keep the handshake model (for example SSE) leave it disabled.
+		void SetProtocolRegistry(const CProtocolRegistry* pRegistry);
+		const CProtocolRegistry& GetProtocolRegistry() const;
+		void SetModernProtocolSupported(bool bSupported);
+		bool GetModernProtocolSupported() const;
+		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
+		int GetServerCacheTtlMs() const;
+		std::string GetServerCacheScope() const;
 
 		// Reset per-connection MCP session state so that a new client (after the previous
 		// transport-level connection dropped) can re-issue `initialize` cleanly. This
@@ -85,20 +97,55 @@ namespace MCP
 		void SetLoggingLevel(const MCP::LoggingLevel& level);
 		MCP::LoggingLevel GetLoggingLevel() const;
 		int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+		int WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+
+		// Era resolution and result preparation shared by every task.
+		ProtocolContext ResolveProtocolContext(const std::shared_ptr<MCP::Message>& spMsg) const;
+		int ValidateProtocolContext(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
+		void PrepareResult(const std::shared_ptr<MCP::Request>& spRequest, const std::shared_ptr<MCP::Response>& spResponse);
+
+		// Subscription notifications. Legacy clients receive the change event
+		// unconditionally, stateless clients are filtered by their listen request.
+		int SendToolListChanged();
+		int SendPromptListChanged();
+		int SendResourceListChanged();
+		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri = std::string());
 
 	private:
 		CMCPSession() = default;
+
+		struct SubscriptionState
+		{
+			MCP::RequestId requestId;
+			ProtocolContext ctxProtocol;
+			std::shared_ptr<MCP::Request> spListenRequest;
+			bool bToolsListChanged{ false };
+			bool bPromptsListChanged{ false };
+			bool bResourcesListChanged{ false };
+			std::set<std::string> setResourceSubscriptions;
+			bool bActive{ false };
+		};
+
 		int ParseMessage(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
-		int ParseRequest(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
+		int ParseRequest(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
 		int ParseResponse(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
-		int ParseNotification(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
+		int ParseNotification(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
+		ProtocolContext ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta) const;
 		int ProcessMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
+		int ProcessModernMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
+		int ProcessModernRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
+		int ProcessModernNotification(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Notification>& spNotification);
 		int ProcessRequest(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessResponse(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessNotification(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int SwitchState(SessionState eState);
+		int SendErrorResponse(const std::shared_ptr<MCP::Request>& spRequest, int iErrCode, const std::string& strMessage, const Json::Value& jErrorData = Json::Value());
+		int SendListChangedNotification(MessageType eMessageType, const std::string& strMethod);
+		int RemoveSubscription(const MCP::RequestId& requestId);
+		int CloseSubscriptions();
 
 		// Asynchronous Task
+		int EnsureAsyncTaskThread();
 		int CommitAsyncTask(const std::shared_ptr<MCP::CMCPTask>& spTask);
 		int CancelAsyncTask(const MCP::RequestId& requestId);
 		int StartAsyncTaskThread();
@@ -109,6 +156,13 @@ namespace MCP
 
 		SessionState m_eSessionState{ SessionState_Original };
 		std::shared_ptr<CMCPTransport> m_spTransport;
+
+		const CProtocolRegistry* m_pRegistry{ nullptr };
+		bool m_bModernSupported{ false };
+		int m_iCacheTtlMs{ 0 };
+		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
+		std::unordered_map<std::string, SubscriptionState> m_hashSubscriptions;
+		std::mutex m_mtxSubscriptions;
 
 		MCP::Implementation m_serverInfo;
 		MCP::ServerCapabilities m_capabilities;

@@ -26,6 +26,7 @@ add_executable(TinyMCPTests
 	IntegrationTests/TestServer.cpp
 	IntegrationTests/Driver.cpp
 	IntegrationTests/Cases/TestLegacyCase.cpp
+	IntegrationTests/Cases/TestSessionCase.cpp
 	${TINYMCP_PROTOCOL_SOURCES}
 	${TINYMCP_JSONCPP_SOURCES}
 )
@@ -54,3 +55,5 @@ add_test(NAME unit.response COMMAND TinyMCPTests --unit response)
 add_test(NAME unit.notification COMMAND TinyMCPTests --unit notification)
 add_test(NAME integration.legacy COMMAND TinyMCPTests --case legacy)
 set_tests_properties(integration.legacy PROPERTIES TIMEOUT 30)
+add_test(NAME unit.session COMMAND TinyMCPTests --unit session)
+set_tests_properties(unit.session PROPERTIES TIMEOUT 30)

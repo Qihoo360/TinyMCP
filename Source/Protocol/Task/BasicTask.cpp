@@ -51,6 +51,16 @@ namespace MCP
 		return MCP::CMCPSession::GetInstance().SendLogMessage(level, strLogger, jData);
 	}
 
+	int ProcessRequest::SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse)
+	{
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		MCP::CMCPSession::GetInstance().PrepareResult(m_spRequest, spResult);
+
+		return spResult->Serialize(strResponse);
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessPingRequest
 	std::shared_ptr<CMCPTask> ProcessPingRequest::Clone() const
@@ -169,11 +179,12 @@ namespace MCP
 		if (!spInitializeResult)
 			return ERRNO_INTERNAL_ERROR;
 		spInitializeResult->requestId = m_spRequest->requestId;
-		spInitializeResult->strProtocolVersion = PROTOCOL_VER;
+		const ProtocolProfile* pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
+		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;
 		spInitializeResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
 		spInitializeResult->implServerInfo = CMCPSession::GetInstance().GetServerInfo();
 		std::string strResponse;
-		if (ERRNO_OK != spInitializeResult->Serialize(strResponse))
+		if (ERRNO_OK != SerializeResult(spInitializeResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
@@ -281,7 +292,7 @@ namespace MCP
 
 		if (spListToolsResult)
 		{
-			if (ERRNO_OK != spListToolsResult->Serialize(strResponse))
+			if (ERRNO_OK != SerializeResult(spListToolsResult, strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -356,7 +367,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		std::string strResponse;
-		if (ERRNO_OK != spResult->Serialize(strResponse))
+		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
@@ -470,7 +481,7 @@ namespace MCP
 
 		if (spListResourcesResult)
 		{
-			if (ERRNO_OK != spListResourcesResult->Serialize(strResponse))
+			if (ERRNO_OK != SerializeResult(spListResourcesResult, strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -545,7 +556,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		std::string strResponse;
-		if (ERRNO_OK != spResult->Serialize(strResponse))
+		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
 		if (!spTransport)
@@ -834,7 +845,7 @@ namespace MCP
 
 		if (spListResourceTemplatesResult)
 		{
-			if (ERRNO_OK != spListResourceTemplatesResult->Serialize(strResponse))
+			if (ERRNO_OK != SerializeResult(spListResourceTemplatesResult, strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -947,7 +958,7 @@ namespace MCP
 
 		if (spListPromptsResult)
 		{
-			if (ERRNO_OK != spListPromptsResult->Serialize(strResponse))
+			if (ERRNO_OK != SerializeResult(spListPromptsResult, strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -1031,7 +1042,7 @@ namespace MCP
 		spResult->requestId = spRequest->requestId;
 
 		std::string strResponse;
-		if (ERRNO_OK != spResult->Serialize(strResponse))
+		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
 		auto spTransport = CMCPSession::GetInstance().GetTransport();
@@ -1143,7 +1154,7 @@ namespace MCP
 		spResult->requestId = spRequest->requestId;
 
 		std::string strResponse;
-		if (ERRNO_OK != spResult->Serialize(strResponse))
+		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
 		auto spTransport = CMCPSession::GetInstance().GetTransport();

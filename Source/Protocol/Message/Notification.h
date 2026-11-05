@@ -84,6 +84,7 @@ namespace MCP
 		}
 
 		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
 	};
 
 	struct ResourceUpdatedNotification : public MCP::Notification
@@ -112,6 +113,7 @@ namespace MCP
 		}
 
 		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
 	};
 
 	struct ToolListChangedNotification : public MCP::Notification
@@ -124,6 +126,7 @@ namespace MCP
 		}
 
 		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
 	};
 
 	// 2026-07-28 subscriptions/acknowledged notification.
