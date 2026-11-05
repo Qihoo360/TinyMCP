@@ -5,6 +5,8 @@ VisualStudioVersion = 16.0.35026.282
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MCPServer", "MCPServer.vcxproj", "{6F6716F9-A77E-405B-8047-6CE7204E787F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TinyMCPTests", "..\..\..\..\Tests\TinyMCPTests.vcxproj", "{3F2B5C7A-9D4E-4B8A-A6C1-5E7D9F0B2C34}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -15,6 +17,10 @@ Global
 		{6F6716F9-A77E-405B-8047-6CE7204E787F}.Debug|x86.Build.0 = Debug|Win32
 		{6F6716F9-A77E-405B-8047-6CE7204E787F}.Release|x86.ActiveCfg = Release|Win32
 		{6F6716F9-A77E-405B-8047-6CE7204E787F}.Release|x86.Build.0 = Release|Win32
+		{3F2B5C7A-9D4E-4B8A-A6C1-5E7D9F0B2C34}.Debug|x86.ActiveCfg = Debug|Win32
+		{3F2B5C7A-9D4E-4B8A-A6C1-5E7D9F0B2C34}.Debug|x86.Build.0 = Debug|Win32
+		{3F2B5C7A-9D4E-4B8A-A6C1-5E7D9F0B2C34}.Release|x86.ActiveCfg = Release|Win32
+		{3F2B5C7A-9D4E-4B8A-A6C1-5E7D9F0B2C34}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
