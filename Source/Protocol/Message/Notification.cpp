@@ -304,14 +304,14 @@ namespace MCP
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
+		// notifications is a required member of the acknowledgment params, even
+		// when the server grants nothing.
 		Json::Value jParams(Json::objectValue);
-		if (jNotifications.isObject() && !jNotifications.empty())
-			jParams[MSG_KEY_NOTIFICATIONS] = jNotifications;
+		jParams[MSG_KEY_NOTIFICATIONS] = jNotifications.isObject() ? jNotifications : Json::Value(Json::objectValue);
 
 		WriteVersionParamsMeta(jParams, ctxProtocol);
 
-		if (!jParams.empty())
-			jMsg[MSG_KEY_PARAMS] = jParams;
+		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;
 	}

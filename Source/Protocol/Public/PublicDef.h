@@ -93,6 +93,8 @@ namespace MCP
 	static constexpr const char* MSG_KEY_EXTENSIONS = "extensions";
 	static constexpr const char* MSG_KEY_COMPLETIONS = "completions";
 	static constexpr const char* MSG_KEY_LOG_LEVEL = "logLevel";
+	static constexpr const char* MSG_KEY_MODE = "mode";
+	static constexpr const char* MSG_KEY_REQUIRED_CAPABILITIES = "requiredCapabilities";
 	static constexpr const char* MSG_KEY_TITLE = "title";
 	static constexpr const char* MSG_KEY_ICONS = "icons";
 	static constexpr const char* MSG_KEY_WEBSITE_URL = "websiteUrl";
@@ -175,6 +177,9 @@ namespace MCP
 	static constexpr const char* METHOD_SUBSCRIPTIONS_LISTEN = "subscriptions/listen";
 	static constexpr const char* METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED = "notifications/subscriptions/acknowledged";
 	static constexpr const char* METHOD_NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
+	static constexpr const char* METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
+	static constexpr const char* METHOD_ROOTS_LIST = "roots/list";
+	static constexpr const char* METHOD_ELICITATION_CREATE = "elicitation/create";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
@@ -192,6 +197,7 @@ namespace MCP
 	static constexpr const char* ERROR_MESSAGE_INVALID_PARAMS = u8"invalid params";
 	static constexpr const char* ERROR_MESSAGE_INTERNAL_ERROR = u8"internal error";
 	static constexpr const char* ERROR_MESSAGE_UNSUPPORTED_PROTOCOL_VERSION = u8"unsupported protocol version";
+	static constexpr const char* ERROR_MESSAGE_MISSING_REQUIRED_CLIENT_CAPABILITY = u8"missing required client capability";
 
 
 	// JSON-RPC 2.0 Standard Error Codes

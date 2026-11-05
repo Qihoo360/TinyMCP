@@ -312,6 +312,10 @@ namespace MCP
 
 	bool CallToolResult::IsValid() const
 	{
+		// An MRTR round trip carries no content until the input is supplied.
+		if (RESULT_TYPE_INPUT_REQUIRED == strResultType)
+			return requestId.IsValid();
+
 		if (vecTextContent.empty() && vecImageContent.empty() && vecEmbeddedResource.empty())
 			return false;
 
@@ -543,6 +547,10 @@ namespace MCP
 
 	bool GetPromptResult::IsValid() const
 	{
+		// An MRTR round trip carries no messages until the input is supplied.
+		if (RESULT_TYPE_INPUT_REQUIRED == strResultType)
+			return requestId.IsValid();
+
 		return !vecMessages.empty();
 	}
 
@@ -605,6 +613,20 @@ namespace MCP
 		if (ERRNO_OK == capabilities.DoSerialize(jCapabilities))
 		{
 			capabilities.DoSerializeVersionExtras(jCapabilities, ctxProtocol);
+
+			// The stateless era replaces legacy-only capability slots: completions
+			// are advertised on their own key and resource subscriptions move to
+			// subscriptions/listen, so discover must not publish either legacy slot.
+			if (ctxProtocol.Supports(Feature_Discover))
+				jCapabilities.removeMember(MSG_KEY_EXPERIMENTAL);
+
+			if (ctxProtocol.Supports(Feature_ListenSubscriptions)
+				&& jCapabilities.isMember(MSG_KEY_RESOURCES)
+				&& jCapabilities[MSG_KEY_RESOURCES].isObject())
+			{
+				jCapabilities[MSG_KEY_RESOURCES].removeMember(MSG_KEY_SUBSCRIBE);
+			}
+
 			jResult[MSG_KEY_CAPABILITIES] = jCapabilities;
 		}
 
@@ -637,6 +659,11 @@ namespace MCP
 	int DiscoverResult::DoDeserialize(const Json::Value& jMsg)
 	{
 		return Response::DoDeserialize(jMsg);
+	}
+
+	bool DiscoverResult::IsCacheableResult() const
+	{
+		return true;
 	}
 
 	bool DiscoverResult::IsValid() const

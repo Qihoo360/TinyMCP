@@ -27,6 +27,7 @@ add_executable(TinyMCPTests
 	IntegrationTests/Driver.cpp
 	IntegrationTests/Cases/TestLegacyCase.cpp
 	IntegrationTests/Cases/TestSessionCase.cpp
+	IntegrationTests/Cases/TestModernCase.cpp
 	${TINYMCP_PROTOCOL_SOURCES}
 	${TINYMCP_JSONCPP_SOURCES}
 )
@@ -57,3 +58,11 @@ add_test(NAME integration.legacy COMMAND TinyMCPTests --case legacy)
 set_tests_properties(integration.legacy PROPERTIES TIMEOUT 30)
 add_test(NAME unit.session COMMAND TinyMCPTests --unit session)
 set_tests_properties(unit.session PROPERTIES TIMEOUT 30)
+add_test(NAME unit.tasks COMMAND TinyMCPTests --unit tasks)
+set_tests_properties(unit.tasks PROPERTIES TIMEOUT 30)
+add_test(NAME unit.caching COMMAND TinyMCPTests --unit caching)
+set_tests_properties(unit.caching PROPERTIES TIMEOUT 30)
+add_test(NAME unit.mrtr COMMAND TinyMCPTests --unit mrtr)
+set_tests_properties(unit.mrtr PROPERTIES TIMEOUT 30)
+add_test(NAME unit.subscriptions COMMAND TinyMCPTests --unit subscriptions)
+set_tests_properties(unit.subscriptions PROPERTIES TIMEOUT 30)

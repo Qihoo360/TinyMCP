@@ -52,6 +52,8 @@ namespace MCP
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
 		int GetServerCacheTtlMs() const;
 		std::string GetServerCacheScope() const;
+		void SetServerInstructions(const std::string& strInstructions);
+		std::string GetServerInstructions() const;
 
 		// Reset per-connection MCP session state so that a new client (after the previous
 		// transport-level connection dropped) can re-issue `initialize` cleanly. This
@@ -143,6 +145,7 @@ namespace MCP
 		int SendListChangedNotification(MessageType eMessageType, const std::string& strMethod);
 		int RemoveSubscription(const MCP::RequestId& requestId);
 		int CloseSubscriptions();
+		int ProcessSubscriptionsListenRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
 
 		// Asynchronous Task
 		int EnsureAsyncTaskThread();
@@ -161,6 +164,7 @@ namespace MCP
 		bool m_bModernSupported{ false };
 		int m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
+		std::string m_strServerInstructions;
 		std::unordered_map<std::string, SubscriptionState> m_hashSubscriptions;
 		std::mutex m_mtxSubscriptions;
 

@@ -714,6 +714,7 @@ namespace MCP
 		if (!jParams.isMember(MSG_KEY_NOTIFICATIONS) || !jParams[MSG_KEY_NOTIFICATIONS].isObject())
 			return ERRNO_OK;
 
+		bHasNotifications = true;
 		auto& jNotifications = jParams[MSG_KEY_NOTIFICATIONS];
 		bToolsListChanged = jNotifications.isMember(MSG_KEY_TOOLS_LIST_CHANGED)
 			&& jNotifications[MSG_KEY_TOOLS_LIST_CHANGED].asBool();

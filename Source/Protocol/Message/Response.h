@@ -246,6 +246,7 @@ namespace MCP
 		std::string strInstructions;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};

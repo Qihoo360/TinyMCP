@@ -266,6 +266,7 @@ namespace MCP
 		{
 		}
 
+		bool bHasNotifications{ false };
 		bool bToolsListChanged{ false };
 		bool bPromptsListChanged{ false };
 		bool bResourcesListChanged{ false };

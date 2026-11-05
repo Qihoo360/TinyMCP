@@ -32,6 +32,15 @@ namespace MCP
 		// before the result is serialized.
 		int SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse);
 
+		// Validates an MRTR round trip against the request's client capabilities.
+		// Returns ERRNO_INVALID_PARAMS when neither part is present or the payload
+		// is malformed, ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY when the client
+		// did not declare a capability needed by one of the input requests.
+		int ValidateInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState) const;
+		int SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
+			const Json::Value& jInputRequests, const std::string& strRequestState);
+		int SendMissingClientCapability(const Json::Value& jRequiredCapabilities);
+
 		std::shared_ptr<MCP::Request> m_spRequest;
 	};
 
@@ -111,6 +120,8 @@ namespace MCP
 		int NotifyProgress(int iProgress, int iTotal);
 		int NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult);
 		int NotifyCancelled();
+		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 
 	private:
 		bool m_bFinished{ false };
@@ -146,6 +157,8 @@ namespace MCP
 		int NotifyResult(std::shared_ptr<MCP::ReadResourceResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
+		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 
 	private:
 		bool m_bFinished{ false };
@@ -235,6 +248,8 @@ namespace MCP
 		int NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
+		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 
 	protected:
 		bool m_bFinished{ false };
@@ -261,6 +276,19 @@ namespace MCP
 	protected:
 		bool m_bFinished{ false };
 		bool m_bCancelled{ false };
+	};
+
+	class ProcessDiscoverRequest : public ProcessRequest
+	{
+	public:
+		ProcessDiscoverRequest(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
 	};
 
 	class ProcessSetLevelRequest : public ProcessRequest

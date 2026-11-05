@@ -57,6 +57,19 @@ namespace MCP
 
 			return Json::Value();
 		}
+
+		// A subscription is keyed by both the JSON type and the value of its
+		// listen request id, so "7" and 7 stay independent subscriptions.
+		std::string MakeRequestIdKey(const RequestId& requestId)
+		{
+			if (DataType_Integer == requestId.eIdDataType)
+				return std::string("i:") + std::to_string(requestId.iId);
+
+			if (DataType_String == requestId.eIdDataType)
+				return std::string("s:") + requestId.strId;
+
+			return std::string();
+		}
 	}
 
 	CMCPSession CMCPSession::s_Instance;
@@ -1366,6 +1379,16 @@ namespace MCP
 		return m_strCacheScope;
 	}
 
+	void CMCPSession::SetServerInstructions(const std::string& strInstructions)
+	{
+		m_strServerInstructions = strInstructions;
+	}
+
+	std::string CMCPSession::GetServerInstructions() const
+	{
+		return m_strServerInstructions;
+	}
+
 	ProtocolContext CMCPSession::ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta) const
 	{
 		const CProtocolRegistry& registry = GetProtocolRegistry();
@@ -1533,6 +1556,18 @@ namespace MCP
 
 		switch (spRequest->eMessageType)
 		{
+			case MessageType_DiscoverRequest:
+			{
+				auto spTask = std::make_shared<ProcessDiscoverRequest>(spRequest);
+				if (!spTask)
+					return ERRNO_INTERNAL_ERROR;
+
+				return spTask->Execute();
+			} break;
+			case MessageType_SubscriptionsListenRequest:
+			{
+				return ProcessSubscriptionsListenRequest(ctxProtocol, spRequest);
+			} break;
 			case MessageType_ListToolsRequest:
 			case MessageType_ListResourcesRequest:
 			case MessageType_ListResourceTemplatesRequest:
@@ -1573,7 +1608,10 @@ namespace MCP
 
 				auto spPrototype = GetServerReadResourceTask(spReadResourceRequest->strUri);
 				if (!spPrototype)
-					return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+				{
+					int iNotFoundCode = pProfile->iResourceNotFoundCode;
+					return SendErrorResponse(spRequest, iNotFoundCode, ERROR_MESSAGE_INVALID_PARAMS);
+				}
 
 				return DispatchAsyncTask(spPrototype, spRequest);
 			} break;
@@ -1824,6 +1862,94 @@ namespace MCP
 		return iErrCode;
 	}
 
+	int CMCPSession::ProcessSubscriptionsListenRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest)
+	{
+		if (!spRequest)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spListenRequest = std::dynamic_pointer_cast<MCP::SubscriptionsListenRequest>(spRequest);
+		if (!spListenRequest || !spListenRequest->IsValid() || !spListenRequest->bHasNotifications)
+			return SendErrorResponse(spRequest, ERRNO_INVALID_PARAMS, ERROR_MESSAGE_INVALID_PARAMS);
+
+		if (!ctxProtocol.Supports(Feature_ListenSubscriptions))
+			return SendErrorResponse(spRequest, ERRNO_METHOD_NOT_FOUND, ERROR_MESSAGE_METHOD_NOT_FOUND);
+
+		MCP::ServerCapabilities capabilities = GetServerCapabilities();
+
+		SubscriptionState subscription;
+		subscription.requestId = spListenRequest->requestId;
+		subscription.ctxProtocol = ctxProtocol;
+		subscription.spListenRequest = spRequest;
+
+		// Only grant the notification types the server can actually publish.
+		subscription.bToolsListChanged = spListenRequest->bToolsListChanged && capabilities.tools.bExist;
+		subscription.bPromptsListChanged = spListenRequest->bPromptsListChanged && capabilities.prompts.bExist;
+		subscription.bResourcesListChanged = spListenRequest->bResourcesListChanged && capabilities.resources.bExist;
+		if (capabilities.resources.bExist)
+		{
+			for (const auto& strUri : spListenRequest->vecResourceSubscriptions)
+				subscription.setResourceSubscriptions.insert(strUri);
+		}
+
+		Json::Value jGranted(Json::objectValue);
+		if (subscription.bToolsListChanged)
+			jGranted[MSG_KEY_TOOLS_LIST_CHANGED] = true;
+		if (subscription.bPromptsListChanged)
+			jGranted[MSG_KEY_PROMPTS_LIST_CHANGED] = true;
+		if (subscription.bResourcesListChanged)
+			jGranted[MSG_KEY_RESOURCES_LIST_CHANGED] = true;
+		if (!subscription.setResourceSubscriptions.empty())
+		{
+			Json::Value jUris(Json::arrayValue);
+			for (const auto& strUri : subscription.setResourceSubscriptions)
+				jUris.append(strUri);
+			jGranted[MSG_KEY_RESOURCE_SUBSCRIPTIONS] = jUris;
+		}
+
+		// Register the subscription as inactive until the acknowledgment has been
+		// written, so an event racing with the ack cannot be delivered before it.
+		const std::string strKey = MakeRequestIdKey(spListenRequest->requestId);
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			m_hashSubscriptions[strKey] = subscription;
+		}
+
+		auto spAcknowledged = std::make_shared<SubscriptionsAcknowledgedNotification>(false);
+		if (!spAcknowledged)
+		{
+			RemoveSubscription(spListenRequest->requestId);
+			return ERRNO_INTERNAL_ERROR;
+		}
+
+		spAcknowledged->strMethod = METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED;
+		spAcknowledged->ctxProtocol = ctxProtocol;
+		spAcknowledged->bHasSubscriptionId = true;
+		spAcknowledged->jSubscriptionId = MakeRequestIdJson(spListenRequest->requestId);
+		spAcknowledged->jNotifications = jGranted;
+
+		std::string strAcknowledged;
+		if (ERRNO_OK != spAcknowledged->Serialize(strAcknowledged))
+		{
+			RemoveSubscription(spListenRequest->requestId);
+			return ERRNO_INTERNAL_ERROR;
+		}
+
+		if (!m_spTransport || ERRNO_OK != m_spTransport->Write(strAcknowledged))
+		{
+			RemoveSubscription(spListenRequest->requestId);
+			return ERRNO_INTERNAL_ERROR;
+		}
+
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
+			auto it = m_hashSubscriptions.find(strKey);
+			if (it != m_hashSubscriptions.end())
+				it->second.bActive = true;
+		}
+
+		return ERRNO_OK;
+	}
+
 	int CMCPSession::CommitAsyncTask(const std::shared_ptr<MCP::CMCPTask>& spTask)
 	{
 		if (!spTask)
@@ -1974,9 +2100,26 @@ namespace MCP
 			{
 				if (spTask)
 				{
-					if (ERRNO_OK == spTask->Execute())
+					int iExecuteErrCode = spTask->Execute();
+					if (ERRNO_OK == iExecuteErrCode)
 					{
 						m_vecAsyncTasksCache.push_back(spTask);
+						continue;
+					}
+
+					// A stateless task that rejected its input without emitting a
+					// result must still answer, otherwise the client would wait
+					// forever on a request that can never complete.
+					auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
+					if (spProcessTask && !spTask->IsFinished())
+					{
+						auto spRequest = spProcessTask->GetRequest();
+						if (spRequest && spRequest->ctxProtocol.IsStateless())
+						{
+							int iCode = (ERRNO_INVALID_PARAMS == iExecuteErrCode) ? ERRNO_INVALID_PARAMS : ERRNO_INTERNAL_ERROR;
+							std::string strMessage = (ERRNO_INVALID_PARAMS == iCode) ? ERROR_MESSAGE_INVALID_PARAMS : ERROR_MESSAGE_INTERNAL_ERROR;
+							SendErrorResponse(spRequest, iCode, strMessage);
+						}
 					}
 				}
 			}

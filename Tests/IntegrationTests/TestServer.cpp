@@ -37,6 +37,62 @@ namespace MCP
 					if (!spCallToolRequest)
 						return MCP::ERRNO_INTERNAL_ERROR;
 
+					std::string strAction;
+					if (spCallToolRequest->jArguments.isMember("action") && spCallToolRequest->jArguments["action"].isString())
+						strAction = spCallToolRequest->jArguments["action"].asString();
+
+					// MRTR probe: an "action":"confirm" call asks the client for an
+					// elicitation round trip before echoing. The legacy echo path is
+					// untouched because action-less calls keep the old behaviour.
+					if ("confirm" == strAction)
+					{
+						if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+						{
+							Json::Value jParams(Json::objectValue);
+							jParams[MCP::MSG_KEY_MODE] = MCP::MSG_KEY_FORM;
+							jParams["message"] = "Confirm the echo?";
+
+							Json::Value jConfirm(Json::objectValue);
+							jConfirm[MCP::MSG_KEY_METHOD] = MCP::METHOD_ELICITATION_CREATE;
+							jConfirm[MCP::MSG_KEY_PARAMS] = jParams;
+
+							Json::Value jInputRequests(Json::objectValue);
+							jInputRequests["confirm"] = jConfirm;
+
+							int iErrCode = NotifyInputRequired(jInputRequests, "echo-confirm-state");
+							if (MCP::ERRNO_OK == iErrCode)
+								return MCP::ERRNO_OK;
+
+							Json::Value jForm(Json::objectValue);
+							Json::Value jElicitation(Json::objectValue);
+							jElicitation[MCP::MSG_KEY_FORM] = jForm;
+
+							Json::Value jRequiredCapabilities(Json::objectValue);
+							jRequiredCapabilities[MCP::MSG_KEY_ELICITATION] = jElicitation;
+
+							return NotifyMissingClientCapability(jRequiredCapabilities);
+						}
+
+						auto spConfirmedResult = BuildResult();
+						if (!spConfirmedResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent confirmedContent;
+						confirmedContent.strType = MCP::CONST_TEXT;
+						confirmedContent.strText = "confirmed";
+						spConfirmedResult->vecTextContent.push_back(confirmedContent);
+						spConfirmedResult->bIsError = false;
+
+						return NotifyResult(spConfirmedResult);
+					}
+
+					if ("confirm_empty" == strAction)
+					{
+						// Exercises the SDK guard that refuses an MRTR result with
+						// neither inputRequests nor requestState.
+						return NotifyInputRequired(Json::Value(), std::string());
+					}
+
 					auto spResult = BuildResult();
 					if (!spResult)
 						return MCP::ERRNO_INTERNAL_ERROR;

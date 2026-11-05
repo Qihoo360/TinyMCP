@@ -48,6 +48,26 @@ namespace MCP
 	{
 		MCP::LoggingLevel level;
 		level.eLevel = eLevel;
+
+		// Stateless requests carry their own threshold; without an explicit
+		// logLevel the request must not receive notifications/message at all.
+		if (m_spRequest && m_spRequest->ctxProtocol.Supports(Feature_LogLevelInMeta))
+		{
+			if (m_spRequest->meta.strLogLevel.empty())
+				return ERRNO_OK;
+
+			MCP::LoggingLevel requestLevel;
+			Json::Value jLevel(Json::objectValue);
+			jLevel[MSG_KEY_LEVEL] = m_spRequest->meta.strLogLevel;
+			if (ERRNO_OK != requestLevel.DoDeserialize(jLevel))
+				return ERRNO_OK;
+
+			if (static_cast<int>(eLevel) < static_cast<int>(requestLevel.eLevel))
+				return ERRNO_OK;
+
+			return MCP::CMCPSession::GetInstance().WriteLogNotification(level, strLogger, jData);
+		}
+
 		return MCP::CMCPSession::GetInstance().SendLogMessage(level, strLogger, jData);
 	}
 
@@ -59,6 +79,101 @@ namespace MCP
 		MCP::CMCPSession::GetInstance().PrepareResult(m_spRequest, spResult);
 
 		return spResult->Serialize(strResponse);
+	}
+
+	int ProcessRequest::ValidateInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState) const
+	{
+		if (!m_spRequest || !m_spRequest->ctxProtocol.Supports(Feature_Mrtr))
+			return ERRNO_INVALID_PARAMS;
+
+		bool bHasInputRequests = jInputRequests.isObject() && !jInputRequests.empty();
+		if (!bHasInputRequests && strRequestState.empty())
+			return ERRNO_INVALID_PARAMS;
+
+		if (!bHasInputRequests)
+			return ERRNO_OK;
+
+		const MCP::ClientCapabilities& clientCapabilities = m_spRequest->meta.clientCapabilities;
+		for (auto it = jInputRequests.begin(); it != jInputRequests.end(); ++it)
+		{
+			const Json::Value& jInputRequest = *it;
+			if (!jInputRequest.isObject() || !jInputRequest.isMember(MSG_KEY_METHOD))
+				return ERRNO_INVALID_PARAMS;
+
+			std::string strMethod = jInputRequest[MSG_KEY_METHOD].asString();
+			if (METHOD_SAMPLING_CREATE_MESSAGE == strMethod)
+			{
+				if (!clientCapabilities.SupportsCapability(MSG_KEY_SAMPLING))
+					return ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY;
+			}
+			else if (METHOD_ROOTS_LIST == strMethod)
+			{
+				if (!clientCapabilities.SupportsCapability(MSG_KEY_ROOTS))
+					return ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY;
+			}
+			else if (METHOD_ELICITATION_CREATE == strMethod)
+			{
+				std::string strMode = MSG_KEY_FORM;
+				if (jInputRequest.isMember(MSG_KEY_PARAMS) && jInputRequest[MSG_KEY_PARAMS].isObject()
+					&& jInputRequest[MSG_KEY_PARAMS].isMember(MSG_KEY_MODE)
+					&& jInputRequest[MSG_KEY_PARAMS][MSG_KEY_MODE].isString())
+				{
+					strMode = jInputRequest[MSG_KEY_PARAMS][MSG_KEY_MODE].asString();
+				}
+
+				if (!clientCapabilities.SupportsElicitationMode(strMode))
+					return ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY;
+			}
+			else
+			{
+				return ERRNO_INVALID_PARAMS;
+			}
+		}
+
+		return ERRNO_OK;
+	}
+
+	int ProcessRequest::SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
+		const Json::Value& jInputRequests, const std::string& strRequestState)
+	{
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		spResult->strResultType = RESULT_TYPE_INPUT_REQUIRED;
+		spResult->jInputRequests = jInputRequests;
+		spResult->strRequestState = strRequestState;
+
+		std::string strResponse;
+		if (ERRNO_OK != SerializeResult(spResult, strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
+	}
+
+	int ProcessRequest::SendMissingClientCapability(const Json::Value& jRequiredCapabilities)
+	{
+		if (!m_spRequest || !m_spRequest->ctxProtocol.Supports(Feature_Mrtr))
+			return ERRNO_INVALID_PARAMS;
+
+		if (!jRequiredCapabilities.isObject() || jRequiredCapabilities.empty())
+			return ERRNO_INVALID_PARAMS;
+
+		Json::Value jErrorData(Json::objectValue);
+		jErrorData[MSG_KEY_REQUIRED_CAPABILITIES] = jRequiredCapabilities;
+
+		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
+		if (!spTask)
+			return ERRNO_INTERNAL_ERROR;
+
+		spTask->SetErrorCode(ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY);
+		spTask->SetErrorMessage(ERROR_MESSAGE_MISSING_REQUIRED_CLIENT_CAPABILITY);
+		spTask->SetErrorData(jErrorData);
+
+		return spTask->Execute();
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -250,6 +365,11 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
+					if (spListToolRequest->ctxProtocol.IsStateless())
+					{
+						spErrorResponse->requestId = spListToolRequest->requestId;
+						spErrorResponse->ctxProtocol = spListToolRequest->ctxProtocol;
+					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
@@ -384,6 +504,26 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
+	int ProcessCallToolRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		m_bFinished = true;
+		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+	}
+
+	int ProcessCallToolRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
+	{
+		m_bFinished = true;
+		return SendMissingClientCapability(jRequiredCapabilities);
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessListResourcesRequest
 	std::shared_ptr<CMCPTask> ProcessListResourcesRequest::Clone() const
@@ -439,6 +579,11 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
+					if (spListResourcesRequest->ctxProtocol.IsStateless())
+					{
+						spErrorResponse->requestId = spListResourcesRequest->requestId;
+						spErrorResponse->ctxProtocol = spListResourcesRequest->ctxProtocol;
+					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
@@ -569,6 +714,10 @@ namespace MCP
 
 	int ProcessReadResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
+		// The error code for a missing resource is owned by the active profile.
+		if (ERRNO_RESOURCE_NOT_FOUND == iCode && m_spRequest && m_spRequest->ctxProtocol.pProfile)
+			iCode = m_spRequest->ctxProtocol.pProfile->iResourceNotFoundCode;
+
 		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
 		if (spTask)
 		{
@@ -585,6 +734,26 @@ namespace MCP
 	{
 		m_bCancelled = true;
 		return ERRNO_OK;
+	}
+
+	int ProcessReadResourceRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		m_bFinished = true;
+		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+	}
+
+	int ProcessReadResourceRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
+	{
+		m_bFinished = true;
+		return SendMissingClientCapability(jRequiredCapabilities);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -803,6 +972,11 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
+					if (spListResourceTemplatesRequest->ctxProtocol.IsStateless())
+					{
+						spErrorResponse->requestId = spListResourceTemplatesRequest->requestId;
+						spErrorResponse->ctxProtocol = spListResourceTemplatesRequest->ctxProtocol;
+					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
@@ -916,6 +1090,11 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
+					if (spListPromptsRequest->ctxProtocol.IsStateless())
+					{
+						spErrorResponse->requestId = spListPromptsRequest->requestId;
+						spErrorResponse->ctxProtocol = spListPromptsRequest->ctxProtocol;
+					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
@@ -1086,6 +1265,26 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
+	int ProcessGetPromptRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		m_bFinished = true;
+		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+	}
+
+	int ProcessGetPromptRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
+	{
+		m_bFinished = true;
+		return SendMissingClientCapability(jRequiredCapabilities);
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessCompleteRequest
 	bool ProcessCompleteRequest::IsFinished() const
@@ -1196,6 +1395,39 @@ namespace MCP
 	{
 		m_bCancelled = true;
 		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessDiscoverRequest
+	std::shared_ptr<CMCPTask> ProcessDiscoverRequest::Clone() const
+	{
+		// Discovery is handled synchronously on the reader thread.
+		return nullptr;
+	}
+
+	int ProcessDiscoverRequest::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spDiscoverResult = std::make_shared<DiscoverResult>(true);
+		if (!spDiscoverResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		spDiscoverResult->requestId = m_spRequest->requestId;
+		spDiscoverResult->vecSupportedVersions = CMCPSession::GetInstance().GetProtocolRegistry().GetSupportedVersions();
+		spDiscoverResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
+		spDiscoverResult->strInstructions = CMCPSession::GetInstance().GetServerInstructions();
+
+		std::string strResponse;
+		if (ERRNO_OK != SerializeResult(spDiscoverResult, strResponse))
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strResponse);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
