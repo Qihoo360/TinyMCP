@@ -21,8 +21,128 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 * [jsoncpp 1.9.5](https://github.com/open-source-parsers/jsoncpp/tree/1.9.5)
 * [cpp-httplib v0.44.0](https://github.com/yhirose/cpp-httplib/tree/v0.44.0)
 
-## 📌 MCP protocol version
-[MCP Specification 2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/index)
+## 📌 MCP protocol version support
+
+| Version | Transports | Session model |
+| --- | --- | --- |
+| [2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/index) | stdio, HTTP+SSE | Handshake with a session state machine |
+| [2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/index) | stdio only | Stateless, per-request `_meta` |
+
+`2026-07-28` is served over **stdio only**; this release does not implement the streamable HTTP transport. The legacy HTTP+SSE transport keeps working unchanged for 2024-11-05 clients. Existing 2024-11-05 code needs no changes: it keeps its behavior byte for byte after a rebuild.
+
+### Enabling 2026-07-28
+The stateless protocol is disabled by default. Call the switch at the stdio entry point before `Start()`:
+
+```cpp
+MCP::CMCPSession::GetInstance().SetModernProtocolSupported(true);
+```
+
+The example does this in `Example/MCPServer/Source/MCPServer.cpp` for `--transport stdio`, while the `sse` branch leaves it off. A modern request received on a transport where the switch is off is rejected with `-32600`.
+
+### Per-request `_meta`
+Stateless requests carry their version and client information in `params._meta`. `protocolVersion` and `clientCapabilities` are required; if any `io.modelcontextprotocol/*` key is present but a required one is missing, the server returns `-32602` and does **not** fill in defaults.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": { "name": "demo-client", "version": "1.0.0" },
+      "io.modelcontextprotocol/logLevel": "info"
+    }
+  }
+}
+```
+
+Requests without any modern `_meta` key keep the legacy 2024-11-05 semantics. `initialize` is always handled by the handshake path, even when it carries modern metadata.
+
+### Discovery
+`server/discover` reports the registered versions and capabilities. `serverInfo` lives in the result `_meta`, not at the result top level.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "server/discover",
+  "params": { "_meta": { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } }
+}
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "resultType": "complete",
+    "supportedVersions": ["2026-07-28", "2024-11-05"],
+    "capabilities": { "tools": { "listChanged": false }, "resources": { "listChanged": false } },
+    "instructions": "Echo server",
+    "ttlMs": 0,
+    "cacheScope": "private",
+    "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "TinyMCP", "version": "1.0.0" } }
+  }
+}
+```
+
+### Multi-round tool requests (MRTR)
+A tool can answer with `resultType: "input_required"` and ask the client for elicitation, sampling, or roots. The client retries the same request with `inputResponses` and the opaque `requestState`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "resultType": "input_required",
+    "inputRequests": {
+      "confirm": {
+        "method": "elicitation/create",
+        "params": { "mode": "form", "message": "Confirm the echo request.", "requestedSchema": { "type": "object", "properties": { "confirm": { "type": "boolean" } } } }
+      }
+    },
+    "requestState": "v1:hello:0a1b2c3d4e5f6071"
+  }
+}
+```
+
+Applications call `NotifyInputRequired(inputRequests, requestState)`. If the client did not declare a capability the request cannot live without, call `NotifyMissingClientCapability(capabilities)`; the SDK answers `-32021` with `error.data.requiredCapabilities`. `requestState` is opaque to the SDK: applications that use it for authorization must protect it themselves (HMAC/AEAD). See `CEchoConfirmTask` in the example. `input_required` results and MRTR retries never carry cache hints.
+
+### Subscriptions
+`subscriptions/listen` replaces `resources/subscribe`, `resources/unsubscribe`, and HTTP GET. Filters live in `params.notifications`; the server first acknowledges with a numeric or string `subscriptionId` that keeps the request id type, then pushes matching events with `_meta["io.modelcontextprotocol/subscriptionId"]`.
+
+```json
+{ "jsonrpc": "2.0", "id": 9, "method": "subscriptions/listen", "params": { "notifications": { "toolsListChanged": true, "resourceSubscriptions": ["ui://echo/app.html"] } } }
+```
+
+The server only grants filters it can actually publish, keeps matching resource URIs exact, and stops sending after `notifications/cancelled` or connection close. The example pushes a `notifications/resources/updated` event every five seconds through `SendSubscriptionNotification()`; a server without listeners sends nothing.
+
+### Caching
+Only these six `resultType: "complete"` results must carry `ttlMs` (>= 0) and `cacheScope` (`"public"` or `"private"`):
+
+`server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, `resources/read`.
+
+Defaults are `ttlMs = 0` and `cacheScope = "private"`; override them with `SetServerCacheOptions(ttlMs, cacheScope)`. `tools/call`, `prompts/get`, `completion/complete`, `subscriptions/listen`, `input_required` results, and MRTR retries never carry cache fields.
+
+### Errors
+* `-32602`: malformed parameters, including a missing required `_meta` field, an unknown tool/resource, or an invalid cursor on modern requests. No defaults are filled in.
+* `-32022`: unsupported protocol version; `error.data.supported` lists `CProtocolRegistry::GetSupportedVersions()`.
+* `-32601`: unknown method, including modern-only methods on a profile that does not support them.
+* `-32021`: missing required client capability; `error.data.requiredCapabilities` is present.
+* `-32001`: legacy header mismatch constant, kept unchanged for compatibility; stdio never emits it.
+* `-32020`: modern header mismatch constant, reserved for header-carrying transports; it is not emitted over stdio in this release.
+
+Modern `resources/read` reports a missing resource as `-32602`, while legacy keeps `-32002`.
+
+### Extensions and MCP Apps
+The only extension implemented today is MCP Apps (`io.modelcontextprotocol/ui`). Extensions are off by default: call `RegisterServerAppsCapabilities()` (or `RegisterServerExtensionsCapabilities()`) to advertise them. Without that call neither `server/discover` nor legacy `initialize` mentions the extension.
+
+MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool to a `ui://` resource, and `Resource._meta.ui` carries `csp` and `permissions` verbatim. Tools must still return meaningful text content so that hosts without Apps support degrade gracefully. The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK.
+
+### Deprecated features
+`logging`, `roots`, and `sampling` are deprecated in 2026-07-28. This release still implements them as specified: request-level `_meta.logLevel` for logging (requests without it receive no `notifications/message`), and MRTR for roots/sampling. New implementations should prefer stderr or OpenTelemetry, tool parameters or resource URIs, and direct LLM API calls. Legacy `logging/setLevel` remains available only on 2024-11-05 sessions. SSE connections do not accept modern requests.
 
 ## 🗂️ Code structure brief
 | directory | brief |
