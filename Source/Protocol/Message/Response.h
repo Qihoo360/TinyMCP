@@ -17,10 +17,24 @@ namespace MCP
 		}
 
 		MCP::RequestId requestId;
+		std::string strResultType;
+		Json::Value jInputRequests;
+		std::string strRequestState;
+		int iTtlMs{ -1 };
+		std::string strCacheScope;
+		Json::Value jResultMeta;
+		Json::Value jServerInfo;
+		bool bMrtrRetry{ false };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+
+		// Result caching only applies to the resource/tool/prompt read methods.
+		virtual bool IsCacheableResult() const;
+
+		// Writes every 2026-07-28 result level field behind its feature gate.
+		void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo) const;
 	};
 
 	struct EmptyResponse : public MCP::Response
@@ -86,6 +100,7 @@ namespace MCP
 		std::string strNextCursor;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
@@ -103,6 +118,7 @@ namespace MCP
 		std::vector<MCP::TextContent> vecTextContent;
 		std::vector<MCP::ImageContent> vecImageContent;
 		std::vector<MCP::EmbeddedResource> vecEmbeddedResource;
+		Json::Value jStructuredContent;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
@@ -122,6 +138,7 @@ namespace MCP
 		std::string strNextCursor;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
@@ -139,6 +156,7 @@ namespace MCP
 		std::vector<MCP::BlobResourceContents> vecBlobResourceContents;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
@@ -156,6 +174,7 @@ namespace MCP
 		std::string strNextCursor;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
@@ -173,6 +192,7 @@ namespace MCP
 		std::string strNextCursor;
 
 		bool IsValid() const override;
+		bool IsCacheableResult() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 	};
@@ -206,6 +226,41 @@ namespace MCP
 		std::vector<std::string> vecValues;
 		int iTotal{ -1 };
 		bool bHasMore{ false };
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// 2026-07-28 server/discover result.
+	struct DiscoverResult : public MCP::Response
+	{
+	public:
+		DiscoverResult(bool bNeedIdentity)
+			: Response(MessageType_DiscoverResult, bNeedIdentity)
+		{
+		}
+
+		std::vector<std::string> vecSupportedVersions;
+		MCP::ServerCapabilities capabilities;
+		std::string strInstructions;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// 2026-07-28 subscriptions/listen result. The subscription id keeps its
+	// original JSON type because the schema allows string and integer ids.
+	struct SubscriptionsListenResult : public MCP::Response
+	{
+	public:
+		SubscriptionsListenResult(bool bNeedIdentity)
+			: Response(MessageType_SubscriptionsListenResult, bNeedIdentity)
+		{
+		}
+
+		Json::Value jSubscriptionId;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

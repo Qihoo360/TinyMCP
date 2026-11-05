@@ -278,6 +278,7 @@ namespace MCP
 		MessageType_GetPromptRequest,
 		MessageType_GetPromptResult,
 		MessageType_PromptListChangedNotification,
+		MessageType_ToolListChangedNotification,
 		MessageType_CompleteRequest,
 		MessageType_CompleteResult,
 		MessageType_PromptReference,

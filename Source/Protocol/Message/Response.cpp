@@ -32,6 +32,69 @@ namespace MCP
 		return requestId.IsValid();
 	}
 
+	bool Response::IsCacheableResult() const
+	{
+		return false;
+	}
+
+	void Response::WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo) const
+	{
+		if (ctxProtocol.Supports(Feature_ResultType))
+		{
+			std::string strType = strResultType.empty() ? std::string(RESULT_TYPE_COMPLETE) : strResultType;
+			jResult[MSG_KEY_RESULT_TYPE] = strType;
+		}
+
+		if (ctxProtocol.Supports(Feature_Mrtr))
+		{
+			if (jInputRequests.isObject() && !jInputRequests.empty())
+				jResult[MSG_KEY_INPUT_REQUESTS] = jInputRequests;
+
+			if (!strRequestState.empty())
+				jResult[MSG_KEY_REQUEST_STATE] = strRequestState;
+		}
+
+		// Cache hints are only defined for complete results of read methods and
+		// must not be reused by an MRTR retry round trip.
+		if (ctxProtocol.Supports(Feature_Caching)
+			&& IsCacheableResult()
+			&& (strResultType.empty() || strResultType == RESULT_TYPE_COMPLETE)
+			&& !bMrtrRetry)
+		{
+			if (iTtlMs >= 0)
+			{
+				Json::Value jTtlMs(iTtlMs);
+				jResult[MSG_KEY_TTL_MS] = jTtlMs;
+			}
+
+			if (!strCacheScope.empty())
+				jResult[MSG_KEY_CACHE_SCOPE] = strCacheScope;
+		}
+
+		Json::Value jMeta(Json::objectValue);
+		if (jResultMeta.isObject())
+			jMeta = jResultMeta;
+
+		// Merge with whatever reserved keys the result already produced and let
+		// the SDK owned serverInfo win over application supplied values.
+		if (jResult.isMember(MSG_KEY_META) && jResult[MSG_KEY_META].isObject())
+		{
+			const Json::Value& jExistingMeta = jResult[MSG_KEY_META];
+			for (auto it = jExistingMeta.begin(); it != jExistingMeta.end(); ++it)
+			{
+				bool bReserved = it.name() == META_KEY_SERVER_INFO || it.name() == META_KEY_SUBSCRIPTION_ID;
+				if (bReserved || !jMeta.isMember(it.name()))
+					jMeta[it.name()] = *it;
+			}
+		}
+
+		if (ctxProtocol.Supports(Feature_ResultMeta) && jServerInfo.isObject() && !jServerInfo.empty())
+			jMeta[META_KEY_SERVER_INFO] = jServerInfo;
+
+		if (!jMeta.empty())
+			jResult[MSG_KEY_META] = jMeta;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// EmptyResponse
 	int EmptyResponse::DoSerialize(Json::Value& jMsg) const
@@ -118,6 +181,11 @@ namespace MCP
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
+		capabilities.DoSerializeVersionExtras(jResult[MSG_KEY_CAPABILITIES], ctxProtocol);
+		implServerInfo.DoSerializeVersionExtras(jResult[MSG_KEY_SERVER_INFO], ctxProtocol);
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
+
 		iErrCode = Response::DoSerialize(jMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
@@ -154,6 +222,7 @@ namespace MCP
 			Json::Value jTool(Json::objectValue);
 			if (ERRNO_OK == tool.DoSerialize(jTool))
 			{
+				tool.DoSerializeVersionExtras(jTool, ctxProtocol);
 				jTools.append(jTool);
 			}
 		}
@@ -164,6 +233,8 @@ namespace MCP
 			Json::Value jNextCursor(strNextCursor);
 			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
 		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -176,6 +247,11 @@ namespace MCP
 	}
 
 	bool ListToolsResult::IsValid() const
+	{
+		return true;
+	}
+
+	bool ListToolsResult::IsCacheableResult() const
 	{
 		return true;
 	}
@@ -194,21 +270,35 @@ namespace MCP
 		{
 			Json::Value jTextContent(Json::objectValue);
 			if (ERRNO_OK == text.DoSerialize(jTextContent))
+			{
+				text.DoSerializeVersionExtras(jTextContent, ctxProtocol);
 				jContent.append(jTextContent);
+			}
 		}
 		for (auto& image : vecImageContent)
 		{
 			Json::Value jImageContent(Json::objectValue);
 			if (ERRNO_OK == image.DoSerialize(jImageContent))
+			{
+				image.DoSerializeVersionExtras(jImageContent, ctxProtocol);
 				jContent.append(jImageContent);
+			}
 		}
 		for (auto& embedded : vecEmbeddedResource)
 		{
 			Json::Value jEmbedded(Json::objectValue);
 			if (ERRNO_OK == embedded.DoSerialize(jEmbedded))
+			{
+				embedded.DoSerializeVersionExtras(jEmbedded, ctxProtocol);
 				jContent.append(jEmbedded);
+			}
 		}
 		jResult[MSG_KEY_CONTENT] = jContent;
+
+		if (ctxProtocol.Supports(Feature_StructuredContent) && !jStructuredContent.isNull())
+			jResult[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -240,6 +330,7 @@ namespace MCP
 			Json::Value jResource(Json::objectValue);
 			if (ERRNO_OK == resource.DoSerialize(jResource))
 			{
+				resource.DoSerializeVersionExtras(jResource, ctxProtocol);
 				jResources.append(jResource);
 			}
 		}
@@ -250,6 +341,8 @@ namespace MCP
 			Json::Value jNextCursor(strNextCursor);
 			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
 		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -266,6 +359,11 @@ namespace MCP
 		return true;
 	}
 
+	bool ListResourcesResult::IsCacheableResult() const
+	{
+		return true;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ReadResourceResult
 	int ReadResourceResult::DoSerialize(Json::Value& jMsg) const
@@ -277,15 +375,23 @@ namespace MCP
 		{
 			Json::Value jTextContent(Json::objectValue);
 			if (ERRNO_OK == text.DoSerialize(jTextContent))
+			{
+				text.DoSerializeVersionExtras(jTextContent, ctxProtocol);
 				jContents.append(jTextContent);
+			}
 		}
 		for (auto& blob : vecBlobResourceContents)
 		{
 			Json::Value jBlobContent(Json::objectValue);
 			if (ERRNO_OK == blob.DoSerialize(jBlobContent))
+			{
+				blob.DoSerializeVersionExtras(jBlobContent, ctxProtocol);
 				jContents.append(jBlobContent);
+			}
 		}
 		jResult[MSG_KEY_CONTENTS] = jContents;
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -302,6 +408,11 @@ namespace MCP
 		return true;
 	}
 
+	bool ReadResourceResult::IsCacheableResult() const
+	{
+		return true;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ListResourceTemplatesResult
 	int ListResourceTemplatesResult::DoSerialize(Json::Value& jMsg) const
@@ -314,6 +425,7 @@ namespace MCP
 			Json::Value jTemplate(Json::objectValue);
 			if (ERRNO_OK == template_.DoSerialize(jTemplate))
 			{
+				template_.DoSerializeVersionExtras(jTemplate, ctxProtocol);
 				jResourceTemplates.append(jTemplate);
 			}
 		}
@@ -324,6 +436,8 @@ namespace MCP
 			Json::Value jNextCursor(strNextCursor);
 			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
 		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -340,6 +454,11 @@ namespace MCP
 		return true;
 	}
 
+	bool ListResourceTemplatesResult::IsCacheableResult() const
+	{
+		return true;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ListPromptsResult
 	int ListPromptsResult::DoSerialize(Json::Value& jMsg) const
@@ -352,6 +471,7 @@ namespace MCP
 			Json::Value jPrompt(Json::objectValue);
 			if (ERRNO_OK == prompt.DoSerialize(jPrompt))
 			{
+				prompt.DoSerializeVersionExtras(jPrompt, ctxProtocol);
 				jPrompts.append(jPrompt);
 			}
 		}
@@ -362,6 +482,8 @@ namespace MCP
 			Json::Value jNextCursor(strNextCursor);
 			jResult[MSG_KEY_NEXT_CURSOR] = jNextCursor;
 		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -374,6 +496,11 @@ namespace MCP
 	}
 
 	bool ListPromptsResult::IsValid() const
+	{
+		return true;
+	}
+
+	bool ListPromptsResult::IsCacheableResult() const
 	{
 		return true;
 	}
@@ -396,10 +523,13 @@ namespace MCP
 			Json::Value jMessage(Json::objectValue);
 			if (ERRNO_OK == msg.DoSerialize(jMessage))
 			{
+				msg.DoSerializeVersionExtras(jMessage, ctxProtocol);
 				jMessages.append(jMessage);
 			}
 		}
 		jResult[MSG_KEY_MESSAGES] = jMessages;
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 
@@ -443,6 +573,8 @@ namespace MCP
 
 		jResult[MSG_KEY_COMPLETION] = jCompletion;
 
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
+
 		jMsg[MSG_KEY_RESULT] = jResult;
 
 		return Response::DoSerialize(jMsg);
@@ -456,5 +588,92 @@ namespace MCP
 	bool CompleteResult::IsValid() const
 	{
 		return !vecValues.empty();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// DiscoverResult
+	int DiscoverResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		Json::Value jVersions(Json::arrayValue);
+		for (const auto& strVersion : vecSupportedVersions)
+			jVersions.append(strVersion);
+		jResult[MSG_KEY_SUPPORTED_VERSIONS] = jVersions;
+
+		Json::Value jCapabilities(Json::objectValue);
+		if (ERRNO_OK == capabilities.DoSerialize(jCapabilities))
+		{
+			capabilities.DoSerializeVersionExtras(jCapabilities, ctxProtocol);
+			jResult[MSG_KEY_CAPABILITIES] = jCapabilities;
+		}
+
+		if (!strInstructions.empty())
+		{
+			Json::Value jInstructions(strInstructions);
+			jResult[MSG_KEY_INSTRUCTIONS] = jInstructions;
+		}
+
+		// discover always publishes its cache hint once the feature is enabled.
+		if (ctxProtocol.Supports(Feature_Discover))
+		{
+			if (iTtlMs >= 0)
+			{
+				Json::Value jTtlMs(iTtlMs);
+				jResult[MSG_KEY_TTL_MS] = jTtlMs;
+			}
+
+			if (!strCacheScope.empty())
+				jResult[MSG_KEY_CACHE_SCOPE] = strCacheScope;
+		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int DiscoverResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool DiscoverResult::IsValid() const
+	{
+		return !vecSupportedVersions.empty();
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// SubscriptionsListenResult
+	int SubscriptionsListenResult::DoSerialize(Json::Value& jMsg) const
+	{
+		Json::Value jResult(Json::objectValue);
+
+		if (ctxProtocol.Supports(Feature_ListenSubscriptions) && !jSubscriptionId.isNull())
+		{
+			Json::Value jMeta(Json::objectValue);
+			jMeta[META_KEY_SUBSCRIPTION_ID] = jSubscriptionId;
+			jResult[MSG_KEY_META] = jMeta;
+		}
+
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
+
+		jMsg[MSG_KEY_RESULT] = jResult;
+
+		return Response::DoSerialize(jMsg);
+	}
+
+	int SubscriptionsListenResult::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Response::DoDeserialize(jMsg);
+	}
+
+	bool SubscriptionsListenResult::IsValid() const
+	{
+		if (!Response::IsValid())
+			return false;
+
+		return true;
 	}
 }

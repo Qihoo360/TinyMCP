@@ -44,6 +44,22 @@ namespace MCP
 		return true;
 	}
 
+	void Notification::WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctxProtocol) const
+	{
+		if (!ctxProtocol.Supports(Feature_ListenSubscriptions))
+			return;
+
+		if (!bHasSubscriptionId || jSubscriptionId.isNull())
+			return;
+
+		Json::Value jMeta(Json::objectValue);
+		if (jParams.isMember(MSG_KEY_META) && jParams[MSG_KEY_META].isObject())
+			jMeta = jParams[MSG_KEY_META];
+
+		jMeta[META_KEY_SUBSCRIPTION_ID] = jSubscriptionId;
+		jParams[MSG_KEY_META] = jMeta;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// InitializedNotification
 	bool InitializedNotification::IsValid() const
@@ -64,6 +80,7 @@ namespace MCP
 
 		Json::Value jParams(Json::objectValue);
 		requestId.DoSerialize(jParams);
+		WriteVersionParamsMeta(jParams, ctxProtocol);
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;
@@ -111,6 +128,7 @@ namespace MCP
 			Json::Value jTotal(iTotal);
 			jParams[MSG_KEY_TOTAL] = jTotal;
 		}
+		WriteVersionParamsMeta(jParams, ctxProtocol);
 		jMsg[MSG_KEY_PARAMS] = jParams;
 		
 		return ERRNO_OK;
@@ -174,6 +192,7 @@ namespace MCP
 		Json::Value jParams(Json::objectValue);
 		Json::Value jUri(strUri);
 		jParams[MSG_KEY_URI] = jUri;
+		WriteVersionParamsMeta(jParams, ctxProtocol);
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;
@@ -223,6 +242,73 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// ToolListChangedNotification
+	bool ToolListChangedNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_NOTIFICATION_TOOLS_LIST_CHANGED) != 0)
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// SubscriptionsAcknowledgedNotification
+	int SubscriptionsAcknowledgedNotification::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Notification::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		if (jNotifications.isObject() && !jNotifications.empty())
+			jParams[MSG_KEY_NOTIFICATIONS] = jNotifications;
+
+		WriteVersionParamsMeta(jParams, ctxProtocol);
+
+		if (!jParams.empty())
+			jMsg[MSG_KEY_PARAMS] = jParams;
+
+		return ERRNO_OK;
+	}
+
+	int SubscriptionsAcknowledgedNotification::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Notification::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_OK;
+
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+		if (jParams.isMember(MSG_KEY_NOTIFICATIONS) && jParams[MSG_KEY_NOTIFICATIONS].isObject())
+			jNotifications = jParams[MSG_KEY_NOTIFICATIONS];
+
+		if (jParams.isMember(MSG_KEY_META) && jParams[MSG_KEY_META].isObject())
+		{
+			auto& jMeta = jParams[MSG_KEY_META];
+			if (jMeta.isMember(META_KEY_SUBSCRIPTION_ID))
+			{
+				bHasSubscriptionId = true;
+				jSubscriptionId = jMeta[META_KEY_SUBSCRIPTION_ID];
+			}
+		}
+
+		return ERRNO_OK;
+	}
+
+	bool SubscriptionsAcknowledgedNotification::IsValid() const
+	{
+		if (!Notification::IsValid())
+			return false;
+
+		return strMethod.compare(METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED) == 0;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// LoggingMessageNotification
 	int LoggingMessageNotification::DoSerialize(Json::Value& jMsg) const
 	{
@@ -241,6 +327,7 @@ namespace MCP
 		{
 			jParams[MSG_KEY_DATA] = jData;
 		}
+		WriteVersionParamsMeta(jParams, ctxProtocol);
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;

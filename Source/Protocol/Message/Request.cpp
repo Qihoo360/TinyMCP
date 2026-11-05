@@ -16,17 +16,43 @@ namespace MCP
 		Json::Value jMethod(strMethod);
 		jMsg[MSG_KEY_METHOD] = jMethod;
 
-		if (progressToken.IsValid())
+		Json::Value jParams(Json::objectValue);
+		bool bHasParams = false;
+		if (jMsg.isMember(MCP::MSG_KEY_PARAMS) && jMsg[MCP::MSG_KEY_PARAMS].isObject())
 		{
-			Json::Value jParams(Json::objectValue);
-			if (jMsg.isMember(MCP::MSG_KEY_PARAMS) && jMsg[MCP::MSG_KEY_PARAMS].isObject())
-				jParams = jMsg[MCP::MSG_KEY_PARAMS];
-
-			Json::Value jMeta(Json::objectValue);
-			progressToken.DoSerialize(jMeta);
-			jParams[MSG_KEY_META] = jMeta;
-			jMsg[MSG_KEY_PARAMS] = jParams;
+			jParams = jMsg[MCP::MSG_KEY_PARAMS];
+			bHasParams = true;
 		}
+
+		Json::Value jMeta(Json::objectValue);
+		meta.DoSerialize(jMeta);
+		meta.DoSerializeVersionExtras(jMeta, ctxProtocol);
+		if (progressToken.IsValid())
+			progressToken.DoSerialize(jMeta);
+
+		if (!jMeta.empty())
+		{
+			jParams[MSG_KEY_META] = jMeta;
+			bHasParams = true;
+		}
+
+		if (ctxProtocol.Supports(Feature_Mrtr))
+		{
+			if (jInputResponses.isObject() && !jInputResponses.empty())
+			{
+				jParams[MSG_KEY_INPUT_RESPONSES] = jInputResponses;
+				bHasParams = true;
+			}
+
+			if (!strRequestState.empty())
+			{
+				jParams[MSG_KEY_REQUEST_STATE] = strRequestState;
+				bHasParams = true;
+			}
+		}
+
+		if (bHasParams)
+			jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return requestId.DoSerialize(jMsg);
 	}
@@ -52,6 +78,21 @@ namespace MCP
 			{
 				auto& jMeta = jParams[MSG_KEY_META];
 				progressToken.DoDeserialize(jMeta);
+				meta.DoDeserialize(jMeta);
+				meta.DoDeserializeVersionExtras(jMeta, ctxProtocol);
+
+				// Per-request logLevel only exists when the profile declares it.
+				if (!ctxProtocol.Supports(Feature_LogLevelInMeta))
+					meta.strLogLevel.clear();
+			}
+
+			if (ctxProtocol.Supports(Feature_Mrtr))
+			{
+				if (jParams.isMember(MSG_KEY_INPUT_RESPONSES) && jParams[MSG_KEY_INPUT_RESPONSES].isObject())
+					jInputResponses = jParams[MSG_KEY_INPUT_RESPONSES];
+
+				if (jParams.isMember(MSG_KEY_REQUEST_STATE) && jParams[MSG_KEY_REQUEST_STATE].isString())
+					strRequestState = jParams[MSG_KEY_REQUEST_STATE].asString();
 			}
 		}
 
@@ -586,5 +627,120 @@ namespace MCP
 			return false;
 
 		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// DiscoverRequest
+	int DiscoverRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		return Request::DoSerialize(jMsg);
+	}
+
+	int DiscoverRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		return Request::DoDeserialize(jMsg);
+	}
+
+	bool DiscoverRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		if (strMethod.compare(METHOD_SERVER_DISCOVER) != 0)
+			return false;
+
+		// params._meta is mandatory once the stateless era is negotiated.
+		if (ctxProtocol.Supports(Feature_Discover) && !meta.HasValue())
+			return false;
+
+		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// SubscriptionsListenRequest
+	int SubscriptionsListenRequest::DoSerialize(Json::Value& jMsg) const
+	{
+		int iErrCode = Request::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value jParams(Json::objectValue);
+		if (jMsg.isMember(MSG_KEY_PARAMS) && jMsg[MSG_KEY_PARAMS].isObject())
+			jParams = jMsg[MSG_KEY_PARAMS];
+
+		Json::Value jNotifications(Json::objectValue);
+		if (bToolsListChanged)
+		{
+			Json::Value jChanged(true);
+			jNotifications[MSG_KEY_TOOLS_LIST_CHANGED] = jChanged;
+		}
+		if (bPromptsListChanged)
+		{
+			Json::Value jChanged(true);
+			jNotifications[MSG_KEY_PROMPTS_LIST_CHANGED] = jChanged;
+		}
+		if (bResourcesListChanged)
+		{
+			Json::Value jChanged(true);
+			jNotifications[MSG_KEY_RESOURCES_LIST_CHANGED] = jChanged;
+		}
+		if (!vecResourceSubscriptions.empty())
+		{
+			Json::Value jSubscriptions(Json::arrayValue);
+			for (const auto& strUri : vecResourceSubscriptions)
+				jSubscriptions.append(strUri);
+			jNotifications[MSG_KEY_RESOURCE_SUBSCRIPTIONS] = jSubscriptions;
+		}
+
+		if (!jNotifications.empty())
+		{
+			jParams[MSG_KEY_NOTIFICATIONS] = jNotifications;
+			jMsg[MSG_KEY_PARAMS] = jParams;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int SubscriptionsListenRequest::DoDeserialize(const Json::Value& jMsg)
+	{
+		int iErrCode = Request::DoDeserialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
+			return ERRNO_OK;
+
+		auto& jParams = jMsg[MSG_KEY_PARAMS];
+		if (!jParams.isMember(MSG_KEY_NOTIFICATIONS) || !jParams[MSG_KEY_NOTIFICATIONS].isObject())
+			return ERRNO_OK;
+
+		auto& jNotifications = jParams[MSG_KEY_NOTIFICATIONS];
+		bToolsListChanged = jNotifications.isMember(MSG_KEY_TOOLS_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_TOOLS_LIST_CHANGED].asBool();
+		bPromptsListChanged = jNotifications.isMember(MSG_KEY_PROMPTS_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_PROMPTS_LIST_CHANGED].asBool();
+		bResourcesListChanged = jNotifications.isMember(MSG_KEY_RESOURCES_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_RESOURCES_LIST_CHANGED].asBool();
+
+		if (jNotifications.isMember(MSG_KEY_RESOURCE_SUBSCRIPTIONS)
+			&& jNotifications[MSG_KEY_RESOURCE_SUBSCRIPTIONS].isArray())
+		{
+			vecResourceSubscriptions.clear();
+			for (const auto& jUri : jNotifications[MSG_KEY_RESOURCE_SUBSCRIPTIONS])
+			{
+				if (jUri.isString())
+					vecResourceSubscriptions.push_back(jUri.asString());
+			}
+		}
+
+		return ERRNO_OK;
+	}
+
+	bool SubscriptionsListenRequest::IsValid() const
+	{
+		if (!Request::IsValid())
+			return false;
+
+		return strMethod.compare(METHOD_SUBSCRIPTIONS_LISTEN) == 0;
 	}
 }

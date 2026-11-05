@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
@@ -31,6 +31,10 @@ namespace MCP
 		unsigned long long ullTimestamp{ 0 };	// Timestamp in milliseconds
 		unsigned long ulRuntimeId{ 0 };	// runtime id
 		static std::atomic_ulong s_ulIdBase;
+
+		// Protocol revision this message belongs to. Default construction keeps
+		// the legacy 2024-11-05 handshake behavior.
+		ProtocolContext ctxProtocol;
 
 		int Serialize(std::string& str) const
 		{

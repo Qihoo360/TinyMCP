@@ -20,6 +20,9 @@ namespace MCP
 		MCP::RequestId requestId;
 		std::string strMethod;
 		MCP::ProgressToken progressToken;
+		MCP::MetaObject meta;
+		Json::Value jInputResponses;
+		std::string strRequestState;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
@@ -233,6 +236,40 @@ namespace MCP
 		}
 
 		MCP::LoggingLevel level;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// 2026-07-28 server/discover request. params._meta carries the client
+	// identity and supported protocol version.
+	struct DiscoverRequest : public MCP::Request
+	{
+	public:
+		DiscoverRequest(bool bNeedIdentity)
+			: Request(MessageType_DiscoverRequest, bNeedIdentity)
+		{
+		}
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// 2026-07-28 subscriptions/listen request.
+	struct SubscriptionsListenRequest : public MCP::Request
+	{
+	public:
+		SubscriptionsListenRequest(bool bNeedIdentity)
+			: Request(MessageType_SubscriptionsListenRequest, bNeedIdentity)
+		{
+		}
+
+		bool bToolsListChanged{ false };
+		bool bPromptsListChanged{ false };
+		bool bResourcesListChanged{ false };
+		std::vector<std::string> vecResourceSubscriptions;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

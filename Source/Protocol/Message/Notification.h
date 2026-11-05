@@ -17,10 +17,15 @@ namespace MCP
 		}
 
 		std::string strMethod;
+		Json::Value jSubscriptionId;
+		bool bHasSubscriptionId{ false };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+
+		// Adds params._meta.subscriptionId when a subscription is attached.
+		void WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctxProtocol) const;
 	};
 
 	struct InitializedNotification : public MCP::Notification
@@ -107,6 +112,35 @@ namespace MCP
 		}
 
 		bool IsValid() const override;
+	};
+
+	struct ToolListChangedNotification : public MCP::Notification
+	{
+	public:
+		ToolListChangedNotification(bool bNeedIdentity)
+			: Notification(MessageType_ToolListChangedNotification, bNeedIdentity)
+		{
+
+		}
+
+		bool IsValid() const override;
+	};
+
+	// 2026-07-28 subscriptions/acknowledged notification.
+	struct SubscriptionsAcknowledgedNotification : public MCP::Notification
+	{
+	public:
+		SubscriptionsAcknowledgedNotification(bool bNeedIdentity)
+			: Notification(MessageType_SubscriptionsAcknowledgedNotification, bNeedIdentity)
+		{
+
+		}
+
+		Json::Value jNotifications;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
 	};
 
 	struct LoggingMessageNotification : public MCP::Notification
