@@ -365,3 +365,4 @@ FodyWeavers.xsd
 *.ui
 *.exp
 
+build-tests/

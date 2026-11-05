@@ -92,6 +92,9 @@
     <ClCompile Include="..\..\..\..\Source\Protocol\Message\Response.cpp">
       <Filter>MCP\Protocol\Message</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\Source\Protocol\Public\PublicDef.cpp">
+      <Filter>MCP\Protocol\Public</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\..\Source\Protocol\Session\Session.cpp">
       <Filter>MCP\Protocol\Session</Filter>
     </ClCompile>

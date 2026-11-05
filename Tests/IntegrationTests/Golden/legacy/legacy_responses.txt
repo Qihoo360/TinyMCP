@@ -1,0 +1,13 @@
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"experimental":{"completion":{}},"logging":{},"prompts":{"listChanged":true},"resources":{"listChanged":true,"subscribe":true},"tools":{"listChanged":false}},"protocolVersion":"2024-11-05","serverInfo":{"name":"TinyMCPTests","version":"1.0.0"}}}
+{"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"Receive the input and return it unchanged.","inputSchema":{"properties":{"input":{"type":"string"}},"required":["input"],"type":"object"},"name":"echo"}]}}
+{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"hello legacy","type":"text"}],"isError":false}}
+{"id":4,"jsonrpc":"2.0","result":{"resources":[{"description":"Legacy test resource","mimeType":"text/plain","name":"echo.txt","uri":"test://echo/resource"}]}}
+{"id":5,"jsonrpc":"2.0","result":{"contents":[{"mimeType":"text/plain","text":"legacy resource payload","uri":"test://echo/resource"}]}}
+{"id":6,"jsonrpc":"2.0","result":{"resourceTemplates":[{"description":"Legacy test resource template","mimeType":"text/plain","name":"Echo files","uriTemplate":"test://echo/{name}"}]}}
+{"id":7,"jsonrpc":"2.0","result":{}}
+{"id":8,"jsonrpc":"2.0","result":{}}
+{"id":9,"jsonrpc":"2.0","result":{"prompts":[{"arguments":[{"description":"Text to echo","name":"text","required":true}],"description":"Echo test prompt","name":"echo_prompt"}]}}
+{"id":10,"jsonrpc":"2.0","result":{"description":"Echo test prompt","messages":[{"content":{"text":"hello from prompt","type":"text"},"role":"user"}]}}
+{"id":11,"jsonrpc":"2.0","result":{"completion":{"hasMore":false,"total":2,"values":["alpha","beta"]}}}
+{"id":12,"jsonrpc":"2.0","result":{}}
+{"id":13,"jsonrpc":"2.0","result":{}}

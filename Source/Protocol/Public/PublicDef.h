@@ -4,11 +4,16 @@
 
 #include <string>
 #include <chrono>
+#include <bitset>
+#include <set>
+#include <vector>
 #include <json/json.h>
 
 namespace MCP
 {
 	static constexpr const char* PROTOCOL_VER = "2024-11-05";
+	static constexpr const char* PROTOCOL_VER_2024_11_05 = "2024-11-05";
+	static constexpr const char* PROTOCOL_VER_2026_07_28 = "2026-07-28";
 	static constexpr const char* JSON_RPC_VER = "2.0";
 
 	static constexpr const char* MSG_KEY_JSONRPC = "jsonrpc";
@@ -69,6 +74,50 @@ namespace MCP
 	static constexpr const char* MSG_KEY_LOGGING = "logging";
 	static constexpr const char* MSG_KEY_LEVEL = "level";
 	static constexpr const char* MSG_KEY_LOGGER = "logger";
+
+	// 2026-07-28 result and parameter keys.
+	static constexpr const char* MSG_KEY_RESULT_TYPE = "resultType";
+	static constexpr const char* MSG_KEY_INPUT_REQUESTS = "inputRequests";
+	static constexpr const char* MSG_KEY_INPUT_RESPONSES = "inputResponses";
+	static constexpr const char* MSG_KEY_REQUEST_STATE = "requestState";
+	static constexpr const char* MSG_KEY_TTL_MS = "ttlMs";
+	static constexpr const char* MSG_KEY_CACHE_SCOPE = "cacheScope";
+	static constexpr const char* MSG_KEY_SUPPORTED_VERSIONS = "supportedVersions";
+	static constexpr const char* MSG_KEY_INSTRUCTIONS = "instructions";
+	static constexpr const char* MSG_KEY_NOTIFICATIONS = "notifications";
+	static constexpr const char* MSG_KEY_TOOLS_LIST_CHANGED = "toolsListChanged";
+	static constexpr const char* MSG_KEY_PROMPTS_LIST_CHANGED = "promptsListChanged";
+	static constexpr const char* MSG_KEY_RESOURCES_LIST_CHANGED = "resourcesListChanged";
+	static constexpr const char* MSG_KEY_RESOURCE_SUBSCRIPTIONS = "resourceSubscriptions";
+	static constexpr const char* MSG_KEY_EXTENSIONS = "extensions";
+	static constexpr const char* MSG_KEY_COMPLETIONS = "completions";
+	static constexpr const char* MSG_KEY_LOG_LEVEL = "logLevel";
+	static constexpr const char* MSG_KEY_TITLE = "title";
+	static constexpr const char* MSG_KEY_ICONS = "icons";
+	static constexpr const char* MSG_KEY_WEBSITE_URL = "websiteUrl";
+	static constexpr const char* MSG_KEY_OUTPUT_SCHEMA = "outputSchema";
+	static constexpr const char* MSG_KEY_STRUCTURED_CONTENT = "structuredContent";
+	static constexpr const char* MSG_KEY_ANNOTATIONS = "annotations";
+	static constexpr const char* MSG_KEY_TOOL_USE_ID = "toolUseId";
+	static constexpr const char* MSG_KEY_UI = "ui";
+	static constexpr const char* MSG_KEY_CSP = "csp";
+	static constexpr const char* MSG_KEY_PERMISSIONS = "permissions";
+	static constexpr const char* MSG_KEY_RESOURCE_URI = "resourceUri";
+
+	// 2026-07-28 per-request metadata keys.
+	static constexpr const char* META_KEY_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion";
+	static constexpr const char* META_KEY_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities";
+	static constexpr const char* META_KEY_CLIENT_INFO = "io.modelcontextprotocol/clientInfo";
+	static constexpr const char* META_KEY_LOG_LEVEL = "io.modelcontextprotocol/logLevel";
+	static constexpr const char* META_KEY_SERVER_INFO = "io.modelcontextprotocol/serverInfo";
+	static constexpr const char* META_KEY_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId";
+
+	static constexpr const char* RESULT_TYPE_COMPLETE = "complete";
+	static constexpr const char* RESULT_TYPE_INPUT_REQUIRED = "input_required";
+	static constexpr const char* CACHE_SCOPE_PUBLIC = "public";
+	static constexpr const char* CACHE_SCOPE_PRIVATE = "private";
+	static constexpr const char* EXTENSION_UI = "io.modelcontextprotocol/ui";
+	static constexpr const char* MIME_TYPE_MCP_APP = "text/html;profile=mcp-app";
 	
 	static constexpr const char* LOGGING_LEVEL_DEBUG = "debug";
 	static constexpr const char* LOGGING_LEVEL_INFO = "info";
@@ -102,10 +151,18 @@ namespace MCP
 	static constexpr const char* METHOD_COMPLETION_COMPLETE = "completion/complete";
 	static constexpr const char* METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
 	static constexpr const char* METHOD_NOTIFICATION_MESSAGE = "notifications/message";
+	static constexpr const char* METHOD_SERVER_DISCOVER = "server/discover";
+	static constexpr const char* METHOD_SUBSCRIPTIONS_LISTEN = "subscriptions/listen";
+	static constexpr const char* METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED = "notifications/subscriptions/acknowledged";
+	static constexpr const char* METHOD_NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
 
 	static constexpr const char* CONST_TEXT = "text";
 	static constexpr const char* CONST_IMAGE = "image";
 	static constexpr const char* CONST_RESOURCE = "resource";
+	static constexpr const char* CONST_AUDIO = "audio";
+	static constexpr const char* CONST_RESOURCE_LINK = "resource_link";
+	static constexpr const char* CONST_TOOL_USE = "tool_use";
+	static constexpr const char* CONST_TOOL_RESULT = "tool_result";
 	static constexpr const char* CONST_REF_PROMPT = "ref/prompt";
 	static constexpr const char* CONST_REF_RESOURCE = "ref/resource";
 
@@ -128,6 +185,9 @@ namespace MCP
 	static constexpr const int ERRNO_SERVER_ERROR_FIRST = -32000;
 	static constexpr const int ERRNO_HEADER_MISMATCH = -32001;
 	static constexpr const int ERRNO_RESOURCE_NOT_FOUND = -32002;
+	static constexpr const int ERRNO_HEADER_MISMATCH_MODERN = -32020;
+	static constexpr const int ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
+	static constexpr const int ERRNO_UNSUPPORTED_PROTOCOL_VERSION = -32022;
 	static constexpr const int ERRNO_INVALID_RESPONSE = -32094;
 	static constexpr const int ERRNO_INVALID_NOTIFICATION = -32095;
 	static constexpr const int ERRNO_INTERNAL_INPUT_TERMINATE = -32096;
@@ -209,6 +269,104 @@ namespace MCP
 		MessageType_LoggingLevel,
 		MessageType_Logging,
 		MessageType_LoggingMessageNotification,
+		MessageType_DiscoverRequest,
+		MessageType_DiscoverResult,
+		MessageType_SubscriptionsListenRequest,
+		MessageType_SubscriptionsListenResult,
+		MessageType_SubscriptionsAcknowledgedNotification,
+		MessageType_MetaObject,
+		MessageType_Icon,
+		MessageType_AudioContent,
+		MessageType_ResourceLink,
+		MessageType_ToolUseContent,
+		MessageType_ToolResultContent,
+	};
+
+	// Interaction model of a protocol revision. This is the only architectural
+	// extension point: adding a version number must not add a new era.
+	enum ProtocolEra
+	{
+		Era_Handshake,
+		Era_Stateless,
+	};
+
+	// Feature flags gate every version-specific field. Business logic must call
+	// ProtocolContext::Supports() instead of comparing version strings.
+	enum ProtocolFeature
+	{
+		Feature_ResultMeta,
+		Feature_EntityMeta,
+		Feature_ImplementationExtras,
+		Feature_ResultType,
+		Feature_Discover,
+		Feature_Caching,
+		Feature_Mrtr,
+		Feature_ListenSubscriptions,
+		Feature_Extensions,
+		Feature_CompletionsCapability,
+		Feature_ToolTitle,
+		Feature_ToolAnnotations,
+		Feature_StructuredContent,
+		Feature_ContentAudio,
+		Feature_ContentResourceLink,
+		Feature_ContentToolUse,
+		Feature_ContentAnnotations,
+		Feature_LogLevelInMeta,
+		Feature_Count,
+	};
+
+	struct ProtocolProfile
+	{
+		std::string strVersion;
+		ProtocolEra eEra{ Era_Handshake };
+		std::bitset<Feature_Count> bitsFeatures;
+		std::set<std::string> setSupportedMethods;
+		int iResourceNotFoundCode{ ERRNO_RESOURCE_NOT_FOUND };
+
+		bool Supports(ProtocolFeature eFeature) const
+		{
+			return bitsFeatures.test(static_cast<size_t>(eFeature));
+		}
+
+		bool SupportsMethod(const std::string& strMethod) const
+		{
+			return setSupportedMethods.find(strMethod) != setSupportedMethods.end();
+		}
+	};
+
+	// Version context carried by every message. The default construction always
+	// resolves the built-in 2024-11-05 handshake profile so objects created by
+	// existing code keep their legacy behavior.
+	struct ProtocolContext
+	{
+		std::string strVersion;
+		const ProtocolProfile* pProfile{ nullptr };
+
+		ProtocolContext();
+		static ProtocolContext Invalid(const std::string& strRequested);
+
+		bool IsValid() const;
+		bool IsStateless() const;
+		bool Supports(ProtocolFeature eFeature) const;
+	};
+
+	// Read-only version table. Version differences are declared as profile data;
+	// the order of the profile list defines version priority.
+	class CProtocolRegistry
+	{
+	public:
+		explicit CProtocolRegistry(const std::vector<ProtocolProfile>& vecProfiles);
+
+		static const CProtocolRegistry& GetGlobalRegistry();
+
+		const ProtocolProfile* Find(const std::string& strVersion) const;
+		const ProtocolProfile* GetDefaultHandshakeProfile() const;
+		const ProtocolProfile* GetLatestStatelessProfile() const;
+		std::vector<std::string> GetSupportedVersions() const;
+		std::vector<std::string> GetSupportedVersions(ProtocolEra eEra) const;
+
+	private:
+		std::vector<ProtocolProfile> m_vecProfiles;
 	};
 
 	enum class LoggingLevelValue
