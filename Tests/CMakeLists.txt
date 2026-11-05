@@ -18,6 +18,7 @@ add_executable(TinyMCPTests
 	UnitTests/TestHarnessSelfCheck.cpp
 	UnitTests/TestConstants.cpp
 	UnitTests/TestVersionRegistry.cpp
+	UnitTests/TestBasicMessage.cpp
 	IntegrationTests/MemoryTransport.cpp
 	IntegrationTests/TestServer.cpp
 	IntegrationTests/Driver.cpp
@@ -42,5 +43,8 @@ enable_testing()
 add_test(NAME unit.all COMMAND TinyMCPTests --unit)
 add_test(NAME unit.constants COMMAND TinyMCPTests --unit constants)
 add_test(NAME unit.version_registry COMMAND TinyMCPTests --unit version_registry)
+add_test(NAME unit.message COMMAND TinyMCPTests --unit message)
+add_test(NAME unit.content_blocks COMMAND TinyMCPTests --unit content_blocks)
+add_test(NAME unit.meta COMMAND TinyMCPTests --unit meta)
 add_test(NAME integration.legacy COMMAND TinyMCPTests --case legacy)
 set_tests_properties(integration.legacy PROPERTIES TIMEOUT 30)

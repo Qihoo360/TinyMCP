@@ -104,6 +104,25 @@ namespace MCP
 	static constexpr const char* MSG_KEY_PERMISSIONS = "permissions";
 	static constexpr const char* MSG_KEY_RESOURCE_URI = "resourceUri";
 
+	// 2026-07-28 icon, annotation and client capability keys.
+	static constexpr const char* MSG_KEY_SRC = "src";
+	static constexpr const char* MSG_KEY_SIZES = "sizes";
+	static constexpr const char* MSG_KEY_THEME = "theme";
+	static constexpr const char* MSG_KEY_AUDIENCE = "audience";
+	static constexpr const char* MSG_KEY_PRIORITY = "priority";
+	static constexpr const char* MSG_KEY_LAST_MODIFIED = "lastModified";
+	static constexpr const char* MSG_KEY_READ_ONLY_HINT = "readOnlyHint";
+	static constexpr const char* MSG_KEY_DESTRUCTIVE_HINT = "destructiveHint";
+	static constexpr const char* MSG_KEY_IDEMPOTENT_HINT = "idempotentHint";
+	static constexpr const char* MSG_KEY_OPEN_WORLD_HINT = "openWorldHint";
+	static constexpr const char* MSG_KEY_INPUT = "input";
+	static constexpr const char* MSG_KEY_ROOTS = "roots";
+	static constexpr const char* MSG_KEY_SAMPLING = "sampling";
+	static constexpr const char* MSG_KEY_ELICITATION = "elicitation";
+	static constexpr const char* MSG_KEY_FORM = "form";
+	static constexpr const char* MSG_KEY_URL = "url";
+	static constexpr const char* MSG_KEY_CONTEXT = "context";
+
 	// 2026-07-28 per-request metadata keys.
 	static constexpr const char* META_KEY_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion";
 	static constexpr const char* META_KEY_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities";

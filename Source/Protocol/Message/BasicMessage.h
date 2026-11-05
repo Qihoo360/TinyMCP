@@ -4,8 +4,72 @@
 
 #include "Message.h"
 
+#include <map>
+
 namespace MCP
 {
+	// 2026-07-28 icon descriptor used by implementations and tools.
+	struct Icon : public MCP::Message
+	{
+	public:
+		Icon()
+			: Message(MessageType_Icon, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strSrc;
+		std::string strMimeType;
+		std::vector<std::string> vecSizes;
+		std::string strTheme;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct Annotations : public MCP::Message
+	{
+	public:
+		Annotations()
+			: Message(MessageType_Unknown, MessageCategory_Basic, false)
+		{
+		}
+
+		std::vector<std::string> vecAudience;
+		double dPriority{ 0.0 };
+		bool bHasPriority{ false };
+		std::string strLastModified;
+
+		bool HasValue() const;
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	struct ToolAnnotations : public MCP::Message
+	{
+	public:
+		ToolAnnotations()
+			: Message(MessageType_Unknown, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strTitle;
+		bool bHasReadOnlyHint{ false };
+		bool bReadOnlyHint{ false };
+		bool bHasDestructiveHint{ false };
+		bool bDestructiveHint{ false };
+		bool bHasIdempotentHint{ false };
+		bool bIdempotentHint{ false };
+		bool bHasOpenWorldHint{ false };
+		bool bOpenWorldHint{ false };
+
+		bool HasValue() const;
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
 	struct RequestId : public MCP::Message
 	{
 	public:
@@ -49,10 +113,16 @@ namespace MCP
 
 		std::string strName;
 		std::string strVersion;
+		std::string strTitle;
+		std::string strDescription;
+		std::vector<Icon> vecIcons;
+		std::string strWebsiteUrl;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct Prompts : public MCP::Message
@@ -161,10 +231,14 @@ namespace MCP
 		MCP::Tools tools;
 		MCP::Experimental experimental;
 		MCP::Logging logging;
+		bool bCompletions{ false };
+		std::map<std::string, Json::Value> mapExtensions;
+		bool bExtensionPassthrough{ false };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
 	struct Tool : public MCP::Message
@@ -178,10 +252,20 @@ namespace MCP
 		std::string strName;
 		std::string strDescription;
 		Json::Value jInputSchema;
+		std::string strTitle;
+		std::vector<Icon> vecIcons;
+		Json::Value jOutputSchema;
+		ToolAnnotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+
+		// Writes _meta.ui.resourceUri used by the MCP Apps extension.
+		void SetUiResourceUri(const std::string& strUri);
 	};
 
 	struct TextContent : public MCP::Message
@@ -194,10 +278,14 @@ namespace MCP
 
 		std::string strText;
 		std::string strType;
+		Annotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct ImageContent : public MCP::Message
@@ -211,10 +299,108 @@ namespace MCP
 		std::string strType;
 		std::string strMimeType;
 		std::string strData;
+		Annotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+	};
+
+	// 2026-07-28 audio content block.
+	struct AudioContent : public MCP::Message
+	{
+		AudioContent()
+			: Message(MessageType_AudioContent, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strType;
+		std::string strData;
+		std::string strMimeType;
+		Annotations annotations;
+		Json::Value jMeta;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+	};
+
+	// 2026-07-28 resource link content block.
+	struct ResourceLink : public MCP::Message
+	{
+		ResourceLink()
+			: Message(MessageType_ResourceLink, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strType;
+		std::string strName;
+		std::string strUri;
+		std::string strTitle;
+		std::string strDescription;
+		std::string strMimeType;
+		int iSize{ 0 };
+		std::vector<Icon> vecIcons;
+		Annotations annotations;
+		Json::Value jMeta;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+	};
+
+	// 2026-07-28 tool use content block.
+	struct ToolUseContent : public MCP::Message
+	{
+		ToolUseContent()
+			: Message(MessageType_ToolUseContent, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strType;
+		std::string strId;
+		std::string strName;
+		Json::Value jInput;
+		Annotations annotations;
+		Json::Value jMeta;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+	};
+
+	// 2026-07-28 tool result content block. Nested content blocks are kept as
+	// raw JSON so callers can pass through client supplied structures.
+	struct ToolResultContent : public MCP::Message
+	{
+		ToolResultContent()
+			: Message(MessageType_ToolResultContent, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strType;
+		std::string strToolUseId;
+		Json::Value jContent;
+		bool bHasIsError{ false };
+		bool bIsError{ false };
+		Json::Value jStructuredContent;
+		Annotations annotations;
+		Json::Value jMeta;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct TextResourceContents : public MCP::Message
@@ -228,10 +414,13 @@ namespace MCP
 		std::string strText;
 		std::string strUri;
 		std::string strMimeType;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct BlobResourceContents : public MCP::Message
@@ -245,10 +434,13 @@ namespace MCP
 		std::string strBlob;
 		std::string strUri;
 		std::string strMimeType;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct EmbeddedResource : public MCP::Message
@@ -262,10 +454,14 @@ namespace MCP
 		std::string strType;
 		TextResourceContents textResource;
 		BlobResourceContents blobResource;
+		Annotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct Resource : public MCP::Message
@@ -281,10 +477,16 @@ namespace MCP
 		std::string strDescription;
 		std::string strMimeType;
 		int iSize{ 0 };
+		std::string strTitle;
+		std::vector<Icon> vecIcons;
+		Annotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct ResourceTemplate : public MCP::Message
@@ -299,10 +501,16 @@ namespace MCP
 		std::string strUriTemplate;
 		std::string strDescription;
 		std::string strMimeType;
+		std::string strTitle;
+		std::vector<Icon> vecIcons;
+		Annotations annotations;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct PromptArgument : public MCP::Message
@@ -333,10 +541,15 @@ namespace MCP
 		std::string strName;
 		std::string strDescription;
 		std::vector<PromptArgument> vecArguments;
+		std::string strTitle;
+		std::vector<Icon> vecIcons;
+		Json::Value jMeta;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
 	struct PromptMessage : public MCP::Message
@@ -356,6 +569,7 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
 	struct ProgressToken : public MCP::Message
@@ -412,5 +626,80 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// Client capabilities carried by modern request metadata and by the legacy
+	// initialize handshake. Raw JSON is preserved so unknown sub-fields survive.
+	struct ClientCapabilities : public MCP::Message
+	{
+	public:
+		ClientCapabilities()
+			: Message(MessageType_Unknown, MessageCategory_Basic, false)
+		{
+		}
+
+		Json::Value jRaw;
+		std::map<std::string, Json::Value> mapExtensions;
+
+		bool HasValue() const;
+		bool SupportsCapability(const std::string& strCapability) const;
+		bool SupportsElicitationMode(const std::string& strMode) const;
+		bool SupportsExtension(const std::string& strExtensionId) const;
+
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+	};
+
+	// Strong typed view of the modern per-request "_meta" object.
+	struct MetaObject : public MCP::Message
+	{
+	public:
+		MetaObject()
+			: Message(MessageType_MetaObject, MessageCategory_Basic, false)
+		{
+		}
+
+		std::string strProtocolVersion;
+		Implementation clientInfo;
+		ClientCapabilities clientCapabilities;
+		bool bHasClientCapabilities{ false };
+		std::string strLogLevel;
+		Json::Value jExtra;
+
+		bool HasValue() const;
+		bool IsValid() const override;
+		int DoSerialize(Json::Value& jMsg) const override;
+		int DoDeserialize(const Json::Value& jMsg) override;
+		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
+		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+
+		static bool IsReservedKey(const std::string& strKey);
+	};
+
+	// Object map containers used by MRTR. They intentionally keep raw JSON so
+	// the SDK only transports application defined payloads.
+	struct InputRequests
+	{
+	public:
+		Json::Value jItems;
+
+		bool IsValid() const;
+		bool Has(const std::string& strKey) const;
+		const Json::Value& Get(const std::string& strKey) const;
+		int DoSerialize(Json::Value& jMsg) const;
+		int DoDeserialize(const Json::Value& jMsg);
+	};
+
+	struct InputResponses
+	{
+	public:
+		Json::Value jItems;
+
+		bool IsValid() const;
+		bool Has(const std::string& strKey) const;
+		const Json::Value& Get(const std::string& strKey) const;
+		int DoSerialize(Json::Value& jMsg) const;
+		int DoDeserialize(const Json::Value& jMsg);
 	};
 }

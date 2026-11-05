@@ -168,7 +168,10 @@ namespace MCP
 }
 
 #define TEST_CASE(name) \
-	TEST_CASE_IMPL(name, __LINE__)
+	TEST_CASE_EXPAND(name, __LINE__)
+
+#define TEST_CASE_EXPAND(name, id) \
+	TEST_CASE_IMPL(name, id)
 
 #define TEST_CASE_IMPL(name, id) \
 	static void TestCaseFunc_##id(); \

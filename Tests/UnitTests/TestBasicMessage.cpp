@@ -1,0 +1,559 @@
+﻿#include "../TestHarness.h"
+
+#include <Message/BasicMessage.h>
+#include <Public/PublicDef.h>
+
+#include <string>
+#include <vector>
+
+using namespace MCP;
+
+namespace
+{
+	ProtocolContext MakeLegacyContext()
+	{
+		return ProtocolContext();
+	}
+
+	ProtocolContext MakeModernContext()
+	{
+		ProtocolContext ctxProtocol;
+		const ProtocolProfile* pProfile = CProtocolRegistry::GetGlobalRegistry().Find(PROTOCOL_VER_2026_07_28);
+		if (pProfile)
+		{
+			ctxProtocol.strVersion = pProfile->strVersion;
+			ctxProtocol.pProfile = pProfile;
+		}
+		return ctxProtocol;
+	}
+
+	Icon MakeTestIcon()
+	{
+		Icon icon;
+		icon.strSrc = "https://example.com/icon.png";
+		icon.strMimeType = "image/png";
+		icon.vecSizes.push_back("64x64");
+		icon.strTheme = "dark";
+		return icon;
+	}
+}
+
+TEST_CASE("unit.message")
+{
+	const ProtocolContext ctxLegacy = MakeLegacyContext();
+	const ProtocolContext ctxModern = MakeModernContext();
+
+	// Implementation: legacy output stays byte compatible even when extras exist.
+	Implementation impl;
+	impl.strName = "tinymcp";
+	impl.strVersion = "1.0.0";
+	impl.strTitle = "Tiny MCP";
+	impl.strDescription = "Server SDK";
+	impl.strWebsiteUrl = "https://example.com";
+	impl.vecIcons.push_back(MakeTestIcon());
+
+	Json::Value jLegacyImpl(Json::objectValue);
+	impl.DoSerialize(jLegacyImpl);
+	impl.DoSerializeVersionExtras(jLegacyImpl, ctxLegacy);
+
+	Json::Value jExpectedImpl(Json::objectValue);
+	jExpectedImpl[MSG_KEY_NAME] = "tinymcp";
+	jExpectedImpl[MSG_KEY_VERSION] = "1.0.0";
+	CHECK_JSON_EQ(jLegacyImpl, jExpectedImpl);
+
+	Json::Value jModernImpl(Json::objectValue);
+	impl.DoSerialize(jModernImpl);
+	impl.DoSerializeVersionExtras(jModernImpl, ctxModern);
+	CHECK_EQ(std::string("Tiny MCP"), jModernImpl[MSG_KEY_TITLE].asString());
+	CHECK_EQ(std::string("Server SDK"), jModernImpl[MSG_KEY_DESCRIPTION].asString());
+	CHECK_EQ(std::string("https://example.com"), jModernImpl[MSG_KEY_WEBSITE_URL].asString());
+	CHECK(jModernImpl[MSG_KEY_ICONS].isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jModernImpl[MSG_KEY_ICONS].size());
+	CHECK_EQ(std::string("https://example.com/icon.png"), jModernImpl[MSG_KEY_ICONS][0][MSG_KEY_SRC].asString());
+	CHECK_EQ(std::string("image/png"), jModernImpl[MSG_KEY_ICONS][0][MSG_KEY_MIMETYPE].asString());
+	CHECK_EQ(std::string("64x64"), jModernImpl[MSG_KEY_ICONS][0][MSG_KEY_SIZES][0].asString());
+	CHECK_EQ(std::string("dark"), jModernImpl[MSG_KEY_ICONS][0][MSG_KEY_THEME].asString());
+
+	// Empty optional fields must not appear in the output.
+	Implementation implEmpty;
+	implEmpty.strName = "tinymcp";
+	implEmpty.strVersion = "1.0.0";
+	Json::Value jEmptyImpl(Json::objectValue);
+	implEmpty.DoSerialize(jEmptyImpl);
+	implEmpty.DoSerializeVersionExtras(jEmptyImpl, ctxModern);
+	CHECK(!jEmptyImpl.isMember(MSG_KEY_TITLE));
+	CHECK(!jEmptyImpl.isMember(MSG_KEY_DESCRIPTION));
+	CHECK(!jEmptyImpl.isMember(MSG_KEY_ICONS));
+	CHECK(!jEmptyImpl.isMember(MSG_KEY_WEBSITE_URL));
+
+	// Modern extras round trip.
+	Implementation implParsed;
+	CHECK_EQ(ERRNO_OK, implParsed.DoDeserialize(jModernImpl));
+	CHECK_EQ(ERRNO_OK, implParsed.DoDeserializeVersionExtras(jModernImpl, ctxModern));
+	CHECK_EQ(std::string("Tiny MCP"), implParsed.strTitle);
+	CHECK_EQ(static_cast<size_t>(1), implParsed.vecIcons.size());
+
+	// Tool: base fields never leak the new keys for the legacy profile.
+	Tool tool;
+	tool.strName = "echo";
+	tool.strDescription = "Echo input";
+	tool.jInputSchema = Json::Value(Json::objectValue);
+	tool.jInputSchema[MSG_KEY_TYPE] = "object";
+	tool.strTitle = "Echo tool";
+	tool.jOutputSchema = Json::Value(Json::objectValue);
+	tool.jOutputSchema[MSG_KEY_TYPE] = "object";
+	tool.annotations.strTitle = "Echo annotations";
+	tool.annotations.bHasReadOnlyHint = true;
+	tool.annotations.bReadOnlyHint = true;
+	tool.vecIcons.push_back(MakeTestIcon());
+	tool.SetUiResourceUri("ui://echo/app.html");
+
+	Json::Value jLegacyTool(Json::objectValue);
+	tool.DoSerialize(jLegacyTool);
+	tool.DoSerializeVersionExtras(jLegacyTool, ctxLegacy);
+	CHECK(!jLegacyTool.isMember(MSG_KEY_TITLE));
+	CHECK(!jLegacyTool.isMember(MSG_KEY_ICONS));
+	CHECK(!jLegacyTool.isMember(MSG_KEY_OUTPUT_SCHEMA));
+	CHECK(!jLegacyTool.isMember(MSG_KEY_ANNOTATIONS));
+	CHECK(!jLegacyTool.isMember(MSG_KEY_META));
+
+	Json::Value jModernTool(Json::objectValue);
+	tool.DoSerialize(jModernTool);
+	tool.DoSerializeVersionExtras(jModernTool, ctxModern);
+	CHECK_EQ(std::string("Echo tool"), jModernTool[MSG_KEY_TITLE].asString());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jModernTool[MSG_KEY_ICONS].size());
+	CHECK(jModernTool[MSG_KEY_OUTPUT_SCHEMA].isObject());
+	CHECK_EQ(std::string("Echo annotations"), jModernTool[MSG_KEY_ANNOTATIONS][MSG_KEY_TITLE].asString());
+	CHECK(jModernTool[MSG_KEY_ANNOTATIONS][MSG_KEY_READ_ONLY_HINT].asBool());
+	CHECK_EQ(std::string("ui://echo/app.html"),
+		jModernTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+
+	// Resource, resource template and prompt share the entity extras gates.
+	Resource resource;
+	resource.strName = "doc";
+	resource.strUri = "file:///doc.txt";
+	resource.strTitle = "Doc";
+	resource.annotations.vecAudience.push_back(CONST_USER);
+	resource.jMeta = Json::Value(Json::objectValue);
+	resource.jMeta["trace"] = "r-1";
+
+	Json::Value jLegacyResource(Json::objectValue);
+	resource.DoSerialize(jLegacyResource);
+	resource.DoSerializeVersionExtras(jLegacyResource, ctxLegacy);
+	CHECK(!jLegacyResource.isMember(MSG_KEY_TITLE));
+	CHECK(!jLegacyResource.isMember(MSG_KEY_ANNOTATIONS));
+	CHECK(!jLegacyResource.isMember(MSG_KEY_META));
+
+	Json::Value jModernResource(Json::objectValue);
+	resource.DoSerialize(jModernResource);
+	resource.DoSerializeVersionExtras(jModernResource, ctxModern);
+	CHECK_EQ(std::string("Doc"), jModernResource[MSG_KEY_TITLE].asString());
+	CHECK_EQ(std::string(CONST_USER), jModernResource[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
+	CHECK_EQ(std::string("r-1"), jModernResource[MSG_KEY_META]["trace"].asString());
+
+	ResourceTemplate resourceTemplate;
+	resourceTemplate.strName = "doc-template";
+	resourceTemplate.strUriTemplate = "file:///{name}";
+	resourceTemplate.strTitle = "Doc template";
+	Json::Value jModernTemplate(Json::objectValue);
+	resourceTemplate.DoSerialize(jModernTemplate);
+	resourceTemplate.DoSerializeVersionExtras(jModernTemplate, ctxModern);
+	CHECK_EQ(std::string("Doc template"), jModernTemplate[MSG_KEY_TITLE].asString());
+
+	Prompt prompt;
+	prompt.strName = "summarize";
+	prompt.strTitle = "Summarize";
+	prompt.jMeta = Json::Value(Json::objectValue);
+	prompt.jMeta["trace"] = "p-1";
+	Json::Value jLegacyPrompt(Json::objectValue);
+	prompt.DoSerialize(jLegacyPrompt);
+	prompt.DoSerializeVersionExtras(jLegacyPrompt, ctxLegacy);
+	CHECK(!jLegacyPrompt.isMember(MSG_KEY_TITLE));
+	CHECK(!jLegacyPrompt.isMember(MSG_KEY_META));
+
+	Json::Value jModernPrompt(Json::objectValue);
+	prompt.DoSerialize(jModernPrompt);
+	prompt.DoSerializeVersionExtras(jModernPrompt, ctxModern);
+	CHECK_EQ(std::string("Summarize"), jModernPrompt[MSG_KEY_TITLE].asString());
+	CHECK_EQ(std::string("p-1"), jModernPrompt[MSG_KEY_META]["trace"].asString());
+
+	// Server capabilities: completions and extensions are feature gated.
+	ServerCapabilities capabilities;
+	capabilities.bCompletions = true;
+	capabilities.mapExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+
+	Json::Value jLegacyCapabilities(Json::objectValue);
+	capabilities.DoSerialize(jLegacyCapabilities);
+	capabilities.DoSerializeVersionExtras(jLegacyCapabilities, ctxLegacy);
+	CHECK(!jLegacyCapabilities.isMember(MSG_KEY_COMPLETIONS));
+	CHECK(!jLegacyCapabilities.isMember(MSG_KEY_EXTENSIONS));
+
+	Json::Value jModernCapabilities(Json::objectValue);
+	capabilities.DoSerialize(jModernCapabilities);
+	capabilities.DoSerializeVersionExtras(jModernCapabilities, ctxModern);
+	CHECK(jModernCapabilities[MSG_KEY_COMPLETIONS].isObject());
+	CHECK(jModernCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+
+	// Explicit passthrough mirrors the legacy initialize extension container.
+	capabilities.bExtensionPassthrough = true;
+	Json::Value jPassthroughCapabilities(Json::objectValue);
+	capabilities.DoSerializeVersionExtras(jPassthroughCapabilities, ctxLegacy);
+	CHECK(jPassthroughCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+	CHECK(!jPassthroughCapabilities.isMember(MSG_KEY_COMPLETIONS));
+
+	ServerCapabilities emptyCapabilities;
+	emptyCapabilities.bExtensionPassthrough = true;
+	Json::Value jEmptyCapabilities(Json::objectValue);
+	emptyCapabilities.DoSerializeVersionExtras(jEmptyCapabilities, ctxModern);
+	CHECK(!jEmptyCapabilities.isMember(MSG_KEY_EXTENSIONS));
+
+	// Capability deserialization keeps unknown extension payloads intact.
+	ServerCapabilities parsedCapabilities;
+	Json::Value jParsedCapabilities(Json::objectValue);
+	Json::Value jParsedExtensions(Json::objectValue);
+	jParsedExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+	jParsedExtensions[EXTENSION_UI]["mimeTypes"] = Json::Value(Json::arrayValue);
+	Json::Value jParsedCompletions(Json::objectValue);
+	jParsedCapabilities[MSG_KEY_COMPLETIONS] = jParsedCompletions;
+	jParsedCapabilities[MSG_KEY_EXTENSIONS] = jParsedExtensions;
+	CHECK_EQ(ERRNO_OK, parsedCapabilities.DoDeserialize(jParsedCapabilities));
+	CHECK(parsedCapabilities.bCompletions);
+	CHECK_EQ(static_cast<size_t>(1), parsedCapabilities.mapExtensions.size());
+	CHECK(parsedCapabilities.mapExtensions[EXTENSION_UI].isMember("mimeTypes"));
+
+	// Message identity fields and serialization stability.
+	TextContent text;
+	text.strType = CONST_TEXT;
+	text.strText = "hello";
+	CHECK(text.IsValid());
+
+	std::string strFirst;
+	std::string strSecond;
+	CHECK_EQ(ERRNO_OK, text.Serialize(strFirst));
+	CHECK_EQ(ERRNO_OK, text.Serialize(strSecond));
+	CHECK_EQ(strFirst, strSecond);
+
+	// MRTR containers only accept non-empty object maps.
+	InputRequests inputRequests;
+	CHECK(!inputRequests.IsValid());
+	Json::Value jInputRequests(Json::objectValue);
+	jInputRequests["req-1"] = Json::Value(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, inputRequests.DoDeserialize(jInputRequests));
+	CHECK(inputRequests.IsValid());
+	CHECK(inputRequests.Has("req-1"));
+	CHECK(!inputRequests.Has("req-2"));
+
+	InputResponses inputResponses;
+	CHECK(!inputResponses.IsValid());
+}
+
+TEST_CASE("unit.content_blocks")
+{
+	const ProtocolContext ctxLegacy = MakeLegacyContext();
+	const ProtocolContext ctxModern = MakeModernContext();
+
+	// Text content: annotations and _meta never leak into the legacy profile.
+	TextContent text;
+	text.strType = CONST_TEXT;
+	text.strText = "hello";
+	text.annotations.vecAudience.push_back(CONST_USER);
+	text.annotations.bHasPriority = true;
+	text.annotations.dPriority = 0.5;
+	text.annotations.strLastModified = "2026-01-01T00:00:00Z";
+	text.jMeta = Json::Value(Json::objectValue);
+	text.jMeta["trace"] = "abc";
+
+	Json::Value jLegacyText(Json::objectValue);
+	text.DoSerialize(jLegacyText);
+	text.DoSerializeVersionExtras(jLegacyText, ctxLegacy);
+	CHECK(!jLegacyText.isMember(MSG_KEY_ANNOTATIONS));
+	CHECK(!jLegacyText.isMember(MSG_KEY_META));
+
+	Json::Value jModernText(Json::objectValue);
+	text.DoSerialize(jModernText);
+	text.DoSerializeVersionExtras(jModernText, ctxModern);
+	CHECK_EQ(std::string(CONST_USER), jModernText[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
+	CHECK(jModernText[MSG_KEY_ANNOTATIONS][MSG_KEY_PRIORITY].asDouble() > 0.49);
+	CHECK_EQ(std::string("2026-01-01T00:00:00Z"),
+		jModernText[MSG_KEY_ANNOTATIONS][MSG_KEY_LAST_MODIFIED].asString());
+	CHECK_EQ(std::string("abc"), jModernText[MSG_KEY_META]["trace"].asString());
+
+	// Empty text stays invalid.
+	TextContent emptyText;
+	emptyText.strType = CONST_TEXT;
+	CHECK(!emptyText.IsValid());
+
+	ImageContent image;
+	image.strType = CONST_IMAGE;
+	image.strMimeType = "image/png";
+	image.strData = "AAAA";
+	CHECK(image.IsValid());
+
+	// Audio content.
+	AudioContent audio;
+	audio.strType = CONST_AUDIO;
+	audio.strData = "AAAA";
+	audio.strMimeType = "audio/wav";
+	CHECK(audio.IsValid());
+
+	Json::Value jAudio(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, audio.DoSerialize(jAudio));
+	CHECK_EQ(std::string(CONST_AUDIO), jAudio[MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("AAAA"), jAudio[MSG_KEY_DATA].asString());
+	CHECK_EQ(std::string("audio/wav"), jAudio[MSG_KEY_MIMETYPE].asString());
+
+	AudioContent parsedAudio;
+	CHECK_EQ(ERRNO_OK, parsedAudio.DoDeserialize(jAudio));
+	CHECK(parsedAudio.IsValid());
+
+	AudioContent invalidAudio;
+	invalidAudio.strType = CONST_AUDIO;
+	CHECK(!invalidAudio.IsValid());
+	CHECK_EQ(ERRNO_PARSE_ERROR, invalidAudio.DoDeserialize(Json::Value(Json::objectValue)));
+
+	// Resource link content.
+	ResourceLink link;
+	link.strType = CONST_RESOURCE_LINK;
+	link.strName = "readme";
+	link.strUri = "file:///readme.md";
+	link.strTitle = "README";
+	link.strDescription = "Project readme";
+	link.strMimeType = "text/markdown";
+	link.iSize = 12;
+	link.vecIcons.push_back(MakeTestIcon());
+	CHECK(link.IsValid());
+
+	Json::Value jLink(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, link.DoSerialize(jLink));
+	CHECK_EQ(std::string(CONST_RESOURCE_LINK), jLink[MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("readme"), jLink[MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("file:///readme.md"), jLink[MSG_KEY_URI].asString());
+	CHECK_EQ(std::string("README"), jLink[MSG_KEY_TITLE].asString());
+	CHECK_EQ(std::string("text/markdown"), jLink[MSG_KEY_MIMETYPE].asString());
+	CHECK_EQ(12, jLink[MSG_KEY_SIZE].asInt());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jLink[MSG_KEY_ICONS].size());
+
+	ResourceLink parsedLink;
+	CHECK_EQ(ERRNO_OK, parsedLink.DoDeserialize(jLink));
+	CHECK(parsedLink.IsValid());
+	CHECK_EQ(std::string("README"), parsedLink.strTitle);
+
+	ResourceLink invalidLink;
+	invalidLink.strType = CONST_RESOURCE_LINK;
+	CHECK(!invalidLink.IsValid());
+
+	// Tool use content.
+	ToolUseContent toolUse;
+	toolUse.strType = CONST_TOOL_USE;
+	toolUse.strId = "call-1";
+	toolUse.strName = "echo";
+	toolUse.jInput = Json::Value(Json::objectValue);
+	toolUse.jInput["text"] = "hi";
+	CHECK(toolUse.IsValid());
+
+	Json::Value jToolUse(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, toolUse.DoSerialize(jToolUse));
+	CHECK_EQ(std::string(CONST_TOOL_USE), jToolUse[MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("call-1"), jToolUse[MSG_KEY_ID].asString());
+	CHECK_EQ(std::string("echo"), jToolUse[MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("hi"), jToolUse[MSG_KEY_INPUT]["text"].asString());
+
+	ToolUseContent parsedToolUse;
+	CHECK_EQ(ERRNO_OK, parsedToolUse.DoDeserialize(jToolUse));
+	CHECK(parsedToolUse.IsValid());
+
+	ToolUseContent invalidToolUse;
+	invalidToolUse.strType = CONST_TOOL_USE;
+	CHECK(!invalidToolUse.IsValid());
+
+	// Tool result content.
+	ToolResultContent toolResult;
+	toolResult.strType = CONST_TOOL_RESULT;
+	toolResult.strToolUseId = "call-1";
+	toolResult.jContent = Json::Value(Json::arrayValue);
+	Json::Value jTextBlock(Json::objectValue);
+	jTextBlock[MSG_KEY_TYPE] = CONST_TEXT;
+	jTextBlock[MSG_KEY_TEXT] = "ok";
+	toolResult.jContent.append(jTextBlock);
+	toolResult.bHasIsError = true;
+	toolResult.bIsError = false;
+	toolResult.jStructuredContent = Json::Value(Json::objectValue);
+	toolResult.jStructuredContent[MSG_KEY_TEXT] = "ok";
+	CHECK(toolResult.IsValid());
+
+	Json::Value jLegacyToolResult(Json::objectValue);
+	toolResult.DoSerialize(jLegacyToolResult);
+	toolResult.DoSerializeVersionExtras(jLegacyToolResult, ctxLegacy);
+	CHECK(!jLegacyToolResult.isMember(MSG_KEY_STRUCTURED_CONTENT));
+	CHECK(!jLegacyToolResult.isMember(MSG_KEY_META));
+	CHECK(jLegacyToolResult.isMember(MSG_KEY_IS_ERROR));
+
+	Json::Value jModernToolResult(Json::objectValue);
+	toolResult.DoSerialize(jModernToolResult);
+	toolResult.DoSerializeVersionExtras(jModernToolResult, ctxModern);
+	CHECK_EQ(std::string(CONST_TOOL_RESULT), jModernToolResult[MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("call-1"), jModernToolResult[MSG_KEY_TOOL_USE_ID].asString());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jModernToolResult[MSG_KEY_CONTENT].size());
+	CHECK_EQ(std::string("ok"), jModernToolResult[MSG_KEY_STRUCTURED_CONTENT][MSG_KEY_TEXT].asString());
+
+	// Resource contents only add _meta.
+	TextResourceContents textResource;
+	textResource.strText = "x";
+	textResource.strUri = "file:///x";
+	textResource.jMeta = Json::Value(Json::objectValue);
+	textResource.jMeta["k"] = "v";
+
+	Json::Value jLegacyTextResource(Json::objectValue);
+	textResource.DoSerialize(jLegacyTextResource);
+	textResource.DoSerializeVersionExtras(jLegacyTextResource, ctxLegacy);
+	CHECK(!jLegacyTextResource.isMember(MSG_KEY_META));
+
+	Json::Value jModernTextResource(Json::objectValue);
+	textResource.DoSerialize(jModernTextResource);
+	textResource.DoSerializeVersionExtras(jModernTextResource, ctxModern);
+	CHECK_EQ(std::string("v"), jModernTextResource[MSG_KEY_META]["k"].asString());
+
+	BlobResourceContents blobResource;
+	blobResource.strBlob = "AAAA";
+	blobResource.strUri = "file:///y";
+	blobResource.jMeta = Json::Value(Json::objectValue);
+	blobResource.jMeta["k"] = "v";
+
+	Json::Value jLegacyBlobResource(Json::objectValue);
+	blobResource.DoSerialize(jLegacyBlobResource);
+	blobResource.DoSerializeVersionExtras(jLegacyBlobResource, ctxLegacy);
+	CHECK(!jLegacyBlobResource.isMember(MSG_KEY_META));
+
+	Json::Value jModernBlobResource(Json::objectValue);
+	blobResource.DoSerialize(jModernBlobResource);
+	blobResource.DoSerializeVersionExtras(jModernBlobResource, ctxModern);
+	CHECK_EQ(std::string("v"), jModernBlobResource[MSG_KEY_META]["k"].asString());
+
+	// Embedded resources propagate extras into the nested resource object.
+	EmbeddedResource embedded;
+	embedded.strType = CONST_RESOURCE;
+	embedded.textResource = textResource;
+	CHECK(embedded.IsValid());
+
+	Json::Value jLegacyEmbedded(Json::objectValue);
+	embedded.DoSerialize(jLegacyEmbedded);
+	embedded.DoSerializeVersionExtras(jLegacyEmbedded, ctxLegacy);
+	CHECK(!jLegacyEmbedded[MSG_KEY_RESOURCE].isMember(MSG_KEY_META));
+
+	Json::Value jModernEmbedded(Json::objectValue);
+	embedded.DoSerialize(jModernEmbedded);
+	embedded.DoSerializeVersionExtras(jModernEmbedded, ctxModern);
+	CHECK_EQ(std::string("v"), jModernEmbedded[MSG_KEY_RESOURCE][MSG_KEY_META]["k"].asString());
+
+	// Prompt messages forward content extras to the nested content object.
+	PromptMessage promptMessage;
+	promptMessage.strRole = CONST_USER;
+	promptMessage.strContentType = CONST_TEXT;
+	promptMessage.textContent = text;
+
+	Json::Value jPromptMessage(Json::objectValue);
+	promptMessage.DoSerialize(jPromptMessage);
+	promptMessage.DoSerializeVersionExtras(jPromptMessage, ctxModern);
+	CHECK_EQ(std::string("abc"), jPromptMessage[MSG_KEY_CONTENT][MSG_KEY_META]["trace"].asString());
+}
+
+TEST_CASE("unit.meta")
+{
+	const ProtocolContext ctxModern = MakeModernContext();
+
+	// Modern request metadata read from a stateless request.
+	Json::Value jCapabilities(Json::objectValue);
+	Json::Value jElicitation(Json::objectValue);
+	jElicitation[MSG_KEY_FORM] = Json::Value(Json::objectValue);
+	jElicitation[MSG_KEY_URL] = Json::Value(Json::objectValue);
+	jCapabilities[MSG_KEY_ELICITATION] = jElicitation;
+	jCapabilities[MSG_KEY_ROOTS] = Json::Value(Json::objectValue);
+	jCapabilities[MSG_KEY_SAMPLING] = Json::Value(Json::objectValue);
+	Json::Value jExtensions(Json::objectValue);
+	jExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+	jCapabilities[MSG_KEY_EXTENSIONS] = jExtensions;
+
+	Json::Value jClientInfo(Json::objectValue);
+	jClientInfo[MSG_KEY_NAME] = "test-client";
+	jClientInfo[MSG_KEY_VERSION] = "1.2.3";
+	jClientInfo[MSG_KEY_TITLE] = "Test client";
+
+	Json::Value jMeta(Json::objectValue);
+	jMeta[META_KEY_PROTOCOL_VERSION] = PROTOCOL_VER_2026_07_28;
+	jMeta[META_KEY_CLIENT_INFO] = jClientInfo;
+	jMeta[META_KEY_CLIENT_CAPABILITIES] = jCapabilities;
+	jMeta[META_KEY_LOG_LEVEL] = LOGGING_LEVEL_INFO;
+	jMeta[MSG_KEY_PROGRESS_TOKEN] = 7;
+	jMeta[MSG_KEY_TOOL_CALL_ID] = "call-9";
+	jMeta["otel.trace"] = "trace-1";
+
+	MetaObject meta;
+	CHECK_EQ(ERRNO_OK, meta.DoDeserialize(jMeta));
+	CHECK_EQ(ERRNO_OK, meta.DoDeserializeVersionExtras(jMeta, ctxModern));
+	CHECK(meta.HasValue());
+	CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), meta.strProtocolVersion);
+	CHECK_EQ(std::string("test-client"), meta.clientInfo.strName);
+	CHECK_EQ(std::string("1.2.3"), meta.clientInfo.strVersion);
+	CHECK_EQ(std::string(LOGGING_LEVEL_INFO), meta.strLogLevel);
+	CHECK(meta.bHasClientCapabilities);
+	CHECK(meta.clientCapabilities.SupportsCapability(MSG_KEY_ELICITATION));
+	CHECK(meta.clientCapabilities.SupportsCapability(MSG_KEY_SAMPLING));
+	CHECK(meta.clientCapabilities.SupportsCapability(MSG_KEY_ROOTS));
+	CHECK(meta.clientCapabilities.SupportsElicitationMode(MSG_KEY_FORM));
+	CHECK(meta.clientCapabilities.SupportsElicitationMode(MSG_KEY_URL));
+	CHECK(meta.clientCapabilities.SupportsExtension(EXTENSION_UI));
+	CHECK(!meta.clientCapabilities.SupportsExtension("io.example/missing"));
+
+	// progressToken and toolCallId stay on the Request model.
+	CHECK(!meta.jExtra.isMember(MSG_KEY_PROGRESS_TOKEN));
+	CHECK(!meta.jExtra.isMember(MSG_KEY_TOOL_CALL_ID));
+	CHECK_EQ(std::string("trace-1"), meta.jExtra["otel.trace"].asString());
+
+	Json::Value jMetaOut(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, meta.DoSerialize(jMetaOut));
+	CHECK(!jMetaOut[META_KEY_CLIENT_INFO].isMember(MSG_KEY_TITLE));
+	meta.DoSerializeVersionExtras(jMetaOut, ctxModern);
+	CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), jMetaOut[META_KEY_PROTOCOL_VERSION].asString());
+	CHECK_EQ(std::string("test-client"), jMetaOut[META_KEY_CLIENT_INFO][MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("Test client"), jMetaOut[META_KEY_CLIENT_INFO][MSG_KEY_TITLE].asString());
+	CHECK(jMetaOut[META_KEY_CLIENT_CAPABILITIES].isMember(MSG_KEY_ELICITATION));
+	CHECK_EQ(std::string(LOGGING_LEVEL_INFO), jMetaOut[META_KEY_LOG_LEVEL].asString());
+	CHECK_EQ(std::string("trace-1"), jMetaOut["otel.trace"].asString());
+	CHECK(!jMetaOut.isMember(MSG_KEY_PROGRESS_TOKEN));
+
+	// An empty metadata object must not create any key.
+	MetaObject emptyMeta;
+	CHECK(!emptyMeta.HasValue());
+	Json::Value jEmptyMetaOut(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, emptyMeta.DoSerialize(jEmptyMetaOut));
+	CHECK(jEmptyMetaOut.empty());
+
+	// Missing required fields stay missing instead of being defaulted.
+	MetaObject missingMeta;
+	CHECK_EQ(ERRNO_OK, missingMeta.DoDeserialize(Json::Value(Json::objectValue)));
+	CHECK(missingMeta.strProtocolVersion.empty());
+	CHECK(!missingMeta.bHasClientCapabilities);
+	CHECK(!missingMeta.HasValue());
+
+	// Legacy initialize capabilities are readable through the same container.
+	Json::Value jLegacyCapabilities(Json::objectValue);
+	jLegacyCapabilities[MSG_KEY_EXPERIMENTAL] = Json::Value(Json::objectValue);
+	Json::Value jLegacyExtensions(Json::objectValue);
+	jLegacyExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+	jLegacyCapabilities[MSG_KEY_EXTENSIONS] = jLegacyExtensions;
+
+	ClientCapabilities legacyCapabilities;
+	CHECK_EQ(ERRNO_OK, legacyCapabilities.DoDeserialize(jLegacyCapabilities));
+	CHECK(legacyCapabilities.HasValue());
+	CHECK(legacyCapabilities.SupportsCapability(MSG_KEY_EXPERIMENTAL));
+	CHECK(!legacyCapabilities.SupportsCapability(MSG_KEY_ELICITATION));
+	CHECK(legacyCapabilities.SupportsExtension(EXTENSION_UI));
+
+	Json::Value jRoundTripCapabilities(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, legacyCapabilities.DoSerialize(jRoundTripCapabilities));
+	CHECK(jRoundTripCapabilities.isMember(MSG_KEY_EXPERIMENTAL));
+	CHECK(jRoundTripCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+
+	CHECK_EQ(ERRNO_PARSE_ERROR, legacyCapabilities.DoDeserialize(Json::Value("not-an-object")));
+	CHECK_EQ(ERRNO_PARSE_ERROR, meta.DoDeserialize(Json::Value(Json::arrayValue)));
+}
