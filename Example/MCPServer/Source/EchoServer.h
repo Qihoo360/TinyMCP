@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 #include <Entity/Server.h>
+#include <atomic>
+#include <memory>
+#include <thread>
 
 
 namespace Implementation
@@ -24,5 +27,13 @@ namespace Implementation
 		friend class MCP::CMCPServer<CEchoServer>;
 		CEchoServer() = default;
 		static CEchoServer s_Instance;
+
+		// Pushes notifications/resources/updated to the active
+		// subscriptions/listen registrations of the UI resource.
+		void StartSubscriptionDemo();
+		void StopSubscriptionDemo();
+
+		std::atomic_bool m_bStopSubscriptionDemo{ false };
+		std::unique_ptr<std::thread> m_upSubscriptionDemoThread;
 	};
 }

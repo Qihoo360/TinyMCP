@@ -27,7 +27,13 @@ int LaunchEchoServer(const std::string& strTransport, const std::string& strHost
     {
         if (strTransport == "sse")
         {
+            // 2026-07-28 is stdio-only in this SDK; the SSE entry stays on the
+            // 2024-11-05 handshake model.
             server.SetTransport(std::make_shared<MCP::CSSETransport>(strHost, iPort));
+        }
+        else
+        {
+            MCP::CMCPSession::GetInstance().SetModernProtocolSupported(true);
         }
         // 2. Start the Server.
         server.Start();

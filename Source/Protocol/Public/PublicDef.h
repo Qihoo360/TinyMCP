@@ -124,6 +124,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_SAMPLING = "sampling";
 	static constexpr const char* MSG_KEY_ELICITATION = "elicitation";
 	static constexpr const char* MSG_KEY_FORM = "form";
+	static constexpr const char* MSG_KEY_REQUESTED_SCHEMA = "requestedSchema";
 	static constexpr const char* MSG_KEY_URL = "url";
 	static constexpr const char* MSG_KEY_CONTEXT = "context";
 

@@ -8,6 +8,52 @@
 
 namespace Implementation
 {
+	namespace
+	{
+		// Illustrative integrity check only. A production server must protect
+		// requestState with an AEAD or an HMAC (for example AES-GCM); a checksum
+		// such as the one below is not tamper resistant. This example deliberately
+		// avoids pulling in a third-party crypto library.
+		constexpr const char* REQUEST_STATE_SECRET = "echo-confirm-demo-secret";
+
+		std::string ToHexString(unsigned long long uValue)
+		{
+			static const char* pszDigits = "0123456789abcdef";
+			std::string strResult;
+			for (int i = 15; i >= 0; --i)
+				strResult.push_back(pszDigits[(uValue >> (i * 4)) & 0xF]);
+			return strResult;
+		}
+
+		unsigned long long Fnv1a64(const std::string& strInput)
+		{
+			unsigned long long uHash = 1469598103934665603ULL;
+			for (unsigned char ch : strInput)
+			{
+				uHash ^= static_cast<unsigned long long>(ch);
+				uHash *= 1099511628211ULL;
+			}
+			return uHash;
+		}
+
+		std::string BuildRequestState(const std::string& strInput)
+		{
+			std::string strPayload = std::string("v1:") + strInput;
+			return strPayload + ":" + ToHexString(Fnv1a64(strPayload + ":" + REQUEST_STATE_SECRET));
+		}
+
+		bool VerifyRequestState(const std::string& strRequestState)
+		{
+			size_t iSeparator = strRequestState.rfind(':');
+			if (std::string::npos == iSeparator || 0 == iSeparator)
+				return false;
+
+			std::string strPayload = strRequestState.substr(0, iSeparator);
+			std::string strChecksum = strRequestState.substr(iSeparator + 1);
+			return strChecksum == ToHexString(Fnv1a64(strPayload + ":" + REQUEST_STATE_SECRET));
+		}
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// CEchoTask
 	std::shared_ptr<MCP::CMCPTask> CEchoTask::Clone() const
@@ -70,6 +116,205 @@ namespace Implementation
 		}
 
 		return iErrCode;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoConfirmTask
+	std::shared_ptr<MCP::CMCPTask> CEchoConfirmTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoConfirmTask>(nullptr);
+		if (spClone)
+		{
+			*spClone = *this;
+		}
+
+		return spClone;
+	}
+
+	int CEchoConfirmTask::Cancel()
+	{
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoConfirmTask::Execute()
+	{
+		if (!IsValid())
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(m_spRequest);
+		if (!spCallToolRequest || spCallToolRequest->strName != TOOL_NAME)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		std::string strInput;
+		if (spCallToolRequest->jArguments.isMember(TOOL_ARGUMENT_INPUT)
+			&& spCallToolRequest->jArguments[TOOL_ARGUMENT_INPUT].isString())
+		{
+			strInput = spCallToolRequest->jArguments[TOOL_ARGUMENT_INPUT].asString();
+		}
+
+		// First round: no inputResponses yet, so ask the client for an
+		// elicitation round trip and hand back an opaque requestState.
+		if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+		{
+			Json::Value jProperties(Json::objectValue);
+			Json::Value jConfirmProperty(Json::objectValue);
+			jConfirmProperty["type"] = "boolean";
+			jConfirmProperty[MCP::MSG_KEY_TITLE] = "Confirm";
+			jProperties["confirm"] = jConfirmProperty;
+
+			Json::Value jRequiredSchema(Json::arrayValue);
+			jRequiredSchema.append("confirm");
+
+			Json::Value jRequestedSchema(Json::objectValue);
+			jRequestedSchema["type"] = "object";
+			jRequestedSchema["properties"] = jProperties;
+			jRequestedSchema[MCP::MSG_KEY_REQUIRED] = jRequiredSchema;
+
+			Json::Value jParams(Json::objectValue);
+			jParams[MCP::MSG_KEY_MODE] = MCP::MSG_KEY_FORM;
+			jParams[MCP::MSG_KEY_MESSAGE] = "Confirm the echo request.";
+			jParams[MCP::MSG_KEY_REQUESTED_SCHEMA] = jRequestedSchema;
+
+			Json::Value jConfirmRequest(Json::objectValue);
+			jConfirmRequest[MCP::MSG_KEY_METHOD] = MCP::METHOD_ELICITATION_CREATE;
+			jConfirmRequest[MCP::MSG_KEY_PARAMS] = jParams;
+
+			Json::Value jInputRequests(Json::objectValue);
+			jInputRequests["confirm"] = jConfirmRequest;
+
+			int iErrCode = NotifyInputRequired(jInputRequests, BuildRequestState(strInput));
+			if (MCP::ERRNO_OK == iErrCode)
+				return iErrCode;
+
+			// The client did not declare form elicitation; tell it what is needed.
+			Json::Value jElicitation(Json::objectValue);
+			jElicitation[MCP::MSG_KEY_FORM] = Json::Value(Json::objectValue);
+
+			Json::Value jRequiredCapabilities(Json::objectValue);
+			jRequiredCapabilities[MCP::MSG_KEY_ELICITATION] = jElicitation;
+
+			return NotifyMissingClientCapability(jRequiredCapabilities);
+		}
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		MCP::TextContent textContent;
+		textContent.strType = MCP::CONST_TEXT;
+
+		// Retry round: reject a requestState that was tampered with or produced
+		// by another server instance.
+		if (!VerifyRequestState(m_spRequest->strRequestState))
+		{
+			spResult->bIsError = true;
+			textContent.strText = u8"Invalid requestState; restart the confirmation round.";
+		}
+		else
+		{
+			spResult->bIsError = false;
+			textContent.strText = u8"confirmed: " + strInput;
+		}
+
+		spResult->vecTextContent.push_back(textContent);
+		return NotifyResult(spResult);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoAppTask
+	std::shared_ptr<MCP::CMCPTask> CEchoAppTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoAppTask>(nullptr);
+		if (spClone)
+		{
+			*spClone = *this;
+		}
+
+		return spClone;
+	}
+
+	int CEchoAppTask::Cancel()
+	{
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoAppTask::Execute()
+	{
+		if (!IsValid())
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(m_spRequest);
+		if (!spCallToolRequest || spCallToolRequest->strName != TOOL_NAME)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		std::string strInput;
+		if (spCallToolRequest->jArguments.isMember(TOOL_ARGUMENT_INPUT)
+			&& spCallToolRequest->jArguments[TOOL_ARGUMENT_INPUT].isString())
+		{
+			strInput = spCallToolRequest->jArguments[TOOL_ARGUMENT_INPUT].asString();
+		}
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		// Text content keeps working for clients that do not render the UI.
+		MCP::TextContent textContent;
+		textContent.strType = MCP::CONST_TEXT;
+		textContent.strText = u8"echo_app received: " + strInput;
+		spResult->vecTextContent.push_back(textContent);
+		spResult->bIsError = false;
+
+		return NotifyResult(spResult);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// CEchoAppResourceReadTask
+	std::shared_ptr<MCP::CMCPTask> CEchoAppResourceReadTask::Clone() const
+	{
+		auto spClone = std::make_shared<CEchoAppResourceReadTask>(nullptr);
+		if (spClone)
+		{
+			*spClone = *this;
+		}
+
+		return spClone;
+	}
+
+	int CEchoAppResourceReadTask::Cancel()
+	{
+		return MCP::ERRNO_OK;
+	}
+
+	int CEchoAppResourceReadTask::Execute()
+	{
+		if (!IsValid())
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
+		if (!spReadResourceRequest)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return MCP::ERRNO_INTERNAL_ERROR;
+
+		MCP::TextResourceContents textContent;
+		textContent.strUri = spReadResourceRequest->strUri;
+		textContent.strMimeType = MCP::MIME_TYPE_MCP_APP;
+		textContent.strText =
+			u8R"(<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Echo App</title></head>
+<body>
+<h1>Echo App</h1>
+<p>This UI resource is served by the TinyMCP example server.</p>
+</body>
+</html>
+)";
+		spResult->vecTextResourceContents.push_back(textContent);
+
+		return NotifyResult(spResult);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

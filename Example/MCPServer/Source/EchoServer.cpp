@@ -1,5 +1,6 @@
 ﻿#include "EchoServer.h"
 #include "EchoTask.h"
+#include <chrono>
 
 namespace Implementation
 {
@@ -26,24 +27,74 @@ namespace Implementation
 		RegisterServerExperimentalCapabilities(experimental);
         RegisterServerLoggingCapabilities();
 
+		// 2026-07-28 capabilities. The legacy experimental flag above stays
+		// untouched so that 2024-11-05 clients receive the same payload as before.
+		RegisterServerCompletionsCapability();
+		// MCP Apps is opt-in; this call advertises io.modelcontextprotocol/ui.
+		RegisterServerAppsCapabilities();
+
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
+		auto ParseInputSchema = [](const char* pszSchema, Json::Value& jSchema) -> bool
+		{
+			Json::Reader reader;
+			return reader.parse(pszSchema, jSchema) && jSchema.isObject();
+		};
+
+		std::vector<MCP::Tool> vecTools;
+
         MCP::Tool tool;
         tool.strName = Implementation::CEchoTask::TOOL_NAME;
         tool.strDescription = Implementation::CEchoTask::TOOL_DESCRIPTION;
-        std::string strInputSchema = Implementation::CEchoTask::TOOL_INPUT_SCHEMA;
-        Json::Reader reader;
-        Json::Value jInputSchema(Json::objectValue);
-        if (!reader.parse(strInputSchema, jInputSchema) || !jInputSchema.isObject())
+        if (!ParseInputSchema(Implementation::CEchoTask::TOOL_INPUT_SCHEMA, tool.jInputSchema))
             return MCP::ERRNO_PARSE_ERROR;
-        tool.jInputSchema = jInputSchema;
-        RegisterServerTools({ tool }, false);
+		vecTools.push_back(tool);
+
+		// MRTR example: the first call returns input_required.
+		MCP::Tool confirmTool;
+		confirmTool.strName = Implementation::CEchoConfirmTask::TOOL_NAME;
+		confirmTool.strDescription = Implementation::CEchoConfirmTask::TOOL_DESCRIPTION;
+		if (!ParseInputSchema(Implementation::CEchoConfirmTask::TOOL_INPUT_SCHEMA, confirmTool.jInputSchema))
+			return MCP::ERRNO_PARSE_ERROR;
+		vecTools.push_back(confirmTool);
+
+		// MCP Apps example: the tool points at the UI resource and still returns text.
+		MCP::Tool appTool;
+		appTool.strName = Implementation::CEchoAppTask::TOOL_NAME;
+		appTool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.jInputSchema))
+			return MCP::ERRNO_PARSE_ERROR;
+		appTool.SetUiResourceUri(Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
+		vecTools.push_back(appTool);
+
+        RegisterServerTools(vecTools, false);
 
 		MCP::Resource resource;
 		resource.strName = "main.rs";
 		resource.strUri = "file:///project/src/main.rs";
 		resource.strDescription = "Primary application entry point";
 		resource.strMimeType = "text/x-rust";
-        RegisterServerResources({ resource }, false);
+
+		// MCP Apps UI resource. The permissions/csp block is minimal on purpose;
+		// hosts enforce the declared policy before rendering the HTML.
+		MCP::Resource appResource;
+		appResource.strName = "echo app";
+		appResource.strUri = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
+		appResource.strDescription = "MCP Apps UI for the echo server";
+		appResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+
+		Json::Value jCsp(Json::objectValue);
+		jCsp["connectDomains"] = Json::Value(Json::arrayValue);
+		jCsp["resourceDomains"] = Json::Value(Json::arrayValue);
+
+		Json::Value jPermissions(Json::objectValue);
+		jPermissions["clipboardWrite"] = Json::Value(Json::objectValue);
+
+		Json::Value jUi(Json::objectValue);
+		jUi[MCP::MSG_KEY_CSP] = jCsp;
+		jUi[MCP::MSG_KEY_PERMISSIONS] = jPermissions;
+		appResource.jMeta[MCP::MSG_KEY_UI] = jUi;
+
+        RegisterServerResources({ resource, appResource }, false);
 
 		MCP::ResourceTemplate resourceTemplate;
 		resourceTemplate.strName = "Project Files";
@@ -75,11 +126,26 @@ namespace Implementation
         if (!spCallToolsTask)
             return MCP::ERRNO_INTERNAL_ERROR;
         RegisterToolsTasks(Implementation::CEchoTask::TOOL_NAME, spCallToolsTask);
+
+		auto spConfirmToolTask = std::make_shared<Implementation::CEchoConfirmTask>(nullptr);
+		if (!spConfirmToolTask)
+			return MCP::ERRNO_INTERNAL_ERROR;
+		RegisterToolsTasks(Implementation::CEchoConfirmTask::TOOL_NAME, spConfirmToolTask);
+
+		auto spAppToolTask = std::make_shared<Implementation::CEchoAppTask>(nullptr);
+		if (!spAppToolTask)
+			return MCP::ERRNO_INTERNAL_ERROR;
+		RegisterToolsTasks(Implementation::CEchoAppTask::TOOL_NAME, spAppToolTask);
         
 		auto spReadResourceTask = std::make_shared<Implementation::CEchoResourceReadTask>(nullptr);
 		if (!spReadResourceTask)
             return MCP::ERRNO_INTERNAL_ERROR;
 		RegisterReadResourceTasks(resource.strUri, spReadResourceTask);
+
+		auto spReadAppResourceTask = std::make_shared<Implementation::CEchoAppResourceReadTask>(nullptr);
+		if (!spReadAppResourceTask)
+			return MCP::ERRNO_INTERNAL_ERROR;
+		RegisterReadResourceTasks(appResource.strUri, spReadAppResourceTask);
 
 		auto spSubscribeResourceTask = std::make_shared<Implementation::CEchoResourceSubscribeTask>(nullptr);
         if (!spSubscribeResourceTask)
@@ -99,12 +165,56 @@ namespace Implementation
         RegisterCompleteTasks(std::string(MCP::CONST_REF_PROMPT) + ":" + Implementation::CEchoGetPromptTask::PROMPT_EXPLAIN_CODE, spCompleteTask);
         RegisterCompleteTasks(std::string(MCP::CONST_REF_RESOURCE) + ":" + resource.strUri, spCompleteTask);
 
+        // 5. Start the subscriptions/listen demo.
+        StartSubscriptionDemo();
+
         return MCP::ERRNO_OK;
     }
 
     int CEchoServer::Uninitialize()
     {
+        StopSubscriptionDemo();
         return MCP::ERRNO_OK;
+    }
+
+    void CEchoServer::StartSubscriptionDemo()
+    {
+        m_bStopSubscriptionDemo = false;
+        m_upSubscriptionDemoThread = std::make_unique<std::thread>([this]()
+        {
+            int iTicks = 0;
+            while (!m_bStopSubscriptionDemo)
+            {
+                // Wake up once per second so that shutdown stays responsive.
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                if (m_bStopSubscriptionDemo)
+                    break;
+
+                if (++iTicks < 5)
+                    continue;
+                iTicks = 0;
+
+                if (!MCP::CMCPSession::GetInstance().GetTransport())
+                    continue;
+
+                Json::Value jParams(Json::objectValue);
+                jParams[MCP::MSG_KEY_URI] = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
+
+                // Only active subscriptions/listen registrations receive this
+                // notification; a server without listeners sends nothing.
+                MCP::CMCPSession::GetInstance().SendSubscriptionNotification(
+                    MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jParams,
+                    Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
+            }
+        });
+    }
+
+    void CEchoServer::StopSubscriptionDemo()
+    {
+        m_bStopSubscriptionDemo = true;
+        if (m_upSubscriptionDemoThread && m_upSubscriptionDemoThread->joinable())
+            m_upSubscriptionDemoThread->join();
+        m_upSubscriptionDemoThread.reset();
     }
 
     CEchoServer CEchoServer::s_Instance;

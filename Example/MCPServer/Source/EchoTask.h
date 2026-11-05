@@ -31,6 +31,67 @@ namespace Implementation
 		int Cancel() override;
 	};
 
+	// 2026-07-28 MRTR example. The first call answers with input_required and an
+	// opaque requestState; the retry that carries inputResponses completes the call.
+	class CEchoConfirmTask : public MCP::ProcessCallToolRequest
+	{
+	public:
+		static constexpr const char* TOOL_NAME = "echo_confirm";
+		static constexpr const char* TOOL_DESCRIPTION = u8"Ask the client to confirm before returning the echoed data (MRTR example).";
+		static constexpr const char* TOOL_INPUT_SCHEMA = u8R"({"type":"object","properties":{"input":{"type":"string","description":"client input data"}},"required":["input"]})";
+		static constexpr const char* TOOL_ARGUMENT_INPUT = "input";
+
+		CEchoConfirmTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessCallToolRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		int Execute() override;
+		int Cancel() override;
+	};
+
+	// MCP Apps example. The tool returns plain text for clients that do not
+	// render the UI, and points to the UI resource through _meta.ui.resourceUri.
+	class CEchoAppTask : public MCP::ProcessCallToolRequest
+	{
+	public:
+		static constexpr const char* TOOL_NAME = "echo_app";
+		static constexpr const char* TOOL_DESCRIPTION = u8"Return the echoed data together with an MCP Apps UI resource.";
+		static constexpr const char* TOOL_INPUT_SCHEMA = u8R"({"type":"object","properties":{"input":{"type":"string","description":"client input data"}},"required":["input"]})";
+		static constexpr const char* TOOL_ARGUMENT_INPUT = "input";
+
+		CEchoAppTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessCallToolRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		int Execute() override;
+		int Cancel() override;
+	};
+
+	class CEchoAppResourceReadTask : public MCP::ProcessReadResourceRequest
+	{
+	public:
+		static constexpr const char* RESOURCE_URI = "ui://echo/app.html";
+
+		CEchoAppResourceReadTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessReadResourceRequest(spRequest)
+		{
+
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+
+		int Execute() override;
+		int Cancel() override;
+	};
+
 	class CEchoResourceReadTask : public MCP::ProcessReadResourceRequest
 	{
 	public:
