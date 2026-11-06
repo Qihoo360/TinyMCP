@@ -834,7 +834,7 @@ TEST_CASE("integration.subscriptions")
 
 	// A granted event is delivered and carries the subscription id.
 	size_t nBeforeEvent = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendResourceListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendResourceListChanged());
 	CHECK(driver.WaitForOutputCount(nBeforeEvent + 1, WAIT_TIMEOUT_MS));
 
 	Json::Value jEvent;
@@ -844,7 +844,7 @@ TEST_CASE("integration.subscriptions")
 
 	// A filter the server cannot publish stays silent.
 	size_t nBeforePrompt = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendPromptListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendPromptListChanged());
 	WaitQuiet();
 	CHECK_EQ(nBeforePrompt, driver.GetOutputCount());
 
@@ -852,7 +852,7 @@ TEST_CASE("integration.subscriptions")
 	Json::Value jUpdatedParams(Json::objectValue);
 	jUpdatedParams[MSG_KEY_URI] = "test://echo/other";
 	size_t nBeforeUri = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendSubscriptionNotification(
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
 		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, "test://echo/other"));
 	WaitQuiet();
 	CHECK_EQ(nBeforeUri, driver.GetOutputCount());
@@ -860,7 +860,7 @@ TEST_CASE("integration.subscriptions")
 	// The granted URI is delivered.
 	jUpdatedParams[MSG_KEY_URI] = CTestServer::RESOURCE_URI;
 	size_t nBeforeGrantedUri = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendSubscriptionNotification(
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
 		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI));
 	CHECK(driver.WaitForOutputCount(nBeforeGrantedUri + 1, WAIT_TIMEOUT_MS));
 
@@ -981,7 +981,7 @@ TEST_CASE("integration.dual_era")
 
 	CompleteLegacyHandshake(driver, 1);
 
-	size_t nRequests = CMCPSession::GetInstance().GetMessageCount(MessageCategory_Request);
+	size_t nRequests = SessionAccess::GetMessageCount(CMCPSession::GetInstance(), MessageCategory_Request);
 	CHECK(nRequests > 0);
 
 	Json::Value jResponse;
@@ -991,13 +991,13 @@ TEST_CASE("integration.dual_era")
 		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
 
 	// Stateless requests never enter the legacy per-connection history.
-	CHECK_EQ(nRequests, CMCPSession::GetInstance().GetMessageCount(MessageCategory_Request));
+	CHECK_EQ(nRequests, SessionAccess::GetMessageCount(CMCPSession::GetInstance(), MessageCategory_Request));
 
 	// A legacy logging threshold does not filter stateless responses. The legacy
 	// request itself is recorded, so the baseline moves once here.
 	CHECK(ExpectResponse(driver, MakeRequest(3, METHOD_LOGGING_SET_LEVEL,
 		"{\"level\":\"error\"}"), jResponse));
-	nRequests = CMCPSession::GetInstance().GetMessageCount(MessageCategory_Request);
+	nRequests = SessionAccess::GetMessageCount(CMCPSession::GetInstance(), MessageCategory_Request);
 
 	// No request level logLevel: the task result is the only output.
 	size_t nBeforeNoLog = driver.GetOutputCount();
@@ -1025,7 +1025,7 @@ TEST_CASE("integration.dual_era")
 	Json::Value jLogged;
 	CHECK(ParseJson(driver.GetOutput(nBeforeLog + 1), jLogged));
 	CHECK_EQ(5, jLogged[MSG_KEY_ID].asInt());
-	CHECK_EQ(nRequests, CMCPSession::GetInstance().GetMessageCount(MessageCategory_Request));
+	CHECK_EQ(nRequests, SessionAccess::GetMessageCount(CMCPSession::GetInstance(), MessageCategory_Request));
 
 	// A restarted connection works with stateless requests only.
 	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().ResetForNewClient());

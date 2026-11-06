@@ -1,6 +1,5 @@
 ﻿#include "SSETransport.h"
 #include "../Public/PublicDef.h"
-#include "../Session/Session.h"
 
 // cpp-httplib is a header-only HTTP library shipped inside the repository at
 // Source/External/cpp-httplib/httplib.h. It is intentionally included only inside
@@ -353,7 +352,7 @@ namespace MCP
 			if (m_bResetPending.exchange(false))
 			{
 				_lock.unlock();
-				CMCPSession::GetInstance().ResetForNewClient();
+				NotifyClientDisconnected();
 				// Loop back to re-check the incoming queue: the new client's first message
 				// may already be sitting there, or we go back to waiting.
 				continue;

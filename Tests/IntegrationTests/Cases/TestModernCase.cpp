@@ -292,7 +292,7 @@ TEST_CASE("unit.subscriptions")
 
 	// List-changed events reach both active subscriptions.
 	size_t nBefore = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendToolListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendToolListChanged());
 	CHECK(driver.WaitForOutputCount(nBefore + 2, WAIT_TIMEOUT_MS));
 
 	bool bSawNumeric = false;
@@ -314,7 +314,7 @@ TEST_CASE("unit.subscriptions")
 	// Only the first subscription granted promptsListChanged, so the event
 	// reaches just that subscription.
 	nBefore = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendPromptListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendPromptListChanged());
 	CHECK(driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS));
 	CHECK(ParseJson(driver.GetOutput(nBefore), jResponse));
 	CHECK_EQ(std::string(METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED),
@@ -328,11 +328,11 @@ TEST_CASE("unit.subscriptions")
 	nBefore = driver.GetOutputCount();
 	Json::Value jUpdatedParams(Json::objectValue);
 	jUpdatedParams[MSG_KEY_URI] = strChildUri;
-	CMCPSession::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, strChildUri);
+	CTestServer::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, strChildUri);
 	CHECK(!driver.WaitForOutputCount(nBefore + 1, QUIET_WAIT_MS));
 
 	jUpdatedParams[MSG_KEY_URI] = CTestServer::RESOURCE_URI;
-	CMCPSession::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI);
+	CTestServer::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI);
 	CHECK(driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS));
 	CHECK(ParseJson(driver.GetOutput(nBefore), jResponse));
 	CHECK_EQ(std::string(METHOD_NOTIFICATION_RESOURCES_UPDATED), jResponse[MSG_KEY_METHOD].asString());
@@ -348,7 +348,7 @@ TEST_CASE("unit.subscriptions")
 	CHECK(ExpectResponse(driver, MakeRequest(32, METHOD_TOOLS_LIST, MakeModernParams()), jResponse));
 
 	nBefore = driver.GetOutputCount();
-	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendToolListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendToolListChanged());
 	CHECK(driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS));
 	CHECK(ParseJson(driver.GetOutput(nBefore), jResponse));
 	CHECK(jResponse[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].isString());

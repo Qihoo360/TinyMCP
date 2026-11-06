@@ -2,226 +2,83 @@
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
-#include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "../Public/PublicDef.h"
-#include "../Session/Session.h"
+#include "../Message/BasicMessage.h"
+#include "../Task/BasicTask.h"
 #include "../Transport/Transport.h"
 
 namespace MCP
 {
-	template <class T>
-	class CMCPServer
+	// Shared behaviour of every CMCPServer<T>. Keeping it outside the template
+	// lets the wiring live in Server.cpp: the header only describes what an
+	// application may call, and the session singleton stays hidden in the .cpp.
+	class CMCPServerBase
 	{
 	public:
-		CMCPServer(const CMCPServer&) = delete;
-		CMCPServer& operator=(const CMCPServer&) = delete;
-		static CMCPServer& GetInstance()
-		{
-			return T::s_Instance;
-		}
+		CMCPServerBase(const CMCPServerBase&) = delete;
+		CMCPServerBase& operator=(const CMCPServerBase&) = delete;
 
-		void SetServerInfo(const MCP::Implementation& serverInfo)
-		{
-			MCP::CMCPSession::GetInstance().SetServerInfo(serverInfo);
-		}
-
-		void SetTransport(const std::shared_ptr<MCP::CMCPTransport>& spTransport)
-		{
-			MCP::CMCPSession::GetInstance().SetTransport(spTransport);
-		}
-
-		std::shared_ptr<MCP::CMCPTransport> GetTransport() const
-		{
-			return MCP::CMCPSession::GetInstance().GetTransport();
-		}
+		void SetServerInfo(const MCP::Implementation& serverInfo);
+		void SetTransport(const std::shared_ptr<MCP::CMCPTransport>& spTransport);
+		std::shared_ptr<MCP::CMCPTransport> GetTransport() const;
 
 		// Server-initiated notifications. Only active listeners receive them, so a
 		// server without subscriptions sends nothing.
-		int SendResourceListChanged()
-		{
-			return MCP::CMCPSession::GetInstance().SendResourceListChanged();
-		}
-
+		int SendToolListChanged();
+		int SendPromptListChanged();
+		int SendResourceListChanged();
 		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams,
-			const std::string& strMatchUri = std::string())
-		{
-			return MCP::CMCPSession::GetInstance().SendSubscriptionNotification(strMethod, jParams, strMatchUri);
-		}
+			const std::string& strMatchUri = std::string());
 
 		// Declares the protocol revisions this server serves. Call it before
 		// Start(); leaving it unused means every revision the transport can
 		// carry. Only an empty declaration is rejected here: which revisions the
 		// SDK knows is a registry question, so Start() owns that decision.
-		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
-		{
-			if (vecVersions.empty())
-				return ERRNO_INVALID_PARAMS;
+		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
 
-			std::vector<std::string> vecSupported;
-			for (const auto& strVersion : vecVersions)
-			{
-				if (std::find(vecSupported.begin(), vecSupported.end(), strVersion) == vecSupported.end())
-					vecSupported.push_back(strVersion);
-			}
-
-			m_vecSupportedProtocolVersions = vecSupported;
-			return ERRNO_OK;
-		}
-
-		void RegisterServerToolsCapabilities(const MCP::Tools& tools)
-		{
-			m_capabilities.tools = tools;
-		}
-
-		void RegisterServerResourcesCapabilities(const MCP::Resources& resources)
-		{
-			m_capabilities.resources = resources;
-		}
-
-		void RegisterServerPromptsCapabilities(const MCP::Prompts& prompts)
-		{
-			m_capabilities.prompts = prompts;
-		}
-
-		void RegisterServerExperimentalCapabilities(const MCP::Experimental& experimental)
-		{
-			m_capabilities.experimental = experimental;
-		}
-
-		void RegisterServerLoggingCapabilities()
-		{
-			m_capabilities.logging.bExist = true;
-		}
+		void RegisterServerToolsCapabilities(const MCP::Tools& tools);
+		void RegisterServerResourcesCapabilities(const MCP::Resources& resources);
+		void RegisterServerPromptsCapabilities(const MCP::Prompts& prompts);
+		void RegisterServerExperimentalCapabilities(const MCP::Experimental& experimental);
+		void RegisterServerLoggingCapabilities();
 
 		// Advertises the stateless-era completions capability. Legacy handshake
 		// output keeps using RegisterServerExperimentalCapabilities.
-		void RegisterServerCompletionsCapability()
-		{
-			m_capabilities.bCompletions = true;
-		}
+		void RegisterServerCompletionsCapability();
 
-		void RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>& mapExtensions)
-		{
-			for (const auto& pair : mapExtensions)
-				m_capabilities.mapExtensions[pair.first] = pair.second;
-
-			if (!mapExtensions.empty())
-				m_capabilities.bExtensionPassthrough = true;
-		}
+		void RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>& mapExtensions);
 
 		// MCP Apps is opt-in; the extension is advertised only after this call.
-		void RegisterServerAppsCapabilities()
-		{
-			m_capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
-			m_capabilities.bExtensionPassthrough = true;
-		}
+		void RegisterServerAppsCapabilities();
 
-		void RegisterServerInstructions(const std::string& strInstructions)
-		{
-			MCP::CMCPSession::GetInstance().SetServerInstructions(strInstructions);
-		}
-
-		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
-		{
-			MCP::CMCPSession::GetInstance().SetServerCacheOptions(iTtlMs, strCacheScope);
-		}
+		void RegisterServerInstructions(const std::string& strInstructions);
+		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
 
 		// Convenience wrapper for UI resources; the UI metadata travels in
 		// Resource::jMeta unchanged.
-		void RegisterServerUiResources(const std::vector<MCP::Resource>& resources, bool bPagination)
-		{
-			RegisterServerResources(resources, bPagination);
-		}
+		void RegisterServerUiResources(const std::vector<MCP::Resource>& resources, bool bPagination);
 
-		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)
-		{
-			MCP::CMCPSession::GetInstance().SetServerToolsPagination(bPagination);
-			MCP::CMCPSession::GetInstance().SetServerTools(tools);
-		}
+		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination);
+		void RegisterServerResources(const std::vector<MCP::Resource>& resources, bool bPagination);
+		void RegisterServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates, bool bPagination);
+		void RegisterServerPrompts(const std::vector<MCP::Prompt>& prompts, bool bPagination);
 
-		void RegisterServerResources(const std::vector<MCP::Resource>& resources, bool bPagination)
-		{
-			MCP::CMCPSession::GetInstance().SetServerResourcesPagination(bPagination);
-			MCP::CMCPSession::GetInstance().SetServerResources(resources);
-		}
+		void RegisterToolsTasks(const std::string& strToolName, std::shared_ptr<MCP::ProcessCallToolRequest> spTask);
+		void RegisterReadResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessReadResourceRequest> spTask);
+		void RegisterSubscribeResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessSubscribeResourceRequest> spTask);
+		void RegisterGetPromptTasks(const std::string& strPromptName, std::shared_ptr<MCP::ProcessGetPromptRequest> spTask);
+		void RegisterCompleteTasks(const std::string& strTaskKey, std::shared_ptr<MCP::ProcessCompleteRequest> spTask);
 
-		void RegisterServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates, bool bPagination)
-		{
-			MCP::CMCPSession::GetInstance().SetServerResourceTemplatesPagination(bPagination);
-			MCP::CMCPSession::GetInstance().SetServerResourceTemplates(resourceTemplates);
-		}
+		int Start();
+		int Stop();
 
-		void RegisterServerPrompts(const std::vector<MCP::Prompt>& prompts, bool bPagination)
-		{
-			MCP::CMCPSession::GetInstance().SetServerPromptsPagination(bPagination);
-			MCP::CMCPSession::GetInstance().SetServerPrompts(prompts);
-		}
-
-		void RegisterToolsTasks(const std::string& strToolName, std::shared_ptr<MCP::ProcessCallToolRequest> spTask)
-		{
-			m_hashCallToolsTasks[strToolName] = spTask;
-		}
-
-		void RegisterReadResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessReadResourceRequest> spTask)
-		{
-			m_hashReadResourceTasks[strResourceUri] = spTask;
-		}
-
-		void RegisterSubscribeResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessSubscribeResourceRequest> spTask)
-		{
-			m_hashSubscribeResourceTasks[strResourceUri] = spTask;
-		}
-
-		void RegisterGetPromptTasks(const std::string& strPromptName, std::shared_ptr<MCP::ProcessGetPromptRequest> spTask)
-		{
-			m_hashGetPromptTasks[strPromptName] = spTask;
-		}
-
-		void RegisterCompleteTasks(const std::string& strTaskKey, std::shared_ptr<MCP::ProcessCompleteRequest> spTask)
-		{
-			m_hashCompleteTasks[strTaskKey] = spTask;
-		}
-
-		virtual int Initialize() = 0;
-		virtual int Uninitialize() = 0;
-
-		int Start()
-		{
-			if (!MCP::CMCPSession::GetInstance().GetTransport())
-			{
-				MCP::CMCPSession::GetInstance().SetTransport(std::make_shared<CStdioTransport>());
-			}
-
-			int iErrCode = MCP::CMCPSession::GetInstance().SetSupportedProtocolVersions(m_vecSupportedProtocolVersions);
-			if (ERRNO_OK != iErrCode)
-				return iErrCode;
-
-			MCP::CMCPSession::GetInstance().SetServerCapabilities(m_capabilities);
-			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);
-			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
-			MCP::CMCPSession::GetInstance().SetServerSubscribeResourceTasks(m_hashSubscribeResourceTasks);
-			MCP::CMCPSession::GetInstance().SetServerGetPromptTasks(m_hashGetPromptTasks);
-			MCP::CMCPSession::GetInstance().SetServerCompleteTasks(m_hashCompleteTasks);
-
-			iErrCode = MCP::CMCPSession::GetInstance().Ready();
-			if (ERRNO_OK != iErrCode)
-				return iErrCode;
-
-			return MCP::CMCPSession::GetInstance().Run();
-		}
-
-		int Stop()
-		{
-			return MCP::CMCPSession::GetInstance().Terminate();
-		}
-
-	private:
 	protected:
-		CMCPServer() = default;
-		~CMCPServer() = default;
+		CMCPServerBase() = default;
+		~CMCPServerBase() = default;
 
 		std::vector<std::string> m_vecSupportedProtocolVersions;
 		MCP::ServerCapabilities m_capabilities;
@@ -230,5 +87,25 @@ namespace MCP
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>> m_hashCompleteTasks;
+	};
+
+	template <class T>
+	class CMCPServer : public CMCPServerBase
+	{
+	public:
+		CMCPServer(const CMCPServer&) = delete;
+		CMCPServer& operator=(const CMCPServer&) = delete;
+
+		static CMCPServer& GetInstance()
+		{
+			return T::s_Instance;
+		}
+
+		virtual int Initialize() = 0;
+		virtual int Uninitialize() = 0;
+
+	protected:
+		CMCPServer() = default;
+		~CMCPServer() = default;
 	};
 }

@@ -105,7 +105,7 @@ namespace MCP
 			return false;
 		}
 
-		// Adapter handed to every dispatched task. It keeps the task layer free of
+	// Adapter handed to every dispatched task. It keeps the task layer free of
 		// the session singleton while the session stays the only owner of the
 		// transport, the registrations and the protocol registry.
 		class CSessionTaskServices final : public TaskServices
@@ -123,7 +123,7 @@ namespace MCP
 
 			void PrepareResult(const std::shared_ptr<MCP::Request>& spRequest, const std::shared_ptr<MCP::Response>& spResponse) override
 			{
-				m_session.PrepareResult(spRequest, spResponse);
+				SessionAccess::PrepareResult(m_session, spRequest, spResponse);
 			}
 
 			int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData) override
@@ -1304,6 +1304,12 @@ namespace MCP
 	void CMCPSession::SetTransport(const std::shared_ptr<CMCPTransport>& spTransport)
 	{
 		m_spTransport = spTransport;
+
+		// Transports that carry several clients over one channel report the gap
+		// between them. Binding the reset here keeps that knowledge in the session
+		// instead of making the transport call back into the singleton.
+		if (m_spTransport)
+			m_spTransport->SetOnClientDisconnected([this]() { ResetForNewClient(); });
 	}
 
 	void CMCPSession::SetServerInfo(const MCP::Implementation& impl)
@@ -1557,9 +1563,14 @@ namespace MCP
 		const bool bStatelessSupported = m_spTransport->SupportsStatelessProtocol();
 		const bool bExplicit = !vecVersions.empty();
 
-		std::vector<std::string> vecEffective = bExplicit
-			? vecVersions
-			: registry.GetSupportedVersions();
+		// The declaration is a set: callers may repeat a version, but it must only
+		// contribute one profile to the registry.
+		std::vector<std::string> vecEffective;
+		for (const auto& strVersion : (bExplicit ? vecVersions : registry.GetSupportedVersions()))
+		{
+			if (std::find(vecEffective.begin(), vecEffective.end(), strVersion) == vecEffective.end())
+				vecEffective.push_back(strVersion);
+		}
 
 		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
 		for (const auto& strVersion : vecEffective)

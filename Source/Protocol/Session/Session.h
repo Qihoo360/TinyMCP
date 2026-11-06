@@ -26,6 +26,7 @@ namespace MCP
 	struct ProtocolContext;
 	class CProtocolRegistry;
 	struct ProtocolRegistryAccess;
+	struct SessionAccess;
 	struct TaskServices;
 
 	class CMCPSession
@@ -54,8 +55,6 @@ namespace MCP
 		// the application declares, so callers never construct profiles.
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
-		int GetServerCacheTtlMs() const;
-		std::string GetServerCacheScope() const;
 		void SetServerInstructions(const std::string& strInstructions);
 		std::string GetServerInstructions() const;
 
@@ -95,6 +94,22 @@ namespace MCP
 		std::shared_ptr<CMCPTransport> GetTransport() const;
 		SessionState GetSessionState() const;
 
+		void SetLoggingLevel(const MCP::LoggingLevel& level);
+		MCP::LoggingLevel GetLoggingLevel() const;
+		int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+		int WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+
+	private:
+		CMCPSession();
+
+		// Internal collaborators. Applications go through CMCPServer; tests reach
+		// the read-only diagnostics through Internal/SessionAccess.h.
+		friend struct SessionAccess;
+
+		// The registry is derived from the version declaration, so it stays out of
+		// the public API. SDK code reaches it through ProtocolRegistryAccess.
+		friend struct ProtocolRegistryAccess;
+
 		// Read-only diagnostics. Only the legacy handshake path records message
 		// history, so a stateless request must not change these counters.
 		size_t GetMessageCount(MessageCategory eCategory) const;
@@ -104,10 +119,8 @@ namespace MCP
 		std::shared_ptr<MCP::ProcessRequest> GetServerGetPromptTask(const std::string& strPromptName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerCompleteTask(const std::string& strTaskKey);
 
-		void SetLoggingLevel(const MCP::LoggingLevel& level);
-		MCP::LoggingLevel GetLoggingLevel() const;
-		int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
-		int WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
+		int GetServerCacheTtlMs() const;
+		std::string GetServerCacheScope() const;
 
 		// Era resolution and result preparation shared by every task.
 		std::shared_ptr<const ProtocolContext> ResolveProtocolContext(const std::shared_ptr<MCP::Message>& spMsg) const;
@@ -120,13 +133,6 @@ namespace MCP
 		int SendPromptListChanged();
 		int SendResourceListChanged();
 		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri = std::string());
-
-	private:
-		CMCPSession();
-
-		// The registry is derived from the version declaration, so it stays out of
-		// the public API. SDK code reaches it through ProtocolRegistryAccess.
-		friend struct ProtocolRegistryAccess;
 		void SetProtocolRegistry(const CProtocolRegistry& registry);
 		const CProtocolRegistry& GetProtocolRegistry() const;
 

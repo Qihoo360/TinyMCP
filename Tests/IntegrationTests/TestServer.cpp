@@ -287,16 +287,16 @@ namespace MCP
 						{
 							Json::Value jUpdated(Json::objectValue);
 							jUpdated[MCP::MSG_KEY_URI] = CTestServer::RESOURCE_URI;
-							MCP::CMCPSession::GetInstance().SendSubscriptionNotification(
+							CTestServer::GetInstance().SendSubscriptionNotification(
 								MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdated, CTestServer::RESOURCE_URI);
 						}
 						else if ("notify_list_changed" == strAction)
 						{
-							MCP::CMCPSession::GetInstance().SendResourceListChanged();
+							CTestServer::GetInstance().SendResourceListChanged();
 						}
 						else
 						{
-							MCP::CMCPSession::GetInstance().SendPromptListChanged();
+							CTestServer::GetInstance().SendPromptListChanged();
 						}
 
 						auto spNotifyResult = BuildResult();
