@@ -196,15 +196,13 @@ TEST_CASE("unit.message")
 	CHECK(jModernCapabilities[MSG_KEY_COMPLETIONS].isObject());
 	CHECK(jModernCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
 
-	// Explicit passthrough mirrors the legacy initialize extension container.
-	capabilities.bExtensionPassthrough = true;
-	Json::Value jPassthroughCapabilities(Json::objectValue);
-	VersionExtrasAccess::Serialize(capabilities, jPassthroughCapabilities, ctxLegacy);
-	CHECK(jPassthroughCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
-	CHECK(!jPassthroughCapabilities.isMember(MSG_KEY_COMPLETIONS));
+	// A legacy handshake never advertises extensions, no matter what the
+	// application registered, and an empty extension map stays absent.
+	Json::Value jLegacyExtensions(Json::objectValue);
+	VersionExtrasAccess::Serialize(capabilities, jLegacyExtensions, ctxLegacy);
+	CHECK(!jLegacyExtensions.isMember(MSG_KEY_EXTENSIONS));
 
 	ServerCapabilities emptyCapabilities;
-	emptyCapabilities.bExtensionPassthrough = true;
 	Json::Value jEmptyCapabilities(Json::objectValue);
 	VersionExtrasAccess::Serialize(emptyCapabilities, jEmptyCapabilities, ctxModern);
 	CHECK(!jEmptyCapabilities.isMember(MSG_KEY_EXTENSIONS));

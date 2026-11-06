@@ -74,7 +74,7 @@ namespace MCP
 		}
 
 		Json::Value jMeta(Json::objectValue);
-		if (jResultMeta.isObject())
+		if (ctxProtocol.Supports(Feature_ResultMeta) && jResultMeta.isObject())
 		{
 			// Reserved keys are SDK owned: drop application supplied values so the
 			// existing result keys and the SDK serverInfo always win.
@@ -719,19 +719,8 @@ namespace MCP
 			jResult[MSG_KEY_INSTRUCTIONS] = jInstructions;
 		}
 
-		// discover always publishes its cache hint once the feature is enabled.
-		if (ctxProtocol.Supports(Feature_Discover))
-		{
-			if (iTtlMs >= 0)
-			{
-				Json::Value jTtlMs(iTtlMs);
-				jResult[MSG_KEY_TTL_MS] = jTtlMs;
-			}
-
-			if (!strCacheScope.empty())
-				jResult[MSG_KEY_CACHE_SCOPE] = strCacheScope;
-		}
-
+		// Cache hints and result meta are emitted by the shared result writer so
+		// discover follows the same caching feature gate as every other method.
 		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
 		jMsg[MSG_KEY_RESULT] = jResult;

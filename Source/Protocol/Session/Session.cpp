@@ -77,35 +77,7 @@ namespace MCP
 			return std::string();
 		}
 
-		// Request types served by the shared handshake switch in ProcessRequest.
-		// A handshake profile must declare the same method before it is served,
-		// otherwise a revision would silently accept a method it never defined.
-		bool IsLegacyDispatchableMessageType(MessageType eMessageType)
-		{
-			switch (eMessageType)
-			{
-			case MessageType_InitializeRequest:
-			case MessageType_ListToolsRequest:
-			case MessageType_CallToolRequest:
-			case MessageType_PingRequest:
-			case MessageType_ListResourcesRequest:
-			case MessageType_ReadResourceRequest:
-			case MessageType_SubscribeResourceRequest:
-			case MessageType_UnsubscribeResourceRequest:
-			case MessageType_ListResourceTemplatesRequest:
-			case MessageType_ListPromptsRequest:
-			case MessageType_GetPromptRequest:
-			case MessageType_CompleteRequest:
-			case MessageType_SetLevelRequest:
-				return true;
-			default:
-				break;
-			}
-
-			return false;
-		}
-
-	// Adapter handed to every dispatched task. It keeps the task layer free of
+		// Adapter handed to every dispatched task. It keeps the task layer free of
 		// the session singleton while the session stays the only owner of the
 		// transport, the registrations and the protocol registry.
 		class CSessionTaskServices final : public TaskServices
@@ -438,13 +410,10 @@ namespace MCP
 		}
 		m_hashMessage[MessageCategory_Request].push_back(spMsg);
 
-		// The handshake switch below serves every known handshake method. A
-		// profile that does not declare the method must not be served, so that
-		// an older or newer handshake revision stays inside its own surface.
-		// Unknown methods keep the historical behaviour handled by the switch
-		// default branch.
-		if (IsLegacyDispatchableMessageType(spRequest->eMessageType)
-			&& !MessageContextAccess::Get(*spRequest).SupportsMethod(spRequest->strMethod))
+		// Protocol.cpp owns the method surface of each revision; the switch below
+		// only implements it. A method the profile does not declare is refused
+		// here so every revision stays inside its own surface.
+		if (!MessageContextAccess::Get(*spRequest).SupportsMethod(spRequest->strMethod))
 		{
 			strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
 			iErrCode = ERRNO_METHOD_NOT_FOUND;
@@ -830,14 +799,10 @@ namespace MCP
 		} break;
 		default:
 		{
-			// A handshake client probing the stateless discovery method receives the
-			// standard method-not-found error instead of a silent drop.
-			if (spRequest->strMethod.compare(METHOD_SERVER_DISCOVER) == 0)
-			{
-				strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
-				iErrCode = ERRNO_METHOD_NOT_FOUND;
-			}
-
+			// The profile declared a method this build does not serve yet. Report
+			// it instead of returning an empty success.
+			strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
+			iErrCode = ERRNO_METHOD_NOT_FOUND;
 		} break;
 		}
 
@@ -1721,6 +1686,8 @@ namespace MCP
 		if (!spRequest || !spResponse)
 			return;
 
+		// Fill the version specific inputs exactly once. Response serialization is
+		// the only writer of the result, so each feature gate lives in one place.
 		MessageContextAccess::Copy(*spResponse, *spRequest);
 		spResponse->bMrtrRetry = spRequest->jInputResponses.isObject() || !spRequest->strRequestState.empty();
 
@@ -1831,6 +1798,14 @@ namespace MCP
 			case MessageType_SubscriptionsListenRequest:
 			{
 				return ProcessSubscriptionsListenRequest(spProtocolContext, spRequest);
+			} break;
+			case MessageType_PingRequest:
+			{
+				auto spTask = MakeProcessTask<ProcessPingRequest>(spRequest);
+				if (!spTask)
+					return ERRNO_INTERNAL_ERROR;
+
+				return spTask->Execute();
 			} break;
 			case MessageType_ListToolsRequest:
 			case MessageType_ListResourcesRequest:

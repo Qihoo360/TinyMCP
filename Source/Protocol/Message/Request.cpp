@@ -30,6 +30,12 @@ namespace MCP
 
 		Json::Value jMeta(Json::objectValue);
 		meta.DoSerialize(jMeta);
+
+		// Per-request logLevel only exists when the profile declares it; emitting
+		// it on a legacy request would introduce an undefined key.
+		if (!ctxProtocol.Supports(Feature_LogLevelInMeta))
+			jMeta.removeMember(META_KEY_LOG_LEVEL);
+
 		VersionExtrasAccess::Serialize(meta, jMeta, ctxProtocol);
 		if (progressToken.IsValid())
 			progressToken.DoSerialize(jMeta);

@@ -552,12 +552,14 @@ TEST_CASE("integration.modern_core")
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
 
-	// Legacy-only methods and unknown methods are not part of the profile.
+	// Legacy-only and unknown methods are not part of the profile; ping is.
 	CHECK(ExpectError(driver, MakeRequest(9, METHOD_LOGGING_SET_LEVEL,
 		MakeModernParams("2026-07-28", "{}", std::string(), "\"level\":\"info\"")),
 		9, ERRNO_METHOD_NOT_FOUND, jResponse));
-	CHECK(ExpectError(driver, MakeRequest(10, METHOD_PING,
-		MakeModernParams("2026-07-28", "{}")), 10, ERRNO_METHOD_NOT_FOUND, jResponse));
+	CHECK(ExpectResponse(driver, MakeRequest(10, METHOD_PING,
+		MakeModernParams("2026-07-28", "{}")), jResponse));
+	CHECK_EQ(10, jResponse[MSG_KEY_ID].asInt());
+	CHECK(!jResponse.isMember(MSG_KEY_ERROR));
 	CHECK(ExpectError(driver, MakeRequest(11, METHOD_RESOURCES_SUBSCRIBE,
 		MakeModernParams("2026-07-28", "{}", std::string(),
 			"\"uri\":\"" + std::string(CTestServer::RESOURCE_URI) + "\"")),

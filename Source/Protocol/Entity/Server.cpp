@@ -93,15 +93,11 @@ namespace MCP
 	{
 		for (const auto& pair : mapExtensions)
 			m_capabilities.mapExtensions[pair.first] = pair.second;
-
-		if (!mapExtensions.empty())
-			m_capabilities.bExtensionPassthrough = true;
 	}
 
 	void CMCPServerBase::RegisterServerAppsCapabilities()
 	{
 		m_capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
-		m_capabilities.bExtensionPassthrough = true;
 	}
 
 	void CMCPServerBase::RegisterServerInstructions(const std::string& strInstructions)

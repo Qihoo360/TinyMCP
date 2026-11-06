@@ -243,7 +243,6 @@ namespace MCP
 		MCP::Logging logging;
 		bool bCompletions{ false };
 		std::map<std::string, Json::Value> mapExtensions;
-		bool bExtensionPassthrough{ false };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

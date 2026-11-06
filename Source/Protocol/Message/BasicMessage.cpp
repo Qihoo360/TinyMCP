@@ -630,11 +630,10 @@ namespace MCP
 			jMsg[MSG_KEY_COMPLETIONS] = jCompletions;
 		}
 
-		// Handshake profiles only emit extensions when the application
-		// explicitly registered one (bExtensionPassthrough).
-		bool bWriteExtensions = !mapExtensions.empty()
-			&& (ctxProtocol.Supports(Feature_Extensions) || bExtensionPassthrough);
-		if (bWriteExtensions)
+		// Extensions belong to the stateless era: a handshake profile that does
+		// not declare the feature never publishes the container, even when the
+		// application registered an extension for other revisions.
+		if (!mapExtensions.empty() && ctxProtocol.Supports(Feature_Extensions))
 		{
 			Json::Value jExtensions(Json::objectValue);
 			for (const auto& pair : mapExtensions)
@@ -1079,7 +1078,7 @@ namespace MCP
 
 	int ToolResultContent::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
 	{
-		if (ctxProtocol.Supports(Feature_ContentToolUse) && !jStructuredContent.isNull())
+		if (ctxProtocol.Supports(Feature_StructuredContent) && !jStructuredContent.isNull())
 			jMsg[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
 
 		WriteContentVersionExtras(jMsg, ctxProtocol, jMeta, annotations);
@@ -1089,7 +1088,7 @@ namespace MCP
 
 	int ToolResultContent::DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol)
 	{
-		if (ctxProtocol.Supports(Feature_ContentToolUse)
+		if (ctxProtocol.Supports(Feature_StructuredContent)
 			&& jMsg.isMember(MSG_KEY_STRUCTURED_CONTENT))
 		{
 			jStructuredContent = jMsg[MSG_KEY_STRUCTURED_CONTENT];

@@ -7,6 +7,7 @@ namespace MCP
 		void AddModernMethodNames(ProtocolProfile& profile)
 		{
 			profile.setSupportedMethods.insert(METHOD_SERVER_DISCOVER);
+			profile.setSupportedMethods.insert(METHOD_PING);
 			profile.setSupportedMethods.insert(METHOD_SUBSCRIPTIONS_LISTEN);
 			profile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
 			profile.setSupportedMethods.insert(METHOD_TOOLS_CALL);

@@ -380,11 +380,11 @@ TEST_CASE("unit.capabilities")
 	if (!StartServer(driver))
 		return;
 
-	// Legacy initialize passes the explicit extensions through unchanged.
+	// Legacy initialize never advertises extensions: the container belongs to
+	// the stateless era profile even when the application registered one.
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeLegacyInitialize(40), jResponse));
-	CHECK(jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS]["example/echo"].isObject());
-	CHECK(jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS][EXTENSION_MCP_APPS_UI].isObject());
+	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_EXTENSIONS));
 	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_COMPLETIONS));
 	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 

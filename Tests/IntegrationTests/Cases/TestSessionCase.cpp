@@ -137,7 +137,9 @@ TEST_CASE("unit.session")
 
 	// Methods outside the stateless profile are not found.
 	CHECK(ExpectError(driver, MakeRequest(6, "acme/unknown", MakeModernMeta()), 6, ERRNO_METHOD_NOT_FOUND, jResponse));
-	CHECK(ExpectError(driver, MakeRequest(7, METHOD_PING, MakeModernMeta()), 7, ERRNO_METHOD_NOT_FOUND, jResponse));
+	CHECK(ExpectResponse(driver, MakeRequest(7, METHOD_PING, MakeModernMeta()), jResponse));
+	CHECK_EQ(7, jResponse[MSG_KEY_ID].asInt());
+	CHECK(!jResponse.isMember(MSG_KEY_ERROR));
 	CHECK(ExpectError(driver, MakeRequest(8, METHOD_RESOURCES_SUBSCRIBE, MakeModernParams("{\"uri\":\"test://echo/resource\"}")),
 		8, ERRNO_METHOD_NOT_FOUND, jResponse));
 
