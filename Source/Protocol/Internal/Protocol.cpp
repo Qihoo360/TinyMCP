@@ -85,7 +85,7 @@ namespace MCP
 
 	ProtocolContext::ProtocolContext()
 	{
-		const ProtocolProfile* pDefault =
+		std::shared_ptr<const ProtocolProfile> pDefault =
 			CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
 		if (pDefault)
 		{
@@ -122,7 +122,7 @@ namespace MCP
 		return pProfile != nullptr && pProfile->SupportsMethod(strMethod);
 	}
 
-	CProtocolRegistry::CProtocolRegistry(const std::vector<ProtocolProfile>& vecProfiles)
+	CProtocolRegistry::CProtocolRegistry(const std::vector<std::shared_ptr<const ProtocolProfile>>& vecProfiles)
 		: m_vecProfiles(vecProfiles)
 	{
 	}
@@ -130,38 +130,40 @@ namespace MCP
 	const CProtocolRegistry& CProtocolRegistry::GetGlobalRegistry()
 	{
 		static const CProtocolRegistry s_Registry(
-			std::vector<ProtocolProfile>{ MakeModernProfile(), MakeLegacyProfile() });
+			std::vector<std::shared_ptr<const ProtocolProfile>>{
+				std::make_shared<const ProtocolProfile>(MakeModernProfile()),
+				std::make_shared<const ProtocolProfile>(MakeLegacyProfile()) });
 		return s_Registry;
 	}
 
-	const ProtocolProfile* CProtocolRegistry::Find(const std::string& strVersion) const
+	std::shared_ptr<const ProtocolProfile> CProtocolRegistry::Find(const std::string& strVersion) const
 	{
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)
 		{
-			if (m_vecProfiles[i].strVersion == strVersion)
-				return &m_vecProfiles[i];
+			if (m_vecProfiles[i]->strVersion == strVersion)
+				return m_vecProfiles[i];
 		}
 
 		return nullptr;
 	}
 
-	const ProtocolProfile* CProtocolRegistry::GetDefaultHandshakeProfile() const
+	std::shared_ptr<const ProtocolProfile> CProtocolRegistry::GetDefaultHandshakeProfile() const
 	{
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)
 		{
-			if (m_vecProfiles[i].eEra == Era_Handshake)
-				return &m_vecProfiles[i];
+			if (m_vecProfiles[i]->eEra == Era_Handshake)
+				return m_vecProfiles[i];
 		}
 
 		return nullptr;
 	}
 
-	const ProtocolProfile* CProtocolRegistry::GetLatestStatelessProfile() const
+	std::shared_ptr<const ProtocolProfile> CProtocolRegistry::GetLatestStatelessProfile() const
 	{
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)
 		{
-			if (m_vecProfiles[i].eEra == Era_Stateless)
-				return &m_vecProfiles[i];
+			if (m_vecProfiles[i]->eEra == Era_Stateless)
+				return m_vecProfiles[i];
 		}
 
 		return nullptr;
@@ -172,7 +174,7 @@ namespace MCP
 		std::vector<std::string> vecVersions;
 		vecVersions.reserve(m_vecProfiles.size());
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)
-			vecVersions.push_back(m_vecProfiles[i].strVersion);
+			vecVersions.push_back(m_vecProfiles[i]->strVersion);
 
 		return vecVersions;
 	}
@@ -182,8 +184,8 @@ namespace MCP
 		std::vector<std::string> vecVersions;
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)
 		{
-			if (m_vecProfiles[i].eEra == eEra)
-				vecVersions.push_back(m_vecProfiles[i].strVersion);
+			if (m_vecProfiles[i]->eEra == eEra)
+				vecVersions.push_back(m_vecProfiles[i]->strVersion);
 		}
 
 		return vecVersions;

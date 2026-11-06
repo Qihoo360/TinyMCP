@@ -1,5 +1,6 @@
 ﻿#include "Response.h"
 #include "../Internal/Protocol.h"
+#include "../Internal/VersionExtras.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -194,8 +195,8 @@ namespace MCP
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
-		capabilities.DoSerializeVersionExtras(jResult[MSG_KEY_CAPABILITIES], ctxProtocol);
-		implServerInfo.DoSerializeVersionExtras(jResult[MSG_KEY_SERVER_INFO], ctxProtocol);
+		VersionExtrasAccess::Serialize(capabilities, jResult[MSG_KEY_CAPABILITIES], ctxProtocol);
+		VersionExtrasAccess::Serialize(implServerInfo, jResult[MSG_KEY_SERVER_INFO], ctxProtocol);
 
 		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 
@@ -237,7 +238,7 @@ namespace MCP
 			Json::Value jTool(Json::objectValue);
 			if (ERRNO_OK == tool.DoSerialize(jTool))
 			{
-				tool.DoSerializeVersionExtras(jTool, ctxProtocol);
+				VersionExtrasAccess::Serialize(tool, jTool, ctxProtocol);
 				jTools.append(jTool);
 			}
 		}
@@ -288,7 +289,7 @@ namespace MCP
 			Json::Value jTextContent(Json::objectValue);
 			if (ERRNO_OK == text.DoSerialize(jTextContent))
 			{
-				text.DoSerializeVersionExtras(jTextContent, ctxProtocol);
+				VersionExtrasAccess::Serialize(text, jTextContent, ctxProtocol);
 				jContent.append(jTextContent);
 			}
 		}
@@ -297,7 +298,7 @@ namespace MCP
 			Json::Value jImageContent(Json::objectValue);
 			if (ERRNO_OK == image.DoSerialize(jImageContent))
 			{
-				image.DoSerializeVersionExtras(jImageContent, ctxProtocol);
+				VersionExtrasAccess::Serialize(image, jImageContent, ctxProtocol);
 				jContent.append(jImageContent);
 			}
 		}
@@ -308,7 +309,7 @@ namespace MCP
 				Json::Value jAudioContent(Json::objectValue);
 				if (ERRNO_OK == audio.DoSerialize(jAudioContent))
 				{
-					audio.DoSerializeVersionExtras(jAudioContent, ctxProtocol);
+					VersionExtrasAccess::Serialize(audio, jAudioContent, ctxProtocol);
 					jContent.append(jAudioContent);
 				}
 			}
@@ -320,7 +321,7 @@ namespace MCP
 				Json::Value jResourceLink(Json::objectValue);
 				if (ERRNO_OK == link.DoSerialize(jResourceLink))
 				{
-					link.DoSerializeVersionExtras(jResourceLink, ctxProtocol);
+					VersionExtrasAccess::Serialize(link, jResourceLink, ctxProtocol);
 					jContent.append(jResourceLink);
 				}
 			}
@@ -330,7 +331,7 @@ namespace MCP
 			Json::Value jEmbedded(Json::objectValue);
 			if (ERRNO_OK == embedded.DoSerialize(jEmbedded))
 			{
-				embedded.DoSerializeVersionExtras(jEmbedded, ctxProtocol);
+				VersionExtrasAccess::Serialize(embedded, jEmbedded, ctxProtocol);
 				jContent.append(jEmbedded);
 			}
 		}
@@ -341,7 +342,7 @@ namespace MCP
 				Json::Value jToolUse(Json::objectValue);
 				if (ERRNO_OK == toolUse.DoSerialize(jToolUse))
 				{
-					toolUse.DoSerializeVersionExtras(jToolUse, ctxProtocol);
+					VersionExtrasAccess::Serialize(toolUse, jToolUse, ctxProtocol);
 					jContent.append(jToolUse);
 				}
 			}
@@ -350,7 +351,7 @@ namespace MCP
 				Json::Value jToolResult(Json::objectValue);
 				if (ERRNO_OK == toolResult.DoSerialize(jToolResult))
 				{
-					toolResult.DoSerializeVersionExtras(jToolResult, ctxProtocol);
+					VersionExtrasAccess::Serialize(toolResult, jToolResult, ctxProtocol);
 					jContent.append(jToolResult);
 				}
 			}
@@ -404,7 +405,7 @@ namespace MCP
 			Json::Value jResource(Json::objectValue);
 			if (ERRNO_OK == resource.DoSerialize(jResource))
 			{
-				resource.DoSerializeVersionExtras(jResource, ctxProtocol);
+				VersionExtrasAccess::Serialize(resource, jResource, ctxProtocol);
 				jResources.append(jResource);
 			}
 		}
@@ -452,7 +453,7 @@ namespace MCP
 			Json::Value jTextContent(Json::objectValue);
 			if (ERRNO_OK == text.DoSerialize(jTextContent))
 			{
-				text.DoSerializeVersionExtras(jTextContent, ctxProtocol);
+				VersionExtrasAccess::Serialize(text, jTextContent, ctxProtocol);
 				jContents.append(jTextContent);
 			}
 		}
@@ -461,7 +462,7 @@ namespace MCP
 			Json::Value jBlobContent(Json::objectValue);
 			if (ERRNO_OK == blob.DoSerialize(jBlobContent))
 			{
-				blob.DoSerializeVersionExtras(jBlobContent, ctxProtocol);
+				VersionExtrasAccess::Serialize(blob, jBlobContent, ctxProtocol);
 				jContents.append(jBlobContent);
 			}
 		}
@@ -503,7 +504,7 @@ namespace MCP
 			Json::Value jTemplate(Json::objectValue);
 			if (ERRNO_OK == template_.DoSerialize(jTemplate))
 			{
-				template_.DoSerializeVersionExtras(jTemplate, ctxProtocol);
+				VersionExtrasAccess::Serialize(template_, jTemplate, ctxProtocol);
 				jResourceTemplates.append(jTemplate);
 			}
 		}
@@ -551,7 +552,7 @@ namespace MCP
 			Json::Value jPrompt(Json::objectValue);
 			if (ERRNO_OK == prompt.DoSerialize(jPrompt))
 			{
-				prompt.DoSerializeVersionExtras(jPrompt, ctxProtocol);
+				VersionExtrasAccess::Serialize(prompt, jPrompt, ctxProtocol);
 				jPrompts.append(jPrompt);
 			}
 		}
@@ -605,7 +606,7 @@ namespace MCP
 			Json::Value jMessage(Json::objectValue);
 			if (ERRNO_OK == msg.DoSerialize(jMessage))
 			{
-				msg.DoSerializeVersionExtras(jMessage, ctxProtocol);
+				VersionExtrasAccess::Serialize(msg, jMessage, ctxProtocol);
 				jMessages.append(jMessage);
 			}
 		}
@@ -694,7 +695,7 @@ namespace MCP
 		Json::Value jCapabilities(Json::objectValue);
 		if (ERRNO_OK == capabilities.DoSerialize(jCapabilities))
 		{
-			capabilities.DoSerializeVersionExtras(jCapabilities, ctxProtocol);
+			VersionExtrasAccess::Serialize(capabilities, jCapabilities, ctxProtocol);
 
 			// The stateless era replaces legacy-only capability slots: completions
 			// are advertised on their own key and resource subscriptions move to

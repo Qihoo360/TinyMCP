@@ -6,6 +6,7 @@
 #include "../Public/PublicDef.h"
 
 #include <bitset>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -70,7 +71,11 @@ namespace MCP
 	struct ProtocolContext
 	{
 		std::string strVersion;
-		const ProtocolProfile* pProfile{ nullptr };
+
+		// Shared ownership: a session may rebuild its registry while messages and
+		// subscriptions still hold a context, so a pointer into the registry's
+		// storage would dangle. Profiles are immutable once published.
+		std::shared_ptr<const ProtocolProfile> pProfile;
 
 		ProtocolContext();
 		static ProtocolContext Invalid(const std::string& strRequested);
@@ -86,17 +91,17 @@ namespace MCP
 	class CProtocolRegistry
 	{
 	public:
-		explicit CProtocolRegistry(const std::vector<ProtocolProfile>& vecProfiles);
+		explicit CProtocolRegistry(const std::vector<std::shared_ptr<const ProtocolProfile>>& vecProfiles);
 
 		static const CProtocolRegistry& GetGlobalRegistry();
 
-		const ProtocolProfile* Find(const std::string& strVersion) const;
-		const ProtocolProfile* GetDefaultHandshakeProfile() const;
-		const ProtocolProfile* GetLatestStatelessProfile() const;
+		std::shared_ptr<const ProtocolProfile> Find(const std::string& strVersion) const;
+		std::shared_ptr<const ProtocolProfile> GetDefaultHandshakeProfile() const;
+		std::shared_ptr<const ProtocolProfile> GetLatestStatelessProfile() const;
 		std::vector<std::string> GetSupportedVersions() const;
 		std::vector<std::string> GetSupportedVersions(ProtocolEra eEra) const;
 
 	private:
-		std::vector<ProtocolProfile> m_vecProfiles;
+		std::vector<std::shared_ptr<const ProtocolProfile>> m_vecProfiles;
 	};
 }

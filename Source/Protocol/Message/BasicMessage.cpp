@@ -1,5 +1,6 @@
 ﻿#include "BasicMessage.h"
 #include "../Internal/Protocol.h"
+#include "../Internal/VersionExtras.h"
 #include <json/json.h>
 
 namespace MCP
@@ -1154,10 +1155,10 @@ namespace MCP
 			return ERRNO_OK;
 
 		if (textResource.IsValid())
-			return textResource.DoSerializeVersionExtras(jMsg[MSG_KEY_RESOURCE], ctxProtocol);
+			return VersionExtrasAccess::Serialize(textResource, jMsg[MSG_KEY_RESOURCE], ctxProtocol);
 
 		if (blobResource.IsValid())
-			return blobResource.DoSerializeVersionExtras(jMsg[MSG_KEY_RESOURCE], ctxProtocol);
+			return VersionExtrasAccess::Serialize(blobResource, jMsg[MSG_KEY_RESOURCE], ctxProtocol);
 
 		return ERRNO_OK;
 	}
@@ -1170,10 +1171,10 @@ namespace MCP
 			return ERRNO_OK;
 
 		if (textResource.IsValid())
-			return textResource.DoDeserializeVersionExtras(jMsg[MSG_KEY_RESOURCE], ctxProtocol);
+			return VersionExtrasAccess::Deserialize(textResource, jMsg[MSG_KEY_RESOURCE], ctxProtocol);
 
 		if (blobResource.IsValid())
-			return blobResource.DoDeserializeVersionExtras(jMsg[MSG_KEY_RESOURCE], ctxProtocol);
+			return VersionExtrasAccess::Deserialize(blobResource, jMsg[MSG_KEY_RESOURCE], ctxProtocol);
 
 		return ERRNO_OK;
 	}
@@ -1655,11 +1656,11 @@ namespace MCP
 
 		Json::Value& jContent = jMsg[MSG_KEY_CONTENT];
 		if (strContentType == CONST_TEXT)
-			return textContent.DoSerializeVersionExtras(jContent, ctxProtocol);
+			return VersionExtrasAccess::Serialize(textContent, jContent, ctxProtocol);
 		if (strContentType == CONST_IMAGE)
-			return imageContent.DoSerializeVersionExtras(jContent, ctxProtocol);
+			return VersionExtrasAccess::Serialize(imageContent, jContent, ctxProtocol);
 		if (strContentType == CONST_RESOURCE)
-			return embeddedResource.DoSerializeVersionExtras(jContent, ctxProtocol);
+			return VersionExtrasAccess::Serialize(embeddedResource, jContent, ctxProtocol);
 
 		return ERRNO_OK;
 	}
@@ -2000,7 +2001,7 @@ namespace MCP
 		if (!jMsg.isMember(META_KEY_CLIENT_INFO) || !jMsg[META_KEY_CLIENT_INFO].isObject())
 			return ERRNO_OK;
 
-		return clientInfo.DoSerializeVersionExtras(jMsg[META_KEY_CLIENT_INFO], ctxProtocol);
+		return VersionExtrasAccess::Serialize(clientInfo, jMsg[META_KEY_CLIENT_INFO], ctxProtocol);
 	}
 
 	int MetaObject::DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol)
@@ -2011,7 +2012,7 @@ namespace MCP
 		if (!jMsg.isMember(META_KEY_CLIENT_INFO) || !jMsg[META_KEY_CLIENT_INFO].isObject())
 			return ERRNO_OK;
 
-		return clientInfo.DoDeserializeVersionExtras(jMsg[META_KEY_CLIENT_INFO], ctxProtocol);
+		return VersionExtrasAccess::Deserialize(clientInfo, jMsg[META_KEY_CLIENT_INFO], ctxProtocol);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

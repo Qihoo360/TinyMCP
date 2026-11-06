@@ -8,6 +8,11 @@
 
 namespace MCP
 {
+	// Internal gateway for protocol revision serialization. Entity classes keep
+	// their version-adaptation helpers out of the public API; SDK code and tests
+	// reach them through this friend declared in Internal/VersionExtras.h.
+	struct VersionExtrasAccess;
+
 	// 2026-07-28 icon descriptor used by implementations and tools.
 	struct Icon : public MCP::Message
 	{
@@ -121,6 +126,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -238,6 +248,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
@@ -261,9 +276,15 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 
+	public:
 		// Writes _meta.ui.resourceUri used by the MCP Apps extension.
 		void SetUiResourceUri(const std::string& strUri);
 	};
@@ -284,6 +305,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -305,6 +331,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -326,6 +357,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -352,6 +388,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -374,6 +415,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -399,6 +445,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -419,6 +470,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -439,6 +495,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -460,6 +521,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -485,6 +551,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -509,6 +580,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -548,6 +624,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
@@ -569,6 +650,11 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
@@ -671,9 +757,15 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
+	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 
+	public:
 		static bool IsReservedKey(const std::string& strKey);
 	};
 

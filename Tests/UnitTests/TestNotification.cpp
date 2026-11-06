@@ -20,7 +20,7 @@ namespace
 	ProtocolContext MakeModernContext()
 	{
 		ProtocolContext ctxProtocol;
-		const ProtocolProfile* pProfile = CProtocolRegistry::GetGlobalRegistry().Find(PROTOCOL_VER_2026_07_28);
+		const std::shared_ptr<const ProtocolProfile> pProfile = CProtocolRegistry::GetGlobalRegistry().Find(PROTOCOL_VER_2026_07_28);
 		if (pProfile)
 		{
 			ctxProtocol.strVersion = pProfile->strVersion;

@@ -5,6 +5,7 @@
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
 #include <Internal/Protocol.h>
+#include <Internal/VersionExtras.h>
 #include <Session/Session.h>
 
 #include <map>
@@ -406,7 +407,7 @@ TEST_CASE("unit.capabilities")
 
 TEST_CASE("unit.apps")
 {
-	const ProtocolProfile* pModernProfile = CMCPSession::GetInstance().GetProtocolRegistry().Find(PROTOCOL_VER_2026_07_28);
+	const std::shared_ptr<const ProtocolProfile> pModernProfile = CMCPSession::GetInstance().GetProtocolRegistry().Find(PROTOCOL_VER_2026_07_28);
 	CHECK(pModernProfile != nullptr);
 	if (!pModernProfile)
 		return;
@@ -422,7 +423,7 @@ TEST_CASE("unit.apps")
 
 	Json::Value jTool;
 	CHECK_EQ(ERRNO_OK, tool.DoSerialize(jTool));
-	tool.DoSerializeVersionExtras(jTool, ctxModern);
+	VersionExtrasAccess::Serialize(tool, jTool, ctxModern);
 	CHECK_EQ(std::string("ui://echo/app.html"),
 		jTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
 
@@ -436,13 +437,13 @@ TEST_CASE("unit.apps")
 	CHECK_EQ(ERRNO_OK, resource.DoSerialize(jResource));
 	CHECK_EQ(std::string("ui://echo/app.html"), jResource[MSG_KEY_URI].asString());
 	CHECK_EQ(std::string("text/html;profile=mcp-app"), jResource[MSG_KEY_MIMETYPE].asString());
-	resource.DoSerializeVersionExtras(jResource, ctxModern);
+	VersionExtrasAccess::Serialize(resource, jResource, ctxModern);
 	CHECK(jResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS]["clipboardWrite"].asBool());
 
 	// Legacy serialization must not grow the UI metadata.
 	ProtocolContext ctxLegacy;
 	Json::Value jLegacyResource;
 	CHECK_EQ(ERRNO_OK, resource.DoSerialize(jLegacyResource));
-	resource.DoSerializeVersionExtras(jLegacyResource, ctxLegacy);
+	VersionExtrasAccess::Serialize(resource, jLegacyResource, ctxLegacy);
 	CHECK(!jLegacyResource.isMember(MSG_KEY_META));
 }

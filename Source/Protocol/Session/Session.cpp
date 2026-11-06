@@ -7,6 +7,7 @@
 #include "../Message/Response.h"
 #include "../Task/BasicTask.h"
 #include "../Internal/Protocol.h"
+#include "../Internal/VersionExtras.h"
 #include "../Internal/MessageAccess.h"
 
 #include <memory>
@@ -19,7 +20,7 @@ namespace MCP
 	{
 		const char* CONST_META_PREFIX = "io.modelcontextprotocol/";
 
-		ProtocolContext MakeProfileContext(const ProtocolProfile* pProfile)
+		ProtocolContext MakeProfileContext(const std::shared_ptr<const ProtocolProfile>& pProfile)
 		{
 			ProtocolContext ctxProtocol;
 			if (pProfile)
@@ -1410,11 +1411,6 @@ namespace MCP
 		return m_spTransport->Write(strNotification);
 	}
 
-	bool CMCPSession::IsKnownProtocolVersion(const std::string& strVersion) const
-	{
-		return nullptr != CProtocolRegistry::GetGlobalRegistry().Find(strVersion);
-	}
-
 	int CMCPSession::SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
 	{
 		if (!m_spTransport)
@@ -1428,10 +1424,10 @@ namespace MCP
 			? vecVersions
 			: registry.GetSupportedVersions();
 
-		std::vector<ProtocolProfile> vecProfiles;
+		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
 		for (const auto& strVersion : vecEffective)
 		{
-			const ProtocolProfile* pProfile = registry.Find(strVersion);
+			std::shared_ptr<const ProtocolProfile> pProfile = registry.Find(strVersion);
 			if (!pProfile)
 				return ERRNO_INVALID_PARAMS;
 
@@ -1446,7 +1442,9 @@ namespace MCP
 				continue;
 			}
 
-			vecProfiles.push_back(*pProfile);
+			// Reuse the registry-owned profile instead of copying it, so contexts
+			// handed out earlier keep a valid profile after this registry is reset.
+			vecProfiles.push_back(pProfile);
 		}
 
 		if (vecProfiles.empty())
@@ -1503,7 +1501,7 @@ namespace MCP
 			// registry serves it in the handshake era. A version the registry does
 			// not know falls back to the default handshake profile, which is the
 			// version the server reports back to the client.
-			const ProtocolProfile* pRequested = registry.Find(strRequestedVersion);
+			std::shared_ptr<const ProtocolProfile> pRequested = registry.Find(strRequestedVersion);
 			if (pRequested && Era_Handshake == pRequested->eEra)
 				return MakeProfileContext(pRequested);
 
@@ -1522,7 +1520,7 @@ namespace MCP
 		if (strVersion.empty())
 			return ProtocolContext::Invalid(strVersion);
 
-		const ProtocolProfile* pProfile = registry.Find(strVersion);
+		std::shared_ptr<const ProtocolProfile> pProfile = registry.Find(strVersion);
 		if (!pProfile)
 			return ProtocolContext::Invalid(strVersion);
 
@@ -1588,7 +1586,7 @@ namespace MCP
 
 		Json::Value jServerInfo(Json::objectValue);
 		m_serverInfo.DoSerialize(jServerInfo);
-		m_serverInfo.DoSerializeVersionExtras(jServerInfo, MessageContextAccess::Get(*spResponse));
+		VersionExtrasAccess::Serialize(m_serverInfo, jServerInfo, MessageContextAccess::Get(*spResponse));
 		spResponse->jServerInfo = jServerInfo;
 	}
 
@@ -1645,7 +1643,7 @@ namespace MCP
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
 
-		const ProtocolProfile* pProfile = ctxProtocol.pProfile;
+		std::shared_ptr<const ProtocolProfile> pProfile = ctxProtocol.pProfile;
 		if (!pProfile || !pProfile->SupportsMethod(spRequest->strMethod))
 			return SendErrorResponse(spRequest, ERRNO_METHOD_NOT_FOUND, ERROR_MESSAGE_METHOD_NOT_FOUND);
 

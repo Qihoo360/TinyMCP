@@ -1,5 +1,6 @@
 ﻿#include "Request.h"
 #include "../Internal/Protocol.h"
+#include "../Internal/VersionExtras.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -29,7 +30,7 @@ namespace MCP
 
 		Json::Value jMeta(Json::objectValue);
 		meta.DoSerialize(jMeta);
-		meta.DoSerializeVersionExtras(jMeta, ctxProtocol);
+		VersionExtrasAccess::Serialize(meta, jMeta, ctxProtocol);
 		if (progressToken.IsValid())
 			progressToken.DoSerialize(jMeta);
 
@@ -84,7 +85,7 @@ namespace MCP
 				auto& jMeta = jParams[MSG_KEY_META];
 				progressToken.DoDeserialize(jMeta);
 				meta.DoDeserialize(jMeta);
-				meta.DoDeserializeVersionExtras(jMeta, ctxProtocol);
+				VersionExtrasAccess::Deserialize(meta, jMeta, ctxProtocol);
 
 				// Per-request logLevel only exists when the profile declares it.
 				if (!ctxProtocol.Supports(Feature_LogLevelInMeta))

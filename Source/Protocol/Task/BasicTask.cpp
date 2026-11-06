@@ -297,7 +297,7 @@ namespace MCP
 		spInitializeResult->requestId = m_spRequest->requestId;
 		// The context carries the negotiated handshake revision, so the response
 		// reports the version the session will actually speak.
-		const ProtocolProfile* pHandshakeProfile = MessageContextAccess::Get(*m_spRequest).pProfile;
+		std::shared_ptr<const ProtocolProfile> pHandshakeProfile = MessageContextAccess::Get(*m_spRequest).pProfile;
 		if (!pHandshakeProfile)
 			pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
 		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;

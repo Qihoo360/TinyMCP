@@ -53,8 +53,8 @@ namespace MCP
 
 		// Declares the protocol revisions this server serves. Call it before
 		// Start(); leaving it unused means every revision the transport can
-		// carry. Revisions unknown to this SDK are rejected instead of being
-		// silently dropped, so a typo cannot narrow the surface by accident.
+		// carry. Only an empty declaration is rejected here: which revisions the
+		// SDK knows is a registry question, so Start() owns that decision.
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
 		{
 			if (vecVersions.empty())
@@ -63,9 +63,6 @@ namespace MCP
 			std::vector<std::string> vecSupported;
 			for (const auto& strVersion : vecVersions)
 			{
-				if (!MCP::CMCPSession::GetInstance().IsKnownProtocolVersion(strVersion))
-					return ERRNO_INVALID_PARAMS;
-
 				if (std::find(vecSupported.begin(), vecSupported.end(), strVersion) == vecSupported.end())
 					vecSupported.push_back(strVersion);
 			}

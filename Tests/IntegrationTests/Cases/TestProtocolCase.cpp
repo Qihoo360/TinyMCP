@@ -249,8 +249,8 @@ TEST_CASE("integration.version_fallback")
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
 	// A handshake-only registry rejects stateless requests and keeps the handshake.
-	CProtocolRegistry handshakeOnly(std::vector<ProtocolProfile>{
-		*CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile() });
+	CProtocolRegistry handshakeOnly(std::vector<std::shared_ptr<const ProtocolProfile>>{
+		CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile() });
 	CMCPSession::GetInstance().SetProtocolRegistry(handshakeOnly);
 	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().ResetForNewClient());
 
@@ -287,9 +287,9 @@ TEST_CASE("integration.version_extensibility")
 		fakeProfile.setSupportedMethods.insert(METHOD_SERVER_DISCOVER);
 		fakeProfile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
 
-		std::vector<ProtocolProfile> vecProfiles;
-		vecProfiles.push_back(fakeProfile);
-		vecProfiles.push_back(legacyProfile);
+		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(fakeProfile));
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
 		CMCPSession::GetInstance().SetProtocolRegistry(registry);
 
@@ -331,9 +331,9 @@ TEST_CASE("integration.version_extensibility")
 		plainProfile.eEra = Era_Stateless;
 		plainProfile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
 
-		std::vector<ProtocolProfile> vecProfiles;
-		vecProfiles.push_back(plainProfile);
-		vecProfiles.push_back(legacyProfile);
+		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(plainProfile));
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
 		CMCPSession::GetInstance().SetProtocolRegistry(registry);
 
@@ -357,9 +357,9 @@ TEST_CASE("integration.version_extensibility")
 		handshakeProfile.setSupportedMethods.insert(METHOD_INITIALIZE);
 		handshakeProfile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
 
-		std::vector<ProtocolProfile> vecProfiles;
-		vecProfiles.push_back(handshakeProfile);
-		vecProfiles.push_back(legacyProfile);
+		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(handshakeProfile));
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
 		CMCPSession::GetInstance().SetProtocolRegistry(registry);
 
@@ -397,9 +397,9 @@ TEST_CASE("integration.handshake_version_fallback")
 	ProtocolProfile handshakeProfile = defaultProfile;
 	handshakeProfile.strVersion = "2098-01-01";
 
-	std::vector<ProtocolProfile> vecProfiles;
-	vecProfiles.push_back(handshakeProfile);
-	vecProfiles.push_back(defaultProfile);
+	std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
+	vecProfiles.push_back(std::make_shared<const ProtocolProfile>(handshakeProfile));
+	vecProfiles.push_back(std::make_shared<const ProtocolProfile>(defaultProfile));
 	CProtocolRegistry registry(vecProfiles);
 	CMCPSession::GetInstance().SetProtocolRegistry(registry);
 
@@ -418,9 +418,12 @@ TEST_CASE("integration.supported_versions")
 {
 	CTestServer& server = CTestServer::s_Instance;
 
-	// Unknown revisions and an empty declaration are rejected.
-	CHECK_EQ(ERRNO_INVALID_PARAMS, server.SetSupportedProtocolVersions({ "2099-99-99" }));
+	// An empty declaration is rejected up front. Whether a revision is known is a
+	// registry question owned by the SDK, so it surfaces when Start() applies it.
 	CHECK_EQ(ERRNO_INVALID_PARAMS, server.SetSupportedProtocolVersions(std::vector<std::string>()));
+
+	CHECK_EQ(ERRNO_OK, server.SetSupportedProtocolVersions({ "2099-99-99" }));
+	CHECK_EQ(ERRNO_INVALID_PARAMS, server.Start());
 
 	// Duplicates collapse, and Start() applies exactly this declaration.
 	CHECK_EQ(ERRNO_OK, server.SetSupportedProtocolVersions({
@@ -567,7 +570,7 @@ TEST_CASE("integration.modern_core")
 			"\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},"
 			"\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}")),
 		jResponse));
-	const ProtocolProfile* pHandshakeProfile = CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
+	const std::shared_ptr<const ProtocolProfile> pHandshakeProfile = CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
 	CHECK(pHandshakeProfile != nullptr);
 	if (pHandshakeProfile)
 		CHECK_EQ(pHandshakeProfile->strVersion, jResponse[MSG_KEY_RESULT][MSG_KEY_PROTOCOL_VERSION].asString());

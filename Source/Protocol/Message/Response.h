@@ -33,6 +33,11 @@ namespace MCP
 		// Result caching only applies to the resource/tool/prompt read methods.
 		virtual bool IsCacheableResult() const;
 
+	protected:
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
 		// Writes every 2026-07-28 result level field behind its feature gate.
 		void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo) const;
 	};

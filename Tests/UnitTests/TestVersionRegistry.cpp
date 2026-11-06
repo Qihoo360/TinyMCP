@@ -13,7 +13,7 @@ TEST_CASE("unit.version_registry")
 	const CProtocolRegistry& registry = CProtocolRegistry::GetGlobalRegistry();
 
 	// Built-in legacy profile keeps handshake semantics and no modern features.
-	const ProtocolProfile* pLegacy = registry.Find(PROTOCOL_VER_2024_11_05);
+	const std::shared_ptr<const ProtocolProfile> pLegacy = registry.Find(PROTOCOL_VER_2024_11_05);
 	CHECK(pLegacy != nullptr);
 	if (pLegacy)
 	{
@@ -27,7 +27,7 @@ TEST_CASE("unit.version_registry")
 	}
 
 	// Built-in modern profile is stateless and enables every declared feature.
-	const ProtocolProfile* pModern = registry.Find(PROTOCOL_VER_2026_07_28);
+	const std::shared_ptr<const ProtocolProfile> pModern = registry.Find(PROTOCOL_VER_2026_07_28);
 	CHECK(pModern != nullptr);
 	if (pModern)
 	{
@@ -43,12 +43,12 @@ TEST_CASE("unit.version_registry")
 	CHECK(registry.Find("1900-01-01") == nullptr);
 
 	// Version priority follows the declaration order inside the registry.
-	const ProtocolProfile* pDefaultHandshake = registry.GetDefaultHandshakeProfile();
+	const std::shared_ptr<const ProtocolProfile> pDefaultHandshake = registry.GetDefaultHandshakeProfile();
 	CHECK(pDefaultHandshake != nullptr);
 	if (pDefaultHandshake)
 		CHECK_EQ(std::string(PROTOCOL_VER_2024_11_05), pDefaultHandshake->strVersion);
 
-	const ProtocolProfile* pLatestModern = registry.GetLatestStatelessProfile();
+	const std::shared_ptr<const ProtocolProfile> pLatestModern = registry.GetLatestStatelessProfile();
 	CHECK(pLatestModern != nullptr);
 	if (pLatestModern)
 		CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), pLatestModern->strVersion);
@@ -89,9 +89,11 @@ TEST_CASE("unit.version_registry")
 	profileOld.strVersion = "2098-01-01";
 	profileOld.eEra = Era_Handshake;
 
-	CProtocolRegistry syntheticRegistry(std::vector<ProtocolProfile>{ profileFuture, profileOld });
+	CProtocolRegistry syntheticRegistry(std::vector<std::shared_ptr<const ProtocolProfile>>{
+		std::make_shared<const ProtocolProfile>(profileFuture),
+		std::make_shared<const ProtocolProfile>(profileOld) });
 
-	const ProtocolProfile* pFuture = syntheticRegistry.Find("2099-01-01");
+	const std::shared_ptr<const ProtocolProfile> pFuture = syntheticRegistry.Find("2099-01-01");
 	CHECK(pFuture != nullptr);
 	if (pFuture)
 	{
@@ -101,7 +103,7 @@ TEST_CASE("unit.version_registry")
 		CHECK(pFuture->SupportsMethod(METHOD_SERVER_DISCOVER));
 	}
 
-	const ProtocolProfile* pOld = syntheticRegistry.GetDefaultHandshakeProfile();
+	const std::shared_ptr<const ProtocolProfile> pOld = syntheticRegistry.GetDefaultHandshakeProfile();
 	CHECK(pOld != nullptr);
 	if (pOld)
 		CHECK_EQ(std::string("2098-01-01"), pOld->strVersion);

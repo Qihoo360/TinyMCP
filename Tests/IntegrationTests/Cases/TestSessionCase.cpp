@@ -109,8 +109,8 @@ TEST_CASE("unit.session")
 
 	// A handshake-only registry rejects stateless requests with the
 	// unsupported-version error and reports what the server does serve.
-	CProtocolRegistry handshakeOnly(std::vector<ProtocolProfile>{
-		*CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile() });
+	CProtocolRegistry handshakeOnly(std::vector<std::shared_ptr<const ProtocolProfile>>{
+		CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile() });
 	CMCPSession::GetInstance().SetProtocolRegistry(handshakeOnly);
 	CHECK(ExpectError(driver, MakeRequest(3, METHOD_TOOLS_LIST, MakeModernMeta()), 3,
 		ERRNO_UNSUPPORTED_PROTOCOL_VERSION, jResponse));

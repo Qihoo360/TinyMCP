@@ -41,7 +41,7 @@ namespace
 TEST_CASE("unit.legacy_compat")
 {
 	// The global registry keeps 2024-11-05 as the handshake revision.
-	const ProtocolProfile* pHandshakeProfile = CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
+	const std::shared_ptr<const ProtocolProfile> pHandshakeProfile = CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
 	CHECK(pHandshakeProfile != nullptr);
 	if (pHandshakeProfile)
 		CHECK_EQ(std::string("2024-11-05"), pHandshakeProfile->strVersion);

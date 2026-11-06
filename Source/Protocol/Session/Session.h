@@ -50,7 +50,6 @@ namespace MCP
 
 		// Internal to the SDK. CMCPServer builds the registry from the versions
 		// the application declares, so callers never construct profiles.
-		bool IsKnownProtocolVersion(const std::string& strVersion) const;
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
 		void SetProtocolRegistry(const CProtocolRegistry& registry);
 		const CProtocolRegistry& GetProtocolRegistry() const;

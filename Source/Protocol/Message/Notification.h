@@ -24,6 +24,11 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
 
+	protected:
+		// Protocol revision adaptation is SDK internal; callers use
+		// VersionExtrasAccess in Internal/VersionExtras.h.
+		friend struct VersionExtrasAccess;
+
 		// Adds params._meta.subscriptionId when a subscription is attached.
 		void WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctxProtocol) const;
 	};

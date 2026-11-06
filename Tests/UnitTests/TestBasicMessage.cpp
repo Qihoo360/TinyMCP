@@ -3,6 +3,7 @@
 #include <Message/BasicMessage.h>
 #include <Public/PublicDef.h>
 #include <Internal/Protocol.h>
+#include <Internal/VersionExtras.h>
 
 #include <string>
 #include <vector>
@@ -19,7 +20,7 @@ namespace
 	ProtocolContext MakeModernContext()
 	{
 		ProtocolContext ctxProtocol;
-		const ProtocolProfile* pProfile = CProtocolRegistry::GetGlobalRegistry().Find(PROTOCOL_VER_2026_07_28);
+		const std::shared_ptr<const ProtocolProfile> pProfile = CProtocolRegistry::GetGlobalRegistry().Find(PROTOCOL_VER_2026_07_28);
 		if (pProfile)
 		{
 			ctxProtocol.strVersion = pProfile->strVersion;
@@ -55,7 +56,7 @@ TEST_CASE("unit.message")
 
 	Json::Value jLegacyImpl(Json::objectValue);
 	impl.DoSerialize(jLegacyImpl);
-	impl.DoSerializeVersionExtras(jLegacyImpl, ctxLegacy);
+	VersionExtrasAccess::Serialize(impl, jLegacyImpl, ctxLegacy);
 
 	Json::Value jExpectedImpl(Json::objectValue);
 	jExpectedImpl[MSG_KEY_NAME] = "tinymcp";
@@ -64,7 +65,7 @@ TEST_CASE("unit.message")
 
 	Json::Value jModernImpl(Json::objectValue);
 	impl.DoSerialize(jModernImpl);
-	impl.DoSerializeVersionExtras(jModernImpl, ctxModern);
+	VersionExtrasAccess::Serialize(impl, jModernImpl, ctxModern);
 	CHECK_EQ(std::string("Tiny MCP"), jModernImpl[MSG_KEY_TITLE].asString());
 	CHECK_EQ(std::string("Server SDK"), jModernImpl[MSG_KEY_DESCRIPTION].asString());
 	CHECK_EQ(std::string("https://example.com"), jModernImpl[MSG_KEY_WEBSITE_URL].asString());
@@ -81,7 +82,7 @@ TEST_CASE("unit.message")
 	implEmpty.strVersion = "1.0.0";
 	Json::Value jEmptyImpl(Json::objectValue);
 	implEmpty.DoSerialize(jEmptyImpl);
-	implEmpty.DoSerializeVersionExtras(jEmptyImpl, ctxModern);
+	VersionExtrasAccess::Serialize(implEmpty, jEmptyImpl, ctxModern);
 	CHECK(!jEmptyImpl.isMember(MSG_KEY_TITLE));
 	CHECK(!jEmptyImpl.isMember(MSG_KEY_DESCRIPTION));
 	CHECK(!jEmptyImpl.isMember(MSG_KEY_ICONS));
@@ -90,7 +91,7 @@ TEST_CASE("unit.message")
 	// Modern extras round trip.
 	Implementation implParsed;
 	CHECK_EQ(ERRNO_OK, implParsed.DoDeserialize(jModernImpl));
-	CHECK_EQ(ERRNO_OK, implParsed.DoDeserializeVersionExtras(jModernImpl, ctxModern));
+	CHECK_EQ(ERRNO_OK, VersionExtrasAccess::Deserialize(implParsed, jModernImpl, ctxModern));
 	CHECK_EQ(std::string("Tiny MCP"), implParsed.strTitle);
 	CHECK_EQ(static_cast<size_t>(1), implParsed.vecIcons.size());
 
@@ -111,7 +112,7 @@ TEST_CASE("unit.message")
 
 	Json::Value jLegacyTool(Json::objectValue);
 	tool.DoSerialize(jLegacyTool);
-	tool.DoSerializeVersionExtras(jLegacyTool, ctxLegacy);
+	VersionExtrasAccess::Serialize(tool, jLegacyTool, ctxLegacy);
 	CHECK(!jLegacyTool.isMember(MSG_KEY_TITLE));
 	CHECK(!jLegacyTool.isMember(MSG_KEY_ICONS));
 	CHECK(!jLegacyTool.isMember(MSG_KEY_OUTPUT_SCHEMA));
@@ -120,7 +121,7 @@ TEST_CASE("unit.message")
 
 	Json::Value jModernTool(Json::objectValue);
 	tool.DoSerialize(jModernTool);
-	tool.DoSerializeVersionExtras(jModernTool, ctxModern);
+	VersionExtrasAccess::Serialize(tool, jModernTool, ctxModern);
 	CHECK_EQ(std::string("Echo tool"), jModernTool[MSG_KEY_TITLE].asString());
 	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jModernTool[MSG_KEY_ICONS].size());
 	CHECK(jModernTool[MSG_KEY_OUTPUT_SCHEMA].isObject());
@@ -140,14 +141,14 @@ TEST_CASE("unit.message")
 
 	Json::Value jLegacyResource(Json::objectValue);
 	resource.DoSerialize(jLegacyResource);
-	resource.DoSerializeVersionExtras(jLegacyResource, ctxLegacy);
+	VersionExtrasAccess::Serialize(resource, jLegacyResource, ctxLegacy);
 	CHECK(!jLegacyResource.isMember(MSG_KEY_TITLE));
 	CHECK(!jLegacyResource.isMember(MSG_KEY_ANNOTATIONS));
 	CHECK(!jLegacyResource.isMember(MSG_KEY_META));
 
 	Json::Value jModernResource(Json::objectValue);
 	resource.DoSerialize(jModernResource);
-	resource.DoSerializeVersionExtras(jModernResource, ctxModern);
+	VersionExtrasAccess::Serialize(resource, jModernResource, ctxModern);
 	CHECK_EQ(std::string("Doc"), jModernResource[MSG_KEY_TITLE].asString());
 	CHECK_EQ(std::string(CONST_USER), jModernResource[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
 	CHECK_EQ(std::string("r-1"), jModernResource[MSG_KEY_META]["trace"].asString());
@@ -158,7 +159,7 @@ TEST_CASE("unit.message")
 	resourceTemplate.strTitle = "Doc template";
 	Json::Value jModernTemplate(Json::objectValue);
 	resourceTemplate.DoSerialize(jModernTemplate);
-	resourceTemplate.DoSerializeVersionExtras(jModernTemplate, ctxModern);
+	VersionExtrasAccess::Serialize(resourceTemplate, jModernTemplate, ctxModern);
 	CHECK_EQ(std::string("Doc template"), jModernTemplate[MSG_KEY_TITLE].asString());
 
 	Prompt prompt;
@@ -168,13 +169,13 @@ TEST_CASE("unit.message")
 	prompt.jMeta["trace"] = "p-1";
 	Json::Value jLegacyPrompt(Json::objectValue);
 	prompt.DoSerialize(jLegacyPrompt);
-	prompt.DoSerializeVersionExtras(jLegacyPrompt, ctxLegacy);
+	VersionExtrasAccess::Serialize(prompt, jLegacyPrompt, ctxLegacy);
 	CHECK(!jLegacyPrompt.isMember(MSG_KEY_TITLE));
 	CHECK(!jLegacyPrompt.isMember(MSG_KEY_META));
 
 	Json::Value jModernPrompt(Json::objectValue);
 	prompt.DoSerialize(jModernPrompt);
-	prompt.DoSerializeVersionExtras(jModernPrompt, ctxModern);
+	VersionExtrasAccess::Serialize(prompt, jModernPrompt, ctxModern);
 	CHECK_EQ(std::string("Summarize"), jModernPrompt[MSG_KEY_TITLE].asString());
 	CHECK_EQ(std::string("p-1"), jModernPrompt[MSG_KEY_META]["trace"].asString());
 
@@ -185,27 +186,27 @@ TEST_CASE("unit.message")
 
 	Json::Value jLegacyCapabilities(Json::objectValue);
 	capabilities.DoSerialize(jLegacyCapabilities);
-	capabilities.DoSerializeVersionExtras(jLegacyCapabilities, ctxLegacy);
+	VersionExtrasAccess::Serialize(capabilities, jLegacyCapabilities, ctxLegacy);
 	CHECK(!jLegacyCapabilities.isMember(MSG_KEY_COMPLETIONS));
 	CHECK(!jLegacyCapabilities.isMember(MSG_KEY_EXTENSIONS));
 
 	Json::Value jModernCapabilities(Json::objectValue);
 	capabilities.DoSerialize(jModernCapabilities);
-	capabilities.DoSerializeVersionExtras(jModernCapabilities, ctxModern);
+	VersionExtrasAccess::Serialize(capabilities, jModernCapabilities, ctxModern);
 	CHECK(jModernCapabilities[MSG_KEY_COMPLETIONS].isObject());
 	CHECK(jModernCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
 
 	// Explicit passthrough mirrors the legacy initialize extension container.
 	capabilities.bExtensionPassthrough = true;
 	Json::Value jPassthroughCapabilities(Json::objectValue);
-	capabilities.DoSerializeVersionExtras(jPassthroughCapabilities, ctxLegacy);
+	VersionExtrasAccess::Serialize(capabilities, jPassthroughCapabilities, ctxLegacy);
 	CHECK(jPassthroughCapabilities[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
 	CHECK(!jPassthroughCapabilities.isMember(MSG_KEY_COMPLETIONS));
 
 	ServerCapabilities emptyCapabilities;
 	emptyCapabilities.bExtensionPassthrough = true;
 	Json::Value jEmptyCapabilities(Json::objectValue);
-	emptyCapabilities.DoSerializeVersionExtras(jEmptyCapabilities, ctxModern);
+	VersionExtrasAccess::Serialize(emptyCapabilities, jEmptyCapabilities, ctxModern);
 	CHECK(!jEmptyCapabilities.isMember(MSG_KEY_EXTENSIONS));
 
 	// Capability deserialization keeps unknown extension payloads intact.
@@ -266,13 +267,13 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jLegacyText(Json::objectValue);
 	text.DoSerialize(jLegacyText);
-	text.DoSerializeVersionExtras(jLegacyText, ctxLegacy);
+	VersionExtrasAccess::Serialize(text, jLegacyText, ctxLegacy);
 	CHECK(!jLegacyText.isMember(MSG_KEY_ANNOTATIONS));
 	CHECK(!jLegacyText.isMember(MSG_KEY_META));
 
 	Json::Value jModernText(Json::objectValue);
 	text.DoSerialize(jModernText);
-	text.DoSerializeVersionExtras(jModernText, ctxModern);
+	VersionExtrasAccess::Serialize(text, jModernText, ctxModern);
 	CHECK_EQ(std::string(CONST_USER), jModernText[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
 	CHECK(jModernText[MSG_KEY_ANNOTATIONS][MSG_KEY_PRIORITY].asDouble() > 0.49);
 	CHECK_EQ(std::string("2026-01-01T00:00:00Z"),
@@ -384,14 +385,14 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jLegacyToolResult(Json::objectValue);
 	toolResult.DoSerialize(jLegacyToolResult);
-	toolResult.DoSerializeVersionExtras(jLegacyToolResult, ctxLegacy);
+	VersionExtrasAccess::Serialize(toolResult, jLegacyToolResult, ctxLegacy);
 	CHECK(!jLegacyToolResult.isMember(MSG_KEY_STRUCTURED_CONTENT));
 	CHECK(!jLegacyToolResult.isMember(MSG_KEY_META));
 	CHECK(jLegacyToolResult.isMember(MSG_KEY_IS_ERROR));
 
 	Json::Value jModernToolResult(Json::objectValue);
 	toolResult.DoSerialize(jModernToolResult);
-	toolResult.DoSerializeVersionExtras(jModernToolResult, ctxModern);
+	VersionExtrasAccess::Serialize(toolResult, jModernToolResult, ctxModern);
 	CHECK_EQ(std::string(CONST_TOOL_RESULT), jModernToolResult[MSG_KEY_TYPE].asString());
 	CHECK_EQ(std::string("call-1"), jModernToolResult[MSG_KEY_TOOL_USE_ID].asString());
 	CHECK_EQ(static_cast<Json::ArrayIndex>(1), jModernToolResult[MSG_KEY_CONTENT].size());
@@ -406,12 +407,12 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jLegacyTextResource(Json::objectValue);
 	textResource.DoSerialize(jLegacyTextResource);
-	textResource.DoSerializeVersionExtras(jLegacyTextResource, ctxLegacy);
+	VersionExtrasAccess::Serialize(textResource, jLegacyTextResource, ctxLegacy);
 	CHECK(!jLegacyTextResource.isMember(MSG_KEY_META));
 
 	Json::Value jModernTextResource(Json::objectValue);
 	textResource.DoSerialize(jModernTextResource);
-	textResource.DoSerializeVersionExtras(jModernTextResource, ctxModern);
+	VersionExtrasAccess::Serialize(textResource, jModernTextResource, ctxModern);
 	CHECK_EQ(std::string("v"), jModernTextResource[MSG_KEY_META]["k"].asString());
 
 	BlobResourceContents blobResource;
@@ -422,12 +423,12 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jLegacyBlobResource(Json::objectValue);
 	blobResource.DoSerialize(jLegacyBlobResource);
-	blobResource.DoSerializeVersionExtras(jLegacyBlobResource, ctxLegacy);
+	VersionExtrasAccess::Serialize(blobResource, jLegacyBlobResource, ctxLegacy);
 	CHECK(!jLegacyBlobResource.isMember(MSG_KEY_META));
 
 	Json::Value jModernBlobResource(Json::objectValue);
 	blobResource.DoSerialize(jModernBlobResource);
-	blobResource.DoSerializeVersionExtras(jModernBlobResource, ctxModern);
+	VersionExtrasAccess::Serialize(blobResource, jModernBlobResource, ctxModern);
 	CHECK_EQ(std::string("v"), jModernBlobResource[MSG_KEY_META]["k"].asString());
 
 	// Embedded resources propagate extras into the nested resource object.
@@ -438,12 +439,12 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jLegacyEmbedded(Json::objectValue);
 	embedded.DoSerialize(jLegacyEmbedded);
-	embedded.DoSerializeVersionExtras(jLegacyEmbedded, ctxLegacy);
+	VersionExtrasAccess::Serialize(embedded, jLegacyEmbedded, ctxLegacy);
 	CHECK(!jLegacyEmbedded[MSG_KEY_RESOURCE].isMember(MSG_KEY_META));
 
 	Json::Value jModernEmbedded(Json::objectValue);
 	embedded.DoSerialize(jModernEmbedded);
-	embedded.DoSerializeVersionExtras(jModernEmbedded, ctxModern);
+	VersionExtrasAccess::Serialize(embedded, jModernEmbedded, ctxModern);
 	CHECK_EQ(std::string("v"), jModernEmbedded[MSG_KEY_RESOURCE][MSG_KEY_META]["k"].asString());
 
 	// Prompt messages forward content extras to the nested content object.
@@ -454,7 +455,7 @@ TEST_CASE("unit.content_blocks")
 
 	Json::Value jPromptMessage(Json::objectValue);
 	promptMessage.DoSerialize(jPromptMessage);
-	promptMessage.DoSerializeVersionExtras(jPromptMessage, ctxModern);
+	VersionExtrasAccess::Serialize(promptMessage, jPromptMessage, ctxModern);
 	CHECK_EQ(std::string("abc"), jPromptMessage[MSG_KEY_CONTENT][MSG_KEY_META]["trace"].asString());
 }
 
@@ -490,7 +491,7 @@ TEST_CASE("unit.meta")
 
 	MetaObject meta;
 	CHECK_EQ(ERRNO_OK, meta.DoDeserialize(jMeta));
-	CHECK_EQ(ERRNO_OK, meta.DoDeserializeVersionExtras(jMeta, ctxModern));
+	CHECK_EQ(ERRNO_OK, VersionExtrasAccess::Deserialize(meta, jMeta, ctxModern));
 	CHECK(meta.HasValue());
 	CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), meta.strProtocolVersion);
 	CHECK_EQ(std::string("test-client"), meta.clientInfo.strName);
@@ -513,7 +514,7 @@ TEST_CASE("unit.meta")
 	Json::Value jMetaOut(Json::objectValue);
 	CHECK_EQ(ERRNO_OK, meta.DoSerialize(jMetaOut));
 	CHECK(!jMetaOut[META_KEY_CLIENT_INFO].isMember(MSG_KEY_TITLE));
-	meta.DoSerializeVersionExtras(jMetaOut, ctxModern);
+	VersionExtrasAccess::Serialize(meta, jMetaOut, ctxModern);
 	CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), jMetaOut[META_KEY_PROTOCOL_VERSION].asString());
 	CHECK_EQ(std::string("test-client"), jMetaOut[META_KEY_CLIENT_INFO][MSG_KEY_NAME].asString());
 	CHECK_EQ(std::string("Test client"), jMetaOut[META_KEY_CLIENT_INFO][MSG_KEY_TITLE].asString());
