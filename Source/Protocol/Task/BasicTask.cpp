@@ -1,6 +1,7 @@
 ﻿#include "BasicTask.h"
 #include "../Session/Session.h"
 #include "../Message/Notification.h"
+#include "../Internal/MessageAccess.h"
 
 namespace MCP
 {
@@ -51,7 +52,7 @@ namespace MCP
 
 		// Stateless requests carry their own threshold; without an explicit
 		// logLevel the request must not receive notifications/message at all.
-		if (m_spRequest && m_spRequest->ctxProtocol.Supports(Feature_LogLevelInMeta))
+		if (m_spRequest && MessageContextAccess::Get(*m_spRequest).Supports(Feature_LogLevelInMeta))
 		{
 			if (m_spRequest->meta.strLogLevel.empty())
 				return ERRNO_OK;
@@ -83,7 +84,7 @@ namespace MCP
 
 	int ProcessRequest::ValidateInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState) const
 	{
-		if (!m_spRequest || !m_spRequest->ctxProtocol.Supports(Feature_Mrtr))
+		if (!m_spRequest || !MessageContextAccess::Get(*m_spRequest).Supports(Feature_Mrtr))
 			return ERRNO_INVALID_PARAMS;
 
 		bool bHasInputRequests = jInputRequests.isObject() && !jInputRequests.empty();
@@ -156,7 +157,7 @@ namespace MCP
 
 	int ProcessRequest::SendMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
-		if (!m_spRequest || !m_spRequest->ctxProtocol.Supports(Feature_Mrtr))
+		if (!m_spRequest || !MessageContextAccess::Get(*m_spRequest).Supports(Feature_Mrtr))
 			return ERRNO_INVALID_PARAMS;
 
 		if (!jRequiredCapabilities.isObject() || jRequiredCapabilities.empty())
@@ -296,7 +297,7 @@ namespace MCP
 		spInitializeResult->requestId = m_spRequest->requestId;
 		// The context carries the negotiated handshake revision, so the response
 		// reports the version the session will actually speak.
-		const ProtocolProfile* pHandshakeProfile = m_spRequest->ctxProtocol.pProfile;
+		const ProtocolProfile* pHandshakeProfile = MessageContextAccess::Get(*m_spRequest).pProfile;
 		if (!pHandshakeProfile)
 			pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
 		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;
@@ -369,10 +370,10 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
-					if (spListToolRequest->ctxProtocol.IsStateless())
+					if (MessageContextAccess::Get(*spListToolRequest).IsStateless())
 					{
 						spErrorResponse->requestId = spListToolRequest->requestId;
-						spErrorResponse->ctxProtocol = spListToolRequest->ctxProtocol;
+						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListToolRequest));
 					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
@@ -583,10 +584,10 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
-					if (spListResourcesRequest->ctxProtocol.IsStateless())
+					if (MessageContextAccess::Get(*spListResourcesRequest).IsStateless())
 					{
 						spErrorResponse->requestId = spListResourcesRequest->requestId;
-						spErrorResponse->ctxProtocol = spListResourcesRequest->ctxProtocol;
+						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListResourcesRequest));
 					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
@@ -719,8 +720,8 @@ namespace MCP
 	int ProcessReadResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
 		// The error code for a missing resource is owned by the active profile.
-		if (ERRNO_RESOURCE_NOT_FOUND == iCode && m_spRequest && m_spRequest->ctxProtocol.pProfile)
-			iCode = m_spRequest->ctxProtocol.pProfile->iResourceNotFoundCode;
+		if (ERRNO_RESOURCE_NOT_FOUND == iCode && m_spRequest && MessageContextAccess::Get(*m_spRequest).pProfile)
+			iCode = MessageContextAccess::Get(*m_spRequest).pProfile->iResourceNotFoundCode;
 
 		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
 		if (spTask)
@@ -976,10 +977,10 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
-					if (spListResourceTemplatesRequest->ctxProtocol.IsStateless())
+					if (MessageContextAccess::Get(*spListResourceTemplatesRequest).IsStateless())
 					{
 						spErrorResponse->requestId = spListResourceTemplatesRequest->requestId;
-						spErrorResponse->ctxProtocol = spListResourceTemplatesRequest->ctxProtocol;
+						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListResourceTemplatesRequest));
 					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;
@@ -1094,10 +1095,10 @@ namespace MCP
 						return ERRNO_INTERNAL_ERROR;
 					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
 					spErrorResponse->strMesage = "invalid params";
-					if (spListPromptsRequest->ctxProtocol.IsStateless())
+					if (MessageContextAccess::Get(*spListPromptsRequest).IsStateless())
 					{
 						spErrorResponse->requestId = spListPromptsRequest->requestId;
-						spErrorResponse->ctxProtocol = spListPromptsRequest->ctxProtocol;
+						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListPromptsRequest));
 					}
 					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 						return ERRNO_INTERNAL_ERROR;

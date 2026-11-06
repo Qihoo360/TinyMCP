@@ -1,8 +1,20 @@
 ﻿#include "BasicMessage.h"
+#include "../Internal/Protocol.h"
 #include <json/json.h>
 
 namespace MCP
 {
+	const ProtocolContext& Message::GetProtocolContext() const
+	{
+		static const ProtocolContext s_DefaultContext;
+		return m_spProtocolContext ? *m_spProtocolContext : s_DefaultContext;
+	}
+
+	void Message::SetProtocolContext(const ProtocolContext& ctxProtocol)
+	{
+		m_spProtocolContext = std::make_shared<const ProtocolContext>(ctxProtocol);
+	}
+
 	namespace
 	{
 		void WriteStringIfNotEmpty(Json::Value& jObj, const char* lpcszKey, const std::string& strValue)

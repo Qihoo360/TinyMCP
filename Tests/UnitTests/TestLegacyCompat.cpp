@@ -3,6 +3,8 @@
 #include <Message/Request.h>
 #include <Message/Response.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
+#include <Internal/MessageAccess.h>
 
 #include <json/writer.h>
 #include <string>
@@ -121,7 +123,7 @@ TEST_CASE("unit.legacy_compat")
 	CallToolRequest callToolRequest(false);
 	CHECK_EQ(ERRNO_OK, callToolRequest.DoDeserialize(jRequest));
 	CHECK_EQ(std::string("echo"), callToolRequest.strName);
-	CHECK(callToolRequest.ctxProtocol.IsValid());
-	CHECK(!callToolRequest.ctxProtocol.IsStateless());
-	CHECK_EQ(std::string("2024-11-05"), callToolRequest.ctxProtocol.strVersion);
+	CHECK(MessageContextAccess::Get(callToolRequest).IsValid());
+	CHECK(!MessageContextAccess::Get(callToolRequest).IsStateless());
+	CHECK_EQ(std::string("2024-11-05"), MessageContextAccess::Get(callToolRequest).strVersion);
 }

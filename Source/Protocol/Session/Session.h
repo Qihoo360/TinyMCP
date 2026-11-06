@@ -33,7 +33,7 @@ namespace MCP
 			SessionState_Shut,
 		};
 
-		~CMCPSession() = default;
+		~CMCPSession();
 		CMCPSession(const CMCPSession&) = delete;
 		CMCPSession& operator=(const CMCPSession&) = delete;
 		static CMCPSession& GetInstance();
@@ -45,6 +45,8 @@ namespace MCP
 
 		// Internal to the SDK. CMCPServer builds the registry from the versions
 		// the application declares, so callers never construct profiles.
+		bool IsKnownProtocolVersion(const std::string& strVersion) const;
+		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
 		void SetProtocolRegistry(const CProtocolRegistry& registry);
 		const CProtocolRegistry& GetProtocolRegistry() const;
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
@@ -116,12 +118,12 @@ namespace MCP
 		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri = std::string());
 
 	private:
-		CMCPSession() = default;
+		CMCPSession();
 
 		struct SubscriptionState
 		{
 			MCP::RequestId requestId;
-			ProtocolContext ctxProtocol;
+			std::shared_ptr<const ProtocolContext> spProtocolContext;
 			std::shared_ptr<MCP::Request> spListenRequest;
 			bool bToolsListChanged{ false };
 			bool bPromptsListChanged{ false };
@@ -163,7 +165,7 @@ namespace MCP
 		SessionState m_eSessionState{ SessionState_Original };
 		std::shared_ptr<CMCPTransport> m_spTransport;
 
-		CProtocolRegistry m_registry{ CProtocolRegistry::GetGlobalRegistry() };
+		std::unique_ptr<CProtocolRegistry> m_upRegistry;
 		int m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
 		std::string m_strServerInstructions;

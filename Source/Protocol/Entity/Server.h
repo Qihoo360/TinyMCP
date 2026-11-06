@@ -63,7 +63,7 @@ namespace MCP
 			std::vector<std::string> vecSupported;
 			for (const auto& strVersion : vecVersions)
 			{
-				if (!MCP::CProtocolRegistry::GetGlobalRegistry().Find(strVersion))
+				if (!MCP::CMCPSession::GetInstance().IsKnownProtocolVersion(strVersion))
 					return ERRNO_INVALID_PARAMS;
 
 				if (std::find(vecSupported.begin(), vecSupported.end(), strVersion) == vecSupported.end())
@@ -198,7 +198,7 @@ namespace MCP
 				MCP::CMCPSession::GetInstance().SetTransport(std::make_shared<CStdioTransport>());
 			}
 
-			int iErrCode = ApplySupportedProtocolVersions();
+			int iErrCode = MCP::CMCPSession::GetInstance().SetSupportedProtocolVersions(m_vecSupportedProtocolVersions);
 			if (ERRNO_OK != iErrCode)
 				return iErrCode;
 
@@ -222,48 +222,6 @@ namespace MCP
 		}
 
 	private:
-		// Translates the declared revision list into the internal registry. An
-		// explicitly requested stateless revision over a handshake-only transport
-		// is a configuration error; the implicit default is filtered instead.
-		int ApplySupportedProtocolVersions()
-		{
-			std::shared_ptr<MCP::CMCPTransport> spTransport = MCP::CMCPSession::GetInstance().GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-
-			const MCP::CProtocolRegistry& registry = MCP::CProtocolRegistry::GetGlobalRegistry();
-			const bool bStatelessSupported = spTransport->SupportsStatelessProtocol();
-			const bool bExplicit = !m_vecSupportedProtocolVersions.empty();
-
-			std::vector<std::string> vecVersions = bExplicit
-				? m_vecSupportedProtocolVersions
-				: registry.GetSupportedVersions();
-
-			std::vector<MCP::ProtocolProfile> vecProfiles;
-			for (const auto& strVersion : vecVersions)
-			{
-				const MCP::ProtocolProfile* pProfile = registry.Find(strVersion);
-				if (!pProfile)
-					return ERRNO_INVALID_PARAMS;
-
-				if (!bStatelessSupported && MCP::Era_Stateless == pProfile->eEra)
-				{
-					if (bExplicit)
-						return ERRNO_INVALID_PARAMS;
-
-					continue;
-				}
-
-				vecProfiles.push_back(*pProfile);
-			}
-
-			if (vecProfiles.empty())
-				return ERRNO_INVALID_PARAMS;
-
-			MCP::CMCPSession::GetInstance().SetProtocolRegistry(MCP::CProtocolRegistry(vecProfiles));
-			return ERRNO_OK;
-		}
-
 	protected:
 		CMCPServer() = default;
 		~CMCPServer() = default;

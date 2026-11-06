@@ -24,6 +24,9 @@
     <Filter Include="MCP\Protocol\Message">
       <UniqueIdentifier>{3938d98a-0fdf-4046-8e10-0d6a0e8bdaf7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="MCP\Protocol\Internal">
+      <UniqueIdentifier>{a1c6d9f2-33b4-4a71-9d2e-5f8b7c4102de}</UniqueIdentifier>
+    </Filter>
     <Filter Include="MCP\Protocol\Public">
       <UniqueIdentifier>{79ce408a-a692-43ae-b298-61c0a491a0b7}</UniqueIdentifier>
     </Filter>
@@ -92,8 +95,8 @@
     <ClCompile Include="..\..\..\..\Source\Protocol\Message\Response.cpp">
       <Filter>MCP\Protocol\Message</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\Source\Protocol\Public\PublicDef.cpp">
-      <Filter>MCP\Protocol\Public</Filter>
+    <ClCompile Include="..\..\..\..\Source\Protocol\Internal\Protocol.cpp">
+      <Filter>MCP\Protocol\Internal</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\Source\Protocol\Session\Session.cpp">
       <Filter>MCP\Protocol\Session</Filter>
@@ -168,6 +171,12 @@
     </ClInclude>
     <ClInclude Include="..\..\..\..\Source\Protocol\Message\Response.h">
       <Filter>MCP\Protocol\Message</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\MessageAccess.h">
+      <Filter>MCP\Protocol\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\Protocol.h">
+      <Filter>MCP\Protocol\Internal</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\Source\Protocol\Public\PublicDef.h">
       <Filter>MCP\Protocol\Public</Filter>

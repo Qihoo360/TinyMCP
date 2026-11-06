@@ -1,4 +1,5 @@
 ﻿#include "Notification.h"
+#include "../Internal/Protocol.h"
 #include <string>
 
 namespace MCP
@@ -80,7 +81,7 @@ namespace MCP
 
 		Json::Value jParams(Json::objectValue);
 		requestId.DoSerialize(jParams);
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;
@@ -128,7 +129,7 @@ namespace MCP
 			Json::Value jTotal(iTotal);
 			jParams[MSG_KEY_TOTAL] = jTotal;
 		}
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		jMsg[MSG_KEY_PARAMS] = jParams;
 		
 		return ERRNO_OK;
@@ -188,7 +189,7 @@ namespace MCP
 			return iErrCode;
 
 		Json::Value jParams(Json::objectValue);
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		if (!jParams.empty())
 			jMsg[MSG_KEY_PARAMS] = jParams;
 
@@ -206,7 +207,7 @@ namespace MCP
 		Json::Value jParams(Json::objectValue);
 		Json::Value jUri(strUri);
 		jParams[MSG_KEY_URI] = jUri;
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;
@@ -262,7 +263,7 @@ namespace MCP
 			return iErrCode;
 
 		Json::Value jParams(Json::objectValue);
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		if (!jParams.empty())
 			jMsg[MSG_KEY_PARAMS] = jParams;
 
@@ -289,7 +290,7 @@ namespace MCP
 			return iErrCode;
 
 		Json::Value jParams(Json::objectValue);
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		if (!jParams.empty())
 			jMsg[MSG_KEY_PARAMS] = jParams;
 
@@ -309,7 +310,7 @@ namespace MCP
 		Json::Value jParams(Json::objectValue);
 		jParams[MSG_KEY_NOTIFICATIONS] = jNotifications.isObject() ? jNotifications : Json::Value(Json::objectValue);
 
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
@@ -369,7 +370,7 @@ namespace MCP
 		{
 			jParams[MSG_KEY_DATA] = jData;
 		}
-		WriteVersionParamsMeta(jParams, ctxProtocol);
+		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		jMsg[MSG_KEY_PARAMS] = jParams;
 
 		return ERRNO_OK;

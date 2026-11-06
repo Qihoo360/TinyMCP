@@ -2,6 +2,7 @@
 
 #include <Message/BasicMessage.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
 
 #include <string>
 #include <vector>

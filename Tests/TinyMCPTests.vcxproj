@@ -180,7 +180,7 @@
     <ClCompile Include="..\Source\Protocol\Message\Notification.cpp" />
     <ClCompile Include="..\Source\Protocol\Message\Request.cpp" />
     <ClCompile Include="..\Source\Protocol\Message\Response.cpp" />
-    <ClCompile Include="..\Source\Protocol\Public\PublicDef.cpp" />
+    <ClCompile Include="..\Source\Protocol\Internal\Protocol.cpp" />
     <ClCompile Include="..\Source\Protocol\Session\Session.cpp" />
     <ClCompile Include="..\Source\Protocol\Task\BasicTask.cpp" />
     <ClCompile Include="..\Source\Protocol\Transport\Transport.cpp" />
@@ -202,6 +202,8 @@
     <ClInclude Include="..\Source\Protocol\Message\Notification.h" />
     <ClInclude Include="..\Source\Protocol\Message\Request.h" />
     <ClInclude Include="..\Source\Protocol\Message\Response.h" />
+    <ClInclude Include="..\Source\Protocol\Internal\MessageAccess.h" />
+    <ClInclude Include="..\Source\Protocol\Internal\Protocol.h" />
     <ClInclude Include="..\Source\Protocol\Public\PublicDef.h" />
     <ClInclude Include="..\Source\Protocol\Public\StringHelper.h" />
     <ClInclude Include="..\Source\Protocol\Session\Session.h" />

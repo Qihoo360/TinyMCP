@@ -6,6 +6,8 @@
 #include "../Message/Request.h"
 #include "../Message/Response.h"
 #include "../Task/BasicTask.h"
+#include "../Internal/Protocol.h"
+#include "../Internal/MessageAccess.h"
 
 #include <memory>
 #include <algorithm>
@@ -101,6 +103,13 @@ namespace MCP
 	}
 
 	CMCPSession CMCPSession::s_Instance;
+
+	CMCPSession::CMCPSession()
+		: m_upRegistry(new CProtocolRegistry(CProtocolRegistry::GetGlobalRegistry()))
+	{
+	}
+
+	CMCPSession::~CMCPSession() = default;
 
 	CMCPSession& CMCPSession::GetInstance()
 	{
@@ -233,23 +242,25 @@ namespace MCP
 		if (!spMsg || !spMsg->IsValid())
 			return ERRNO_INTERNAL_ERROR;
 
+		const ProtocolContext& ctxProtocol = MessageContextAccess::Get(*spMsg);
+
 		// Messages are split by era before the legacy switch runs. A request that
 		// carries modern _meta but cannot resolve a profile must still produce a
 		// JSON-RPC error, so it also enters the modern path.
 		if (MessageCategory_Request == spMsg->eMessageCategory)
 		{
-			if (!spMsg->ctxProtocol.IsValid() || spMsg->ctxProtocol.IsStateless())
+			if (!ctxProtocol.IsValid() || ctxProtocol.IsStateless())
 				return ProcessModernMessage(iErrCode, spMsg);
 		}
 		else if (MessageCategory_Notification == spMsg->eMessageCategory)
 		{
-			if (!spMsg->ctxProtocol.IsValid())
+			if (!ctxProtocol.IsValid())
 				return ERRNO_OK;
 
-			if (spMsg->ctxProtocol.IsStateless())
+			if (ctxProtocol.IsStateless())
 			{
 				return ProcessModernNotification(
-					spMsg->ctxProtocol,
+					ctxProtocol,
 					std::dynamic_pointer_cast<MCP::Notification>(spMsg));
 			}
 		}
@@ -302,7 +313,7 @@ namespace MCP
 		// Unknown methods keep the historical behaviour handled by the switch
 		// default branch.
 		if (IsLegacyDispatchableMessageType(spRequest->eMessageType)
-			&& !spRequest->ctxProtocol.SupportsMethod(spRequest->strMethod))
+			&& !MessageContextAccess::Get(*spRequest).SupportsMethod(spRequest->strMethod))
 		{
 			strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
 			iErrCode = ERRNO_METHOD_NOT_FOUND;
@@ -846,7 +857,7 @@ namespace MCP
 			return ERRNO_PARSE_ERROR;
 
 		int iErrCode = ERRNO_OK;
-		spRequest->ctxProtocol = ctxProtocol;
+		MessageContextAccess::Set(*spRequest, ctxProtocol);
 		iErrCode = spRequest->Deserialize(strMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
@@ -859,7 +870,7 @@ namespace MCP
 			if (!spInitializeRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spInitializeRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spInitializeRequest, ctxProtocol);
 			iErrCode = spInitializeRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -874,7 +885,7 @@ namespace MCP
 			if (!spListToolsRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spListToolsRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spListToolsRequest, ctxProtocol);
 			iErrCode = spListToolsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -889,7 +900,7 @@ namespace MCP
 			if (!spCallToolRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spCallToolRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spCallToolRequest, ctxProtocol);
 			iErrCode = spCallToolRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -904,7 +915,7 @@ namespace MCP
 			if (!spPingRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spPingRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spPingRequest, ctxProtocol);
 			iErrCode = spPingRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -919,7 +930,7 @@ namespace MCP
 			if (!spListResourcesRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spListResourcesRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spListResourcesRequest, ctxProtocol);
 			iErrCode = spListResourcesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -934,7 +945,7 @@ namespace MCP
 			if (!spReadResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spReadResourceRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spReadResourceRequest, ctxProtocol);
 			iErrCode = spReadResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -949,7 +960,7 @@ namespace MCP
 			if (!spSubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spSubscribeResourceRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spSubscribeResourceRequest, ctxProtocol);
 			iErrCode = spSubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -963,7 +974,7 @@ namespace MCP
 			if (!spUnsubscribeResourceRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spUnsubscribeResourceRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spUnsubscribeResourceRequest, ctxProtocol);
 			iErrCode = spUnsubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -977,7 +988,7 @@ namespace MCP
 			if (!spListResourceTemplatesRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spListResourceTemplatesRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spListResourceTemplatesRequest, ctxProtocol);
 			iErrCode = spListResourceTemplatesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -992,7 +1003,7 @@ namespace MCP
 			if (!spListPromptsRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spListPromptsRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spListPromptsRequest, ctxProtocol);
 			iErrCode = spListPromptsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -1007,7 +1018,7 @@ namespace MCP
 			if (!spGetPromptRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spGetPromptRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spGetPromptRequest, ctxProtocol);
 			iErrCode = spGetPromptRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -1022,7 +1033,7 @@ namespace MCP
 			if (!spCompleteRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spCompleteRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spCompleteRequest, ctxProtocol);
 			iErrCode = spCompleteRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -1037,7 +1048,7 @@ namespace MCP
 			if (!spSetLevelRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spSetLevelRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spSetLevelRequest, ctxProtocol);
 			iErrCode = spSetLevelRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -1056,7 +1067,7 @@ namespace MCP
 				if (!spDiscoverRequest)
 					return ERRNO_PARSE_ERROR;
 
-				spDiscoverRequest->ctxProtocol = ctxProtocol;
+				MessageContextAccess::Set(*spDiscoverRequest, ctxProtocol);
 				iErrCode = spDiscoverRequest->Deserialize(strMsg);
 				if (ERRNO_OK != iErrCode)
 					return ERRNO_INVALID_REQUEST;
@@ -1075,7 +1086,7 @@ namespace MCP
 			if (!spListenRequest)
 				return ERRNO_PARSE_ERROR;
 
-			spListenRequest->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spListenRequest, ctxProtocol);
 			iErrCode = spListenRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_REQUEST;
@@ -1111,7 +1122,7 @@ namespace MCP
 			return ERRNO_PARSE_ERROR;
 
 		int iErrCode = ERRNO_OK;
-		spNotification->ctxProtocol = ctxProtocol;
+		MessageContextAccess::Set(*spNotification, ctxProtocol);
 		iErrCode = spNotification->Deserialize(strMsg);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
@@ -1124,7 +1135,7 @@ namespace MCP
 			if (!spInitializedNotification)
 				return ERRNO_PARSE_ERROR;
 
-			spInitializedNotification->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spInitializedNotification, ctxProtocol);
 			iErrCode = spInitializedNotification->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_NOTIFICATION;
@@ -1139,7 +1150,7 @@ namespace MCP
 			if (!spCancelledNotification)
 				return ERRNO_PARSE_ERROR;
 
-			spCancelledNotification->ctxProtocol = ctxProtocol;
+			MessageContextAccess::Set(*spCancelledNotification, ctxProtocol);
 			iErrCode = spCancelledNotification->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
 				return ERRNO_INVALID_NOTIFICATION;
@@ -1399,14 +1410,60 @@ namespace MCP
 		return m_spTransport->Write(strNotification);
 	}
 
+	bool CMCPSession::IsKnownProtocolVersion(const std::string& strVersion) const
+	{
+		return nullptr != CProtocolRegistry::GetGlobalRegistry().Find(strVersion);
+	}
+
+	int CMCPSession::SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
+	{
+		if (!m_spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		const CProtocolRegistry& registry = CProtocolRegistry::GetGlobalRegistry();
+		const bool bStatelessSupported = m_spTransport->SupportsStatelessProtocol();
+		const bool bExplicit = !vecVersions.empty();
+
+		std::vector<std::string> vecEffective = bExplicit
+			? vecVersions
+			: registry.GetSupportedVersions();
+
+		std::vector<ProtocolProfile> vecProfiles;
+		for (const auto& strVersion : vecEffective)
+		{
+			const ProtocolProfile* pProfile = registry.Find(strVersion);
+			if (!pProfile)
+				return ERRNO_INVALID_PARAMS;
+
+			// An explicitly requested stateless revision over a handshake-only
+			// transport is a configuration error; the implicit default is filtered
+			// instead so an SSE server keeps working without extra configuration.
+			if (!bStatelessSupported && Era_Stateless == pProfile->eEra)
+			{
+				if (bExplicit)
+					return ERRNO_INVALID_PARAMS;
+
+				continue;
+			}
+
+			vecProfiles.push_back(*pProfile);
+		}
+
+		if (vecProfiles.empty())
+			return ERRNO_INVALID_PARAMS;
+
+		m_upRegistry.reset(new CProtocolRegistry(vecProfiles));
+		return ERRNO_OK;
+	}
+
 	void CMCPSession::SetProtocolRegistry(const CProtocolRegistry& registry)
 	{
-		m_registry = registry;
+		m_upRegistry.reset(new CProtocolRegistry(registry));
 	}
 
 	const CProtocolRegistry& CMCPSession::GetProtocolRegistry() const
 	{
-		return m_registry;
+		return *m_upRegistry;
 	}
 
 	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
@@ -1517,7 +1574,7 @@ namespace MCP
 		if (!spRequest || !spResponse)
 			return;
 
-		spResponse->ctxProtocol = spRequest->ctxProtocol;
+		MessageContextAccess::Set(*spResponse, MessageContextAccess::Get(*spRequest));
 		spResponse->bMrtrRetry = spRequest->jInputResponses.isObject() || !spRequest->strRequestState.empty();
 
 		if (spResponse->IsCacheableResult())
@@ -1531,7 +1588,7 @@ namespace MCP
 
 		Json::Value jServerInfo(Json::objectValue);
 		m_serverInfo.DoSerialize(jServerInfo);
-		m_serverInfo.DoSerializeVersionExtras(jServerInfo, spResponse->ctxProtocol);
+		m_serverInfo.DoSerializeVersionExtras(jServerInfo, MessageContextAccess::Get(*spResponse));
 		spResponse->jServerInfo = jServerInfo;
 	}
 
@@ -1557,7 +1614,7 @@ namespace MCP
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
 
-		int iValidate = ValidateProtocolContext(spRequest->ctxProtocol, spRequest);
+		int iValidate = ValidateProtocolContext(MessageContextAccess::Get(*spRequest), spRequest);
 		if (ERRNO_OK != iValidate)
 		{
 			Json::Value jErrorData;
@@ -1580,7 +1637,7 @@ namespace MCP
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
-		return ProcessModernRequest(spRequest->ctxProtocol, spRequest);
+		return ProcessModernRequest(MessageContextAccess::Get(*spRequest), spRequest);
 	}
 
 	int CMCPSession::ProcessModernRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest)
@@ -1843,7 +1900,8 @@ namespace MCP
 				continue;
 
 			spNotification->strMethod = strMethod;
-			spNotification->ctxProtocol = subscription.ctxProtocol;
+			if (subscription.spProtocolContext)
+				MessageContextAccess::Set(*spNotification, *subscription.spProtocolContext);
 			spNotification->bHasSubscriptionId = true;
 			spNotification->jSubscriptionId = MakeRequestIdJson(subscription.requestId);
 
@@ -1937,7 +1995,7 @@ namespace MCP
 
 		SubscriptionState subscription;
 		subscription.requestId = spListenRequest->requestId;
-		subscription.ctxProtocol = ctxProtocol;
+		subscription.spProtocolContext = std::make_shared<const ProtocolContext>(ctxProtocol);
 		subscription.spListenRequest = spRequest;
 
 		// Only grant the notification types the server can actually publish.
@@ -1981,7 +2039,7 @@ namespace MCP
 		}
 
 		spAcknowledged->strMethod = METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED;
-		spAcknowledged->ctxProtocol = ctxProtocol;
+		MessageContextAccess::Set(*spAcknowledged, ctxProtocol);
 		spAcknowledged->bHasSubscriptionId = true;
 		spAcknowledged->jSubscriptionId = MakeRequestIdJson(spListenRequest->requestId);
 		spAcknowledged->jNotifications = jGranted;
@@ -2203,7 +2261,7 @@ namespace MCP
 					if (spProcessTask && !spTask->IsFinished())
 					{
 						auto spRequest = spProcessTask->GetRequest();
-						if (spRequest && spRequest->ctxProtocol.IsStateless())
+						if (spRequest && MessageContextAccess::Get(*spRequest).IsStateless())
 						{
 							int iCode = (ERRNO_INVALID_PARAMS == iExecuteErrCode) ? ERRNO_INVALID_PARAMS : ERRNO_INTERNAL_ERROR;
 							std::string strMessage = (ERRNO_INVALID_PARAMS == iCode) ? ERROR_MESSAGE_INVALID_PARAMS : ERROR_MESSAGE_INTERNAL_ERROR;

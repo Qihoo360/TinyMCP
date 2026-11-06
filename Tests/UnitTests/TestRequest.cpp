@@ -2,6 +2,8 @@
 
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
+#include <Internal/MessageAccess.h>
 
 #include <string>
 #include <vector>
@@ -61,7 +63,7 @@ TEST_CASE("unit.request")
 	ListToolsRequest legacyRequest(false);
 	legacyRequest.requestId = MakeRequestId(1);
 	legacyRequest.strMethod = METHOD_TOOLS_LIST;
-	legacyRequest.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(legacyRequest, ctxLegacy);
 	legacyRequest.jInputResponses["confirm"] = "value";
 	legacyRequest.strRequestState = "legacy-state";
 
@@ -69,7 +71,7 @@ TEST_CASE("unit.request")
 	CHECK(!jLegacy.isMember(MSG_KEY_PARAMS));
 
 	// The same object with a modern context exposes the MRTR payload.
-	legacyRequest.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(legacyRequest, ctxModern);
 	Json::Value jModernOut = SerializeRequest(legacyRequest);
 	CHECK_EQ(std::string("value"), jModernOut[MSG_KEY_PARAMS][MSG_KEY_INPUT_RESPONSES]["confirm"].asString());
 	CHECK_EQ(std::string("legacy-state"), jModernOut[MSG_KEY_PARAMS][MSG_KEY_REQUEST_STATE].asString());
@@ -106,7 +108,7 @@ TEST_CASE("unit.request")
 	jMsg[MSG_KEY_PARAMS] = jParams;
 
 	ListToolsRequest modernRequest(false);
-	modernRequest.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(modernRequest, ctxModern);
 	CHECK_EQ(ERRNO_OK, modernRequest.DoDeserialize(jMsg));
 	CHECK_EQ(std::string(PROTOCOL_VER_2026_07_28), modernRequest.meta.strProtocolVersion);
 	CHECK(modernRequest.meta.bHasClientCapabilities);
@@ -119,7 +121,7 @@ TEST_CASE("unit.request")
 
 	// A handshake context drops the per-request logLevel and the MRTR fields.
 	ListToolsRequest legacyParsed(false);
-	legacyParsed.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(legacyParsed, ctxLegacy);
 	CHECK_EQ(ERRNO_OK, legacyParsed.DoDeserialize(jMsg));
 	CHECK(legacyParsed.meta.strLogLevel.empty());
 	CHECK(!legacyParsed.jInputResponses.isObject());
@@ -129,7 +131,7 @@ TEST_CASE("unit.request")
 	DiscoverRequest discover(false);
 	discover.requestId = MakeStringRequestId("discover-1");
 	discover.strMethod = METHOD_SERVER_DISCOVER;
-	discover.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(discover, ctxModern);
 	CHECK(!discover.IsValid());
 
 	discover.meta.strProtocolVersion = PROTOCOL_VER_2026_07_28;
@@ -142,7 +144,7 @@ TEST_CASE("unit.request")
 	DiscoverRequest legacyDiscover(false);
 	legacyDiscover.requestId = MakeStringRequestId("discover-2");
 	legacyDiscover.strMethod = METHOD_SERVER_DISCOVER;
-	legacyDiscover.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(legacyDiscover, ctxLegacy);
 	CHECK(legacyDiscover.IsValid());
 	CHECK(!SerializeRequest(legacyDiscover).isMember(MSG_KEY_PARAMS));
 
@@ -150,7 +152,7 @@ TEST_CASE("unit.request")
 	SubscriptionsListenRequest listen(false);
 	listen.requestId = MakeStringRequestId("listen-1");
 	listen.strMethod = METHOD_SUBSCRIPTIONS_LISTEN;
-	listen.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(listen, ctxModern);
 	listen.meta.strProtocolVersion = PROTOCOL_VER_2026_07_28;
 	listen.bToolsListChanged = true;
 	listen.bResourcesListChanged = true;
@@ -164,7 +166,7 @@ TEST_CASE("unit.request")
 	CHECK_EQ(std::string("file:///one.txt"), jNotifications[MSG_KEY_RESOURCE_SUBSCRIPTIONS][0].asString());
 
 	SubscriptionsListenRequest parsed(false);
-	parsed.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(parsed, ctxModern);
 	CHECK_EQ(ERRNO_OK, parsed.DoDeserialize(jListen));
 	CHECK(parsed.bToolsListChanged);
 	CHECK(!parsed.bPromptsListChanged);

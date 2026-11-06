@@ -138,7 +138,7 @@ Defaults are `ttlMs = 0` and `cacheScope = "private"`; override them with `SetSe
 
 ### Errors
 * `-32602`: malformed parameters, including a missing required `_meta` field, an unknown tool/resource, or an invalid cursor on modern requests. No defaults are filled in.
-* `-32022`: unsupported protocol version; `error.data.supported` lists `CProtocolRegistry::GetSupportedVersions()`.
+* `-32022`: unsupported protocol version; `error.data.supported` lists the revisions the server declares (see `SetSupportedProtocolVersions`).
 * `-32601`: unknown method, including modern-only methods on a profile that does not support them.
 * `-32021`: missing required client capability; `error.data.requiredCapabilities` is present.
 * `-32001`: legacy header mismatch constant, kept unchanged for compatibility; stdio never emits it.

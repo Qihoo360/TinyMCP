@@ -3,6 +3,8 @@
 #include <Message/BasicMessage.h>
 #include <Message/Response.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
+#include <Internal/MessageAccess.h>
 
 #include <string>
 
@@ -53,7 +55,7 @@ TEST_CASE("unit.response")
 	// modern members are populated by mistake.
 	ListToolsResult legacyResult(false);
 	legacyResult.requestId = MakeRequestId(7);
-	legacyResult.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(legacyResult, ctxLegacy);
 	legacyResult.iTtlMs = 1500;
 	legacyResult.strCacheScope = CACHE_SCOPE_PRIVATE;
 	legacyResult.jInputRequests[MSG_KEY_TYPE] = "confirm";
@@ -73,7 +75,7 @@ TEST_CASE("unit.response")
 	// serverInfo merged into result._meta.
 	ListToolsResult modernResult(false);
 	modernResult.requestId = MakeRequestId(8);
-	modernResult.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(modernResult, ctxModern);
 	modernResult.iTtlMs = 2500;
 	modernResult.strCacheScope = CACHE_SCOPE_PUBLIC;
 	modernResult.jInputRequests["confirm"] = "please";
@@ -103,7 +105,7 @@ TEST_CASE("unit.response")
 	// tools/call is not cacheable and structuredContent only exists in modern.
 	CallToolResult toolResult(false);
 	toolResult.requestId = MakeRequestId(9);
-	toolResult.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(toolResult, ctxModern);
 	toolResult.iTtlMs = 1000;
 	toolResult.strCacheScope = CACHE_SCOPE_PUBLIC;
 	TextContent text;
@@ -118,7 +120,7 @@ TEST_CASE("unit.response")
 	CHECK_EQ(42, jTool[MSG_KEY_RESULT][MSG_KEY_STRUCTURED_CONTENT][MSG_KEY_VALUE].asInt());
 
 	CallToolResult legacyTool(toolResult);
-	legacyTool.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(legacyTool, ctxLegacy);
 	Json::Value jLegacyTool = SerializeMessage(legacyTool);
 	CHECK(!jLegacyTool[MSG_KEY_RESULT].isMember(MSG_KEY_STRUCTURED_CONTENT));
 	CHECK(!jLegacyTool[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
@@ -127,7 +129,7 @@ TEST_CASE("unit.response")
 	// while unrelated application keys survive the merge.
 	SubscriptionsListenResult listenResult(false);
 	listenResult.requestId = MakeRequestId(10);
-	listenResult.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(listenResult, ctxModern);
 	listenResult.jSubscriptionId = Json::Value("sdk-subscription");
 	listenResult.jResultMeta[META_KEY_SUBSCRIPTION_ID] = "application-subscription";
 	listenResult.jResultMeta["application/key"] = "value";
@@ -146,7 +148,7 @@ TEST_CASE("unit.response")
 	CHECK_EQ(77, jIntListen[MSG_KEY_RESULT][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
 
 	// Legacy results never carry a subscription id.
-	listenResult.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(listenResult, ctxLegacy);
 	listenResult.jResultMeta = Json::Value();
 	listenResult.jServerInfo = Json::Value();
 	Json::Value jLegacyListen = SerializeMessage(listenResult);
@@ -155,7 +157,7 @@ TEST_CASE("unit.response")
 	// server/discover publishes the version list plus mandatory cache hints.
 	DiscoverResult discover(false);
 	discover.requestId = MakeRequestId(11);
-	discover.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(discover, ctxModern);
 	discover.vecSupportedVersions.push_back(PROTOCOL_VER_2026_07_28);
 	discover.iTtlMs = 5000;
 	discover.strCacheScope = CACHE_SCOPE_PUBLIC;

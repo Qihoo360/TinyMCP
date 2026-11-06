@@ -1,4 +1,5 @@
 ﻿#include "Response.h"
+#include "../Internal/Protocol.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -165,6 +166,8 @@ namespace MCP
 	// InitializeResult
 	int InitializeResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		if (!IsValid())
 			return ERRNO_INVALID_RESPONSE;
 
@@ -224,6 +227,8 @@ namespace MCP
 	// ListToolsResult
 	int ListToolsResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jTools(Json::arrayValue);
@@ -270,6 +275,8 @@ namespace MCP
 	// CallToolResult
 	int CallToolResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jIsError(bIsError);
@@ -387,6 +394,8 @@ namespace MCP
 	// ListResourcesResult
 	int ListResourcesResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jResources(Json::arrayValue);
@@ -433,6 +442,8 @@ namespace MCP
 	// ReadResourceResult
 	int ReadResourceResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jContents(Json::arrayValue);
@@ -482,6 +493,8 @@ namespace MCP
 	// ListResourceTemplatesResult
 	int ListResourceTemplatesResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jResourceTemplates(Json::arrayValue);
@@ -528,6 +541,8 @@ namespace MCP
 	// ListPromptsResult
 	int ListPromptsResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jPrompts(Json::arrayValue);
@@ -574,6 +589,8 @@ namespace MCP
 	// GetPromptResult
 	int GetPromptResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		if (!strDescription.empty())
@@ -619,6 +636,8 @@ namespace MCP
 	// CompleteResult
 	int CompleteResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jCompletion(Json::objectValue);
@@ -663,6 +682,8 @@ namespace MCP
 	// DiscoverResult
 	int DiscoverResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		Json::Value jVersions(Json::arrayValue);
@@ -736,6 +757,8 @@ namespace MCP
 	// SubscriptionsListenResult
 	int SubscriptionsListenResult::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		Json::Value jResult(Json::objectValue);
 
 		if (ctxProtocol.Supports(Feature_ListenSubscriptions) && !jSubscriptionId.isNull())

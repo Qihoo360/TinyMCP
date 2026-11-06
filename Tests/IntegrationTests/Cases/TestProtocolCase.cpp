@@ -4,6 +4,7 @@
 
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
 #include <Session/Session.h>
 
 #include <algorithm>

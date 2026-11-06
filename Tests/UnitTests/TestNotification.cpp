@@ -3,6 +3,8 @@
 #include <Message/BasicMessage.h>
 #include <Message/Notification.h>
 #include <Public/PublicDef.h>
+#include <Internal/Protocol.h>
+#include <Internal/MessageAccess.h>
 
 #include <string>
 
@@ -53,7 +55,7 @@ TEST_CASE("unit.notification")
 	// subscription id; a string id keeps its JSON type.
 	SubscriptionsAcknowledgedNotification ack(false);
 	ack.strMethod = METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED;
-	ack.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(ack, ctxModern);
 	ack.bHasSubscriptionId = true;
 	ack.jSubscriptionId = Json::Value("sub-1");
 	ack.jNotifications[MSG_KEY_TOOLS_LIST_CHANGED] = true;
@@ -63,7 +65,7 @@ TEST_CASE("unit.notification")
 	CHECK(jAck[MSG_KEY_PARAMS][MSG_KEY_NOTIFICATIONS][MSG_KEY_TOOLS_LIST_CHANGED].asBool());
 
 	SubscriptionsAcknowledgedNotification parsed(false);
-	parsed.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(parsed, ctxModern);
 	CHECK_EQ(ERRNO_OK, parsed.DoDeserialize(jAck));
 	CHECK(parsed.bHasSubscriptionId);
 	CHECK_EQ(std::string("sub-1"), parsed.jSubscriptionId.asString());
@@ -75,7 +77,7 @@ TEST_CASE("unit.notification")
 	CHECK_EQ(99, jIntAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
 
 	// Legacy output never carries a subscription id.
-	ack.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(ack, ctxLegacy);
 	Json::Value jLegacyAck = SerializeNotification(ack);
 	CHECK(!jLegacyAck[MSG_KEY_PARAMS].isMember(MSG_KEY_META));
 	CHECK(jLegacyAck[MSG_KEY_PARAMS].isMember(MSG_KEY_NOTIFICATIONS));
@@ -87,13 +89,13 @@ TEST_CASE("unit.notification")
 	updated.strUri = "file:///one.txt";
 	updated.bHasSubscriptionId = true;
 	updated.jSubscriptionId = Json::Value("sub-2");
-	updated.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(updated, ctxModern);
 
 	Json::Value jUpdated = SerializeNotification(updated);
 	CHECK_EQ(std::string("file:///one.txt"), jUpdated[MSG_KEY_PARAMS][MSG_KEY_URI].asString());
 	CHECK_EQ(std::string("sub-2"), jUpdated[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asString());
 
-	updated.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(updated, ctxLegacy);
 	Json::Value jLegacyUpdated = SerializeNotification(updated);
 	CHECK(!jLegacyUpdated[MSG_KEY_PARAMS].isMember(MSG_KEY_META));
 
@@ -103,7 +105,7 @@ TEST_CASE("unit.notification")
 	cancelled.requestId = MakeRequestId(3);
 	cancelled.bHasSubscriptionId = true;
 	cancelled.jSubscriptionId = Json::Value("sub-3");
-	cancelled.ctxProtocol = ctxModern;
+	MessageContextAccess::Set(cancelled, ctxModern);
 
 	Json::Value jCancelled = SerializeNotification(cancelled);
 	CHECK_EQ(3, jCancelled[MSG_KEY_PARAMS][MSG_KEY_ID].asInt());
@@ -120,7 +122,7 @@ TEST_CASE("unit.notification")
 	logging.level.eLevel = LoggingLevelValue::LoggingLevel_Info;
 	logging.strLogger = "tinymcp";
 	logging.jData["message"] = "hello";
-	logging.ctxProtocol = ctxLegacy;
+	MessageContextAccess::Set(logging, ctxLegacy);
 
 	Json::Value jLogging = SerializeNotification(logging);
 	CHECK_EQ(std::string(LOGGING_LEVEL_INFO), jLogging[MSG_KEY_PARAMS][MSG_KEY_LEVEL].asString());

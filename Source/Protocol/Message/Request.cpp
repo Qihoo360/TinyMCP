@@ -1,4 +1,5 @@
 ﻿#include "Request.h"
+#include "../Internal/Protocol.h"
 #include <json/writer.h>
 
 namespace MCP
@@ -7,6 +8,8 @@ namespace MCP
 	// Request
 	int Request::DoSerialize(Json::Value& jMsg) const
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		if (!IsValid())
 			return ERRNO_INVALID_REQUEST;
 
@@ -59,6 +62,8 @@ namespace MCP
 
 	int Request::DoDeserialize(const Json::Value& jMsg)
 	{
+		const ProtocolContext& ctxProtocol = GetProtocolContext();
+
 		if (!jMsg.isMember(MSG_KEY_JSONRPC) || !jMsg[MSG_KEY_JSONRPC].isString())
 			return ERRNO_INVALID_REQUEST;
 		auto strRPCVer = jMsg[MSG_KEY_JSONRPC].asString();
@@ -650,7 +655,7 @@ namespace MCP
 			return false;
 
 		// params._meta is mandatory once the stateless era is negotiated.
-		if (ctxProtocol.Supports(Feature_Discover) && !meta.HasValue())
+		if (GetProtocolContext().Supports(Feature_Discover) && !meta.HasValue())
 			return false;
 
 		return true;
