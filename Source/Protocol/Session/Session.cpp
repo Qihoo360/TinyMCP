@@ -70,6 +70,34 @@ namespace MCP
 
 			return std::string();
 		}
+
+		// Request types served by the shared handshake switch in ProcessRequest.
+		// A handshake profile must declare the same method before it is served,
+		// otherwise a revision would silently accept a method it never defined.
+		bool IsLegacyDispatchableMessageType(MessageType eMessageType)
+		{
+			switch (eMessageType)
+			{
+			case MessageType_InitializeRequest:
+			case MessageType_ListToolsRequest:
+			case MessageType_CallToolRequest:
+			case MessageType_PingRequest:
+			case MessageType_ListResourcesRequest:
+			case MessageType_ReadResourceRequest:
+			case MessageType_SubscribeResourceRequest:
+			case MessageType_UnsubscribeResourceRequest:
+			case MessageType_ListResourceTemplatesRequest:
+			case MessageType_ListPromptsRequest:
+			case MessageType_GetPromptRequest:
+			case MessageType_CompleteRequest:
+			case MessageType_SetLevelRequest:
+				return true;
+			default:
+				break;
+			}
+
+			return false;
+		}
 	}
 
 	CMCPSession CMCPSession::s_Instance;
@@ -267,6 +295,19 @@ namespace MCP
 			goto PROC_END;
 		}
 		m_hashMessage[MessageCategory_Request].push_back(spMsg);
+
+		// The handshake switch below serves every known handshake method. A
+		// profile that does not declare the method must not be served, so that
+		// an older or newer handshake revision stays inside its own surface.
+		// Unknown methods keep the historical behaviour handled by the switch
+		// default branch.
+		if (IsLegacyDispatchableMessageType(spRequest->eMessageType)
+			&& !spRequest->ctxProtocol.SupportsMethod(spRequest->strMethod))
+		{
+			strMessage = ERROR_MESSAGE_METHOD_NOT_FOUND;
+			iErrCode = ERRNO_METHOD_NOT_FOUND;
+			goto PROC_END;
+		}
 
 		switch (spRequest->eMessageType)
 		{

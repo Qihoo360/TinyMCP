@@ -371,6 +371,14 @@ TEST_CASE("integration.version_extensibility")
 		CHECK(ExpectResponse(driver, MakeRequest(7, METHOD_TOOLS_LIST, std::string()), jResponse));
 		CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
+		// Methods outside the synthetic revision surface are rejected instead of
+		// being silently served by the shared handshake switch.
+		CHECK(ExpectError(driver, MakeRequest(8, METHOD_PING, std::string()),
+			8, ERRNO_METHOD_NOT_FOUND, jResponse));
+		CHECK(ExpectError(driver, MakeRequest(9, METHOD_TOOLS_CALL,
+			"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\"}}"),
+			9, ERRNO_METHOD_NOT_FOUND, jResponse));
+
 		CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
 	}
 

@@ -379,6 +379,7 @@ namespace MCP
 		bool IsValid() const;
 		bool IsStateless() const;
 		bool Supports(ProtocolFeature eFeature) const;
+		bool SupportsMethod(const std::string& strMethod) const;
 	};
 
 	// Read-only version table. Version differences are declared as profile data;

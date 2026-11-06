@@ -40,8 +40,33 @@ namespace MCP
 			ProtocolProfile profile;
 			profile.strVersion = PROTOCOL_VER_2026_07_28;
 			profile.eEra = Era_Stateless;
-			for (size_t i = 0; i < static_cast<size_t>(Feature_Count); ++i)
-				profile.bitsFeatures.set(i);
+
+			// Features are listed explicitly. A feature introduced for a later
+			// revision must not be enabled here automatically, otherwise the
+			// behaviour of an already released version would silently change.
+			const ProtocolFeature arrFeatures[] = {
+				Feature_ResultMeta,
+				Feature_EntityMeta,
+				Feature_ImplementationExtras,
+				Feature_ResultType,
+				Feature_Discover,
+				Feature_Caching,
+				Feature_Mrtr,
+				Feature_ListenSubscriptions,
+				Feature_Extensions,
+				Feature_CompletionsCapability,
+				Feature_ToolTitle,
+				Feature_ToolAnnotations,
+				Feature_StructuredContent,
+				Feature_ContentAudio,
+				Feature_ContentResourceLink,
+				Feature_ContentToolUse,
+				Feature_ContentAnnotations,
+				Feature_LogLevelInMeta,
+			};
+			for (const ProtocolFeature& eFeature : arrFeatures)
+				profile.bitsFeatures.set(static_cast<size_t>(eFeature));
+
 			profile.iResourceNotFoundCode = ERRNO_INVALID_PARAMS;
 			AddModernMethodNames(profile);
 			return profile;
@@ -90,6 +115,11 @@ namespace MCP
 	bool ProtocolContext::Supports(ProtocolFeature eFeature) const
 	{
 		return pProfile != nullptr && pProfile->Supports(eFeature);
+	}
+
+	bool ProtocolContext::SupportsMethod(const std::string& strMethod) const
+	{
+		return pProfile != nullptr && pProfile->SupportsMethod(strMethod);
 	}
 
 	CProtocolRegistry::CProtocolRegistry(const std::vector<ProtocolProfile>& vecProfiles)
