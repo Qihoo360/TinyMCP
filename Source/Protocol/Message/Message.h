@@ -82,6 +82,11 @@ namespace MCP
 		const ProtocolContext& GetProtocolContext() const;
 		void SetProtocolContext(const ProtocolContext& ctxProtocol);
 
+		// Shared hand-off: a request, its response and its subscription keep one
+		// context allocation instead of copying it at every hop.
+		std::shared_ptr<const ProtocolContext> GetSharedProtocolContext() const;
+		void SetProtocolContext(const std::shared_ptr<const ProtocolContext>& spProtocolContext);
+
 	private:
 		std::shared_ptr<const ProtocolContext> m_spProtocolContext;
 		friend struct MessageContextAccess;

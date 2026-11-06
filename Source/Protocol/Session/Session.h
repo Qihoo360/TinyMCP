@@ -25,6 +25,7 @@ namespace MCP
 	// the message layer but neither type is visible outside the SDK.
 	struct ProtocolContext;
 	class CProtocolRegistry;
+	struct ProtocolRegistryAccess;
 
 	class CMCPSession
 	{
@@ -51,8 +52,6 @@ namespace MCP
 		// Internal to the SDK. CMCPServer builds the registry from the versions
 		// the application declares, so callers never construct profiles.
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
-		void SetProtocolRegistry(const CProtocolRegistry& registry);
-		const CProtocolRegistry& GetProtocolRegistry() const;
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
 		int GetServerCacheTtlMs() const;
 		std::string GetServerCacheScope() const;
@@ -110,8 +109,8 @@ namespace MCP
 		int WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData);
 
 		// Era resolution and result preparation shared by every task.
-		ProtocolContext ResolveProtocolContext(const std::shared_ptr<MCP::Message>& spMsg) const;
-		int ValidateProtocolContext(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
+		std::shared_ptr<const ProtocolContext> ResolveProtocolContext(const std::shared_ptr<MCP::Message>& spMsg) const;
+		int ValidateProtocolContext(const std::shared_ptr<const ProtocolContext>& spProtocolContext, const std::shared_ptr<MCP::Request>& spRequest);
 		void PrepareResult(const std::shared_ptr<MCP::Request>& spRequest, const std::shared_ptr<MCP::Response>& spResponse);
 
 		// Subscription notifications. Legacy clients receive the change event
@@ -123,6 +122,12 @@ namespace MCP
 
 	private:
 		CMCPSession();
+
+		// The registry is derived from the version declaration, so it stays out of
+		// the public API. SDK code reaches it through ProtocolRegistryAccess.
+		friend struct ProtocolRegistryAccess;
+		void SetProtocolRegistry(const CProtocolRegistry& registry);
+		const CProtocolRegistry& GetProtocolRegistry() const;
 
 		struct SubscriptionState
 		{
@@ -137,15 +142,15 @@ namespace MCP
 		};
 
 		int ParseMessage(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
-		int ParseRequest(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
+		int ParseRequest(const std::string& strMsg, const std::shared_ptr<const ProtocolContext>& spProtocolContext, std::shared_ptr<MCP::Message>& spMsg);
 		int ParseResponse(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
-		int ParseNotification(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
-		ProtocolContext ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta,
+		int ParseNotification(const std::string& strMsg, const std::shared_ptr<const ProtocolContext>& spProtocolContext, std::shared_ptr<MCP::Message>& spMsg);
+		std::shared_ptr<const ProtocolContext> ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta,
 			const std::string& strRequestedVersion) const;
 		int ProcessMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessModernMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
-		int ProcessModernRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
-		int ProcessModernNotification(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Notification>& spNotification);
+		int ProcessModernRequest(const std::shared_ptr<const ProtocolContext>& spProtocolContext, const std::shared_ptr<MCP::Request>& spRequest);
+		int ProcessModernNotification(const std::shared_ptr<const ProtocolContext>& spProtocolContext, const std::shared_ptr<MCP::Notification>& spNotification);
 		int ProcessRequest(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessResponse(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessNotification(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
@@ -154,7 +159,7 @@ namespace MCP
 		int SendListChangedNotification(MessageType eMessageType, const std::string& strMethod);
 		int RemoveSubscription(const MCP::RequestId& requestId);
 		int CloseSubscriptions();
-		int ProcessSubscriptionsListenRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);
+		int ProcessSubscriptionsListenRequest(const std::shared_ptr<const ProtocolContext>& spProtocolContext, const std::shared_ptr<MCP::Request>& spRequest);
 
 		// Asynchronous Task
 		int EnsureAsyncTaskThread();

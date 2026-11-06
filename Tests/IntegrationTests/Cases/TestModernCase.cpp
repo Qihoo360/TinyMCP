@@ -5,6 +5,7 @@
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
 #include <Internal/Protocol.h>
+#include <Internal/SessionAccess.h>
 #include <Internal/VersionExtras.h>
 #include <Session/Session.h>
 
@@ -144,7 +145,7 @@ TEST_CASE("unit.tasks")
 	CHECK_EQ(std::string(CTestServer::SERVER_NAME),
 		jResult[MSG_KEY_META][META_KEY_SERVER_INFO][MSG_KEY_NAME].asString());
 
-	std::vector<std::string> vecVersions = CMCPSession::GetInstance().GetProtocolRegistry().GetSupportedVersions();
+	std::vector<std::string> vecVersions = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetSupportedVersions();
 	CHECK_EQ(vecVersions.size(), static_cast<size_t>(jResult[MSG_KEY_SUPPORTED_VERSIONS].size()));
 	for (Json::ArrayIndex i = 0; i < jResult[MSG_KEY_SUPPORTED_VERSIONS].size() && i < vecVersions.size(); ++i)
 		CHECK_EQ(vecVersions[i], jResult[MSG_KEY_SUPPORTED_VERSIONS][i].asString());
@@ -407,7 +408,7 @@ TEST_CASE("unit.capabilities")
 
 TEST_CASE("unit.apps")
 {
-	const std::shared_ptr<const ProtocolProfile> pModernProfile = CMCPSession::GetInstance().GetProtocolRegistry().Find(PROTOCOL_VER_2026_07_28);
+	const std::shared_ptr<const ProtocolProfile> pModernProfile = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).Find(PROTOCOL_VER_2026_07_28);
 	CHECK(pModernProfile != nullptr);
 	if (!pModernProfile)
 		return;

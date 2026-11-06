@@ -2,9 +2,34 @@
 #include "../Session/Session.h"
 #include "../Message/Notification.h"
 #include "../Internal/MessageAccess.h"
+#include "../Internal/SessionAccess.h"
 
 namespace MCP
 {
+	namespace
+	{
+		// A paged list request with an invalid cursor is answered by an error only in
+		// the stateless era, where every request must carry its own id and context.
+		// Legacy callers keep the legacy code path, so the shared helper preserves
+		// that split in one place instead of repeating it per list task.
+		int WriteInvalidCursorErrorResponse(const std::shared_ptr<MCP::Request>& spRequest, std::string& strResponse)
+		{
+			auto spErrorResponse = std::make_shared<ErrorResponse>(true);
+			if (!spErrorResponse)
+				return ERRNO_INTERNAL_ERROR;
+
+			spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
+			spErrorResponse->strMesage = ERROR_MESSAGE_INVALID_PARAMS;
+			if (MessageContextAccess::Get(*spRequest).IsStateless())
+			{
+				spErrorResponse->requestId = spRequest->requestId;
+				MessageContextAccess::Copy(*spErrorResponse, *spRequest);
+			}
+
+			return spErrorResponse->Serialize(strResponse);
+		}
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessRequest
 	bool ProcessRequest::IsValid() const
@@ -299,7 +324,7 @@ namespace MCP
 		// reports the version the session will actually speak.
 		std::shared_ptr<const ProtocolProfile> pHandshakeProfile = MessageContextAccess::Get(*m_spRequest).pProfile;
 		if (!pHandshakeProfile)
-			pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
+			pHandshakeProfile = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetDefaultHandshakeProfile();
 		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;
 		spInitializeResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
 		spInitializeResult->implServerInfo = CMCPSession::GetInstance().GetServerInfo();
@@ -365,17 +390,7 @@ namespace MCP
 
 				if (!bValidCursor)
 				{
-					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
-					if (!spErrorResponse)
-						return ERRNO_INTERNAL_ERROR;
-					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
-					spErrorResponse->strMesage = "invalid params";
-					if (MessageContextAccess::Get(*spListToolRequest).IsStateless())
-					{
-						spErrorResponse->requestId = spListToolRequest->requestId;
-						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListToolRequest));
-					}
-					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+					if (ERRNO_OK != WriteInvalidCursorErrorResponse(spListToolRequest, strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
 				else
@@ -579,17 +594,7 @@ namespace MCP
 
 				if (!bValidCursor)
 				{
-					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
-					if (!spErrorResponse)
-						return ERRNO_INTERNAL_ERROR;
-					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
-					spErrorResponse->strMesage = "invalid params";
-					if (MessageContextAccess::Get(*spListResourcesRequest).IsStateless())
-					{
-						spErrorResponse->requestId = spListResourcesRequest->requestId;
-						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListResourcesRequest));
-					}
-					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+					if (ERRNO_OK != WriteInvalidCursorErrorResponse(spListResourcesRequest, strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
 				else
@@ -972,17 +977,7 @@ namespace MCP
 
 				if (!bValidCursor)
 				{
-					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
-					if (!spErrorResponse)
-						return ERRNO_INTERNAL_ERROR;
-					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
-					spErrorResponse->strMesage = "invalid params";
-					if (MessageContextAccess::Get(*spListResourceTemplatesRequest).IsStateless())
-					{
-						spErrorResponse->requestId = spListResourceTemplatesRequest->requestId;
-						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListResourceTemplatesRequest));
-					}
-					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+					if (ERRNO_OK != WriteInvalidCursorErrorResponse(spListResourceTemplatesRequest, strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
 				else
@@ -1090,17 +1085,7 @@ namespace MCP
 
 				if (!bValidCursor)
 				{
-					auto spErrorResponse = std::make_shared<ErrorResponse>(true);
-					if (!spErrorResponse)
-						return ERRNO_INTERNAL_ERROR;
-					spErrorResponse->iCode = ERRNO_INVALID_PARAMS;
-					spErrorResponse->strMesage = "invalid params";
-					if (MessageContextAccess::Get(*spListPromptsRequest).IsStateless())
-					{
-						spErrorResponse->requestId = spListPromptsRequest->requestId;
-						MessageContextAccess::Set(*spErrorResponse, MessageContextAccess::Get(*spListPromptsRequest));
-					}
-					if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
+					if (ERRNO_OK != WriteInvalidCursorErrorResponse(spListPromptsRequest, strResponse))
 						return ERRNO_INTERNAL_ERROR;
 				}
 				else
@@ -1420,7 +1405,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		spDiscoverResult->requestId = m_spRequest->requestId;
-		spDiscoverResult->vecSupportedVersions = CMCPSession::GetInstance().GetProtocolRegistry().GetSupportedVersions();
+		spDiscoverResult->vecSupportedVersions = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetSupportedVersions();
 		spDiscoverResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
 		spDiscoverResult->strInstructions = CMCPSession::GetInstance().GetServerInstructions();
 

@@ -16,6 +16,16 @@ namespace MCP
 		m_spProtocolContext = std::make_shared<const ProtocolContext>(ctxProtocol);
 	}
 
+	std::shared_ptr<const ProtocolContext> Message::GetSharedProtocolContext() const
+	{
+		return m_spProtocolContext;
+	}
+
+	void Message::SetProtocolContext(const std::shared_ptr<const ProtocolContext>& spProtocolContext)
+	{
+		m_spProtocolContext = spProtocolContext;
+	}
+
 	namespace
 	{
 		void WriteStringIfNotEmpty(Json::Value& jObj, const char* lpcszKey, const std::string& strValue)

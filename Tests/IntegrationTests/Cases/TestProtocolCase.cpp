@@ -5,6 +5,7 @@
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
 #include <Internal/Protocol.h>
+#include <Internal/SessionAccess.h>
 #include <Session/Session.h>
 
 #include <algorithm>
@@ -188,7 +189,7 @@ TEST_CASE("integration.discover")
 	CHECK_EQ(std::string(CTestServer::SERVER_NAME),
 		jResult[MSG_KEY_META][META_KEY_SERVER_INFO][MSG_KEY_NAME].asString());
 
-	std::vector<std::string> vecVersions = CMCPSession::GetInstance().GetProtocolRegistry().GetSupportedVersions();
+	std::vector<std::string> vecVersions = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetSupportedVersions();
 	CHECK_EQ(vecVersions.size(), static_cast<size_t>(jResult[MSG_KEY_SUPPORTED_VERSIONS].size()));
 	for (Json::ArrayIndex i = 0; i < jResult[MSG_KEY_SUPPORTED_VERSIONS].size() && i < vecVersions.size(); ++i)
 		CHECK_EQ(vecVersions[i], jResult[MSG_KEY_SUPPORTED_VERSIONS][i].asString());
@@ -228,7 +229,7 @@ TEST_CASE("integration.version_fallback")
 
 	std::vector<std::string> vecReported;
 	CHECK(ReadStringArray(jErrorData[MSG_KEY_SUPPORTED], vecReported));
-	std::vector<std::string> vecVersions = CMCPSession::GetInstance().GetProtocolRegistry().GetSupportedVersions();
+	std::vector<std::string> vecVersions = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetSupportedVersions();
 	CHECK_EQ(vecVersions.size(), vecReported.size());
 	for (auto& strVersion : vecVersions)
 		CHECK(Contains(vecReported, strVersion));
@@ -251,7 +252,7 @@ TEST_CASE("integration.version_fallback")
 	// A handshake-only registry rejects stateless requests and keeps the handshake.
 	CProtocolRegistry handshakeOnly(std::vector<std::shared_ptr<const ProtocolProfile>>{
 		CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile() });
-	CMCPSession::GetInstance().SetProtocolRegistry(handshakeOnly);
+	ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), handshakeOnly);
 	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().ResetForNewClient());
 
 	CHECK(ExpectError(driver, MakeRequest(6, METHOD_SERVER_DISCOVER,
@@ -262,7 +263,7 @@ TEST_CASE("integration.version_fallback")
 	CHECK(ExpectResponse(driver, MakeRequest(8, METHOD_TOOLS_LIST, std::string()), jResponse));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
-	CMCPSession::GetInstance().SetProtocolRegistry(CProtocolRegistry::GetGlobalRegistry());
+	ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	driver.Stop();
 }
 
@@ -291,7 +292,7 @@ TEST_CASE("integration.version_extensibility")
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(fakeProfile));
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
-		CMCPSession::GetInstance().SetProtocolRegistry(registry);
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), registry);
 
 		Json::Value jResponse;
 		CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_SERVER_DISCOVER,
@@ -321,7 +322,7 @@ TEST_CASE("integration.version_extensibility")
 		CHECK(ReadStringArray(jResponse[MSG_KEY_ERROR][MSG_KEY_DATA][MSG_KEY_SUPPORTED], vecSupported));
 		CHECK(Contains(vecSupported, "2099-01-01"));
 
-		CMCPSession::GetInstance().SetProtocolRegistry(CProtocolRegistry::GetGlobalRegistry());
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	}
 
 	// A profile without Feature_ResultType omits resultType and cache hints.
@@ -335,7 +336,7 @@ TEST_CASE("integration.version_extensibility")
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(plainProfile));
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
-		CMCPSession::GetInstance().SetProtocolRegistry(registry);
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), registry);
 
 		Json::Value jResponse;
 		CHECK(ExpectResponse(driver, MakeRequest(5, METHOD_TOOLS_LIST,
@@ -346,7 +347,7 @@ TEST_CASE("integration.version_extensibility")
 		CHECK(!jResult.isMember(MSG_KEY_TTL_MS));
 		CHECK(!jResult.isMember(MSG_KEY_CACHE_SCOPE));
 
-		CMCPSession::GetInstance().SetProtocolRegistry(CProtocolRegistry::GetGlobalRegistry());
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	}
 
 	// Handshake initialize negotiates to the requested version.
@@ -361,7 +362,7 @@ TEST_CASE("integration.version_extensibility")
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(handshakeProfile));
 		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
 		CProtocolRegistry registry(vecProfiles);
-		CMCPSession::GetInstance().SetProtocolRegistry(registry);
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), registry);
 
 		Json::Value jResponse;
 		CHECK(ExpectResponse(driver, MakeLegacyInitialize(6, "2098-01-01"), jResponse));
@@ -380,7 +381,7 @@ TEST_CASE("integration.version_extensibility")
 			"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\"}}"),
 			9, ERRNO_METHOD_NOT_FOUND, jResponse));
 
-		CMCPSession::GetInstance().SetProtocolRegistry(CProtocolRegistry::GetGlobalRegistry());
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	}
 
 	driver.Stop();
@@ -401,14 +402,14 @@ TEST_CASE("integration.handshake_version_fallback")
 	vecProfiles.push_back(std::make_shared<const ProtocolProfile>(handshakeProfile));
 	vecProfiles.push_back(std::make_shared<const ProtocolProfile>(defaultProfile));
 	CProtocolRegistry registry(vecProfiles);
-	CMCPSession::GetInstance().SetProtocolRegistry(registry);
+	ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), registry);
 
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeLegacyInitialize(1, "2097-01-01"), jResponse));
 	CHECK_EQ(std::string("2098-01-01"),
 		jResponse[MSG_KEY_RESULT][MSG_KEY_PROTOCOL_VERSION].asString());
 
-	CMCPSession::GetInstance().SetProtocolRegistry(CProtocolRegistry::GetGlobalRegistry());
+	ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	driver.Stop();
 }
 
