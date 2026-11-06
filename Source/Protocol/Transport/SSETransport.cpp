@@ -89,7 +89,10 @@ namespace MCP
 		if (m_bRunning.load())
 			return ERRNO_INTERNAL_ERROR;
 
-		m_strSessionId = GenerateSessionId();
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxSessionId);
+			m_strSessionId = GenerateSessionId();
+		}
 		m_bClientConnected.store(false);
 		m_bEndpointSent.store(false);
 		{
@@ -146,7 +149,12 @@ namespace MCP
 					// The path is relative; MCP Inspector / browsers resolve it against the SSE origin.
 					if (!m_bEndpointSent.load())
 					{
-						std::string strEndpointUri = m_strMessageEndpoint + "?sessionId=" + m_strSessionId;
+						std::string strSessionId;
+						{
+							std::lock_guard<std::mutex> _lock(m_mtxSessionId);
+							strSessionId = m_strSessionId;
+						}
+						std::string strEndpointUri = m_strMessageEndpoint + "?sessionId=" + strSessionId;
 						std::string strFrame = "event: endpoint\ndata: " + strEndpointUri + "\n\n";
 						if (!sink.write(strFrame.data(), strFrame.size()))
 							return false;
@@ -245,7 +253,10 @@ namespace MCP
 					// Rotate the session id so any late POST /messages?sessionId=<old>
 					// from the departed client is rejected instead of being fed to the
 					// next client's session by mistake.
-					m_strSessionId = GenerateSessionId();
+					{
+						std::lock_guard<std::mutex> _lock(m_mtxSessionId);
+						m_strSessionId = GenerateSessionId();
+					}
 					m_bEndpointSent.store(false);
 					m_bClientConnected.store(false);
 					// Signal the Session::Run() thread (blocked in Read()) that the MCP
@@ -271,7 +282,12 @@ namespace MCP
 				return;
 			}
 
-			if (!req.has_param("sessionId") || req.get_param_value("sessionId") != m_strSessionId)
+			std::string strExpectedSessionId;
+			{
+				std::lock_guard<std::mutex> _lock(m_mtxSessionId);
+				strExpectedSessionId = m_strSessionId;
+			}
+			if (!req.has_param("sessionId") || req.get_param_value("sessionId") != strExpectedSessionId)
 			{
 				res.status = 404;
 				res.set_content("session not found", "text/plain");

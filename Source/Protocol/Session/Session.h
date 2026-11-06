@@ -174,6 +174,7 @@ namespace MCP
 		int CancelAsyncTask(const MCP::RequestId& requestId);
 		int StartAsyncTaskThread();
 		int StopAsyncTaskThread();
+		int ResetAsyncTaskThread();
 		int AsyncThreadProc();
 
 		// Tasks never reach back to the session singleton. The session binds the
@@ -184,8 +185,16 @@ namespace MCP
 
 		static CMCPSession s_Instance;
 
-		SessionState m_eSessionState{ SessionState_Original };
+		std::atomic<SessionState> m_eSessionState{ SessionState_Original };
+
+		// Read on the reader thread and on every async task thread, replaced only
+		// before Ready(); the mutex keeps a late SetTransport from racing readers.
+		mutable std::mutex m_mtxTransport;
 		std::shared_ptr<CMCPTransport> m_spTransport;
+
+		// Server options are published before Run() and read by tasks afterwards,
+		// so the accessors take the lock even though the write happens once.
+		mutable std::mutex m_mtxServerOptions;
 
 		std::unique_ptr<CProtocolRegistry> m_upRegistry;
 		std::shared_ptr<TaskServices> m_spTaskServices;
@@ -207,6 +216,7 @@ namespace MCP
 		bool m_bPromptsPagination{ false };
 		MCP::LoggingLevel m_loggingLevel;
 
+		mutable std::mutex m_mtxMessages;
 		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
@@ -215,7 +225,9 @@ namespace MCP
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>> m_hashCompleteTasks;
 
-		// Asynchronous Task
+		// Asynchronous Task. m_mtxTaskThread serializes creation, joining and
+		// reset of the worker so shutdown cannot race a newly spawned thread.
+		std::mutex m_mtxTaskThread;
 		std::unique_ptr<std::thread> m_upTaskThread;
 		std::atomic_bool m_bRunAsyncTask{ true };
 		std::mutex m_mtxAsyncThread;

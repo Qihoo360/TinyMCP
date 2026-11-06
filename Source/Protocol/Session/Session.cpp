@@ -264,9 +264,7 @@ namespace MCP
 
 	int CMCPSession::Terminate()
 	{
-		StopAsyncTaskThread();
-		if (m_upTaskThread && m_upTaskThread->joinable())
-			m_upTaskThread->join();
+		ResetAsyncTaskThread();
 
 		// Close every live subscription before the transport goes away so the
 		// client still observes a complete result for its listen request.
@@ -295,20 +293,11 @@ namespace MCP
 		// task still sitting in m_vecAsyncTasksCache (see the `!m_bRunAsyncTask` branch),
 		// so we do NOT re-cancel them here to avoid double-emitting cancellation side
 		// effects from user-supplied tool implementations.
-		if (m_upTaskThread)
-		{
-			StopAsyncTaskThread();
-			if (m_upTaskThread->joinable())
-				m_upTaskThread->join();
-			m_upTaskThread.reset();
-		}
+		ResetAsyncTaskThread();
 
 		// After join(), the async thread no longer touches any of the members below.
-		// The reader thread (single caller of ResetForNewClient) is the only owner of
-		// m_hashMessage / m_hashUri2SubscribeResourceTaskId / m_eSessionState, so no
-		// lock is needed for those. The async-thread-private containers are cleared
-		// under m_mtxAsyncThread purely for contract cleanliness -- there is no live
-		// contender at this point.
+		// The async-thread-private containers are cleared under m_mtxAsyncThread
+		// purely for contract cleanliness -- there is no live contender at this point.
 		{
 			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
 			m_deqAsyncTasks.clear();
@@ -318,14 +307,21 @@ namespace MCP
 
 		// Roll back the MCP protocol state machine to the pre-handshake state so the next
 		// client's `initialize` request is accepted (see ProcessRequest / SwitchState).
-		m_eSessionState = SessionState_Original;
+		m_eSessionState.store(SessionState_Original);
 
 		// Drop cached per-connection message history and subscription bookkeeping. The
 		// server-side static registrations (tools/resources/prompts/handlers/capabilities)
 		// remain untouched -- they were populated at server start and are not per-client.
-		m_hashMessage.clear();
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxMessages);
+			m_hashMessage.clear();
+		}
 		m_hashUri2SubscribeResourceTaskId.clear();
-		m_loggingLevel = MCP::LoggingLevel{};
+
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
+			m_loggingLevel = MCP::LoggingLevel{};
+		}
 
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
@@ -408,7 +404,10 @@ namespace MCP
 			iErrCode = ERRNO_INTERNAL_ERROR;
 			goto PROC_END;
 		}
-		m_hashMessage[MessageCategory_Request].push_back(spMsg);
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxMessages);
+			m_hashMessage[MessageCategory_Request].push_back(spMsg);
+		}
 
 		// Protocol.cpp owns the method surface of each revision; the switch below
 		// only implements it. A method the profile does not declare is refused
@@ -828,7 +827,10 @@ namespace MCP
 		auto spResponse = std::dynamic_pointer_cast<MCP::Response>(spMsg);
 		if (!spResponse)
 			return ERRNO_INTERNAL_ERROR;
-		m_hashMessage[MessageCategory_Response].push_back(spMsg);
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxMessages);
+			m_hashMessage[MessageCategory_Response].push_back(spMsg);
+		}
 
 		return ERRNO_INTERNAL_ERROR;
 	}
@@ -840,7 +842,10 @@ namespace MCP
 		auto spNotification = std::dynamic_pointer_cast<MCP::Notification>(spMsg);
 		if (!spNotification)
 			return ERRNO_INTERNAL_ERROR;
-		m_hashMessage[MessageCategory_Notification].push_back(spMsg);
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxMessages);
+			m_hashMessage[MessageCategory_Notification].push_back(spMsg);
+		}
 
 		if (ERRNO_OK != iErrCode)
 		{
@@ -1268,6 +1273,7 @@ namespace MCP
 
 	void CMCPSession::SetTransport(const std::shared_ptr<CMCPTransport>& spTransport)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxTransport);
 		m_spTransport = spTransport;
 
 		// Transports that carry several clients over one channel report the gap
@@ -1404,6 +1410,7 @@ namespace MCP
 
 	std::shared_ptr<CMCPTransport> CMCPSession::GetTransport() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxTransport);
 		return m_spTransport;
 	}
 
@@ -1411,28 +1418,29 @@ namespace MCP
 	{
 		if (SessionState_Initializing == eState)
 		{
-			if (SessionState_Original != m_eSessionState)
+			if (SessionState_Original != m_eSessionState.load())
 				return ERRNO_INTERNAL_ERROR;
 		}
 
 		if (SessionState_Initialized == eState)
 		{
-			if (SessionState_Initializing != m_eSessionState)
+			if (SessionState_Initializing != m_eSessionState.load())
 				return ERRNO_INTERNAL_ERROR;
 		}
 
-		m_eSessionState = eState;
+		m_eSessionState.store(eState);
 
 		return ERRNO_OK;
 	}
 
 	CMCPSession::SessionState CMCPSession::GetSessionState() const
 	{
-		return m_eSessionState;
+		return m_eSessionState.load();
 	}
 
 	size_t CMCPSession::GetMessageCount(MessageCategory eCategory) const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxMessages);
 		auto it = m_hashMessage.find(eCategory);
 		if (it == m_hashMessage.end())
 			return 0;
@@ -1482,11 +1490,13 @@ namespace MCP
 
 	void CMCPSession::SetLoggingLevel(const MCP::LoggingLevel& level)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		m_loggingLevel = level;
 	}
 
 	MCP::LoggingLevel CMCPSession::GetLoggingLevel() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		return m_loggingLevel;
 	}
 
@@ -1579,27 +1589,32 @@ namespace MCP
 
 	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		m_iCacheTtlMs = iTtlMs;
 		m_strCacheScope = strCacheScope.empty() ? CACHE_SCOPE_PRIVATE : strCacheScope;
 	}
 
 	int CMCPSession::GetServerCacheTtlMs() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		return m_iCacheTtlMs;
 	}
 
 	std::string CMCPSession::GetServerCacheScope() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		return m_strCacheScope;
 	}
 
 	void CMCPSession::SetServerInstructions(const std::string& strInstructions)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		m_strServerInstructions = strInstructions;
 	}
 
 	std::string CMCPSession::GetServerInstructions() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		return m_strServerInstructions;
 	}
 
@@ -1693,11 +1708,19 @@ namespace MCP
 
 		if (spResponse->IsCacheableResult())
 		{
+			int iDefaultTtlMs = 0;
+			std::string strDefaultCacheScope;
+			{
+				std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
+				iDefaultTtlMs = m_iCacheTtlMs;
+				strDefaultCacheScope = m_strCacheScope;
+			}
+
 			if (spResponse->iTtlMs < 0)
-				spResponse->iTtlMs = m_iCacheTtlMs;
+				spResponse->iTtlMs = iDefaultTtlMs;
 
 			if (spResponse->strCacheScope.empty())
-				spResponse->strCacheScope = m_strCacheScope;
+				spResponse->strCacheScope = strDefaultCacheScope;
 		}
 
 		Json::Value jServerInfo(Json::objectValue);
@@ -1913,12 +1936,11 @@ namespace MCP
 
 	int CMCPSession::EnsureAsyncTaskThread()
 	{
-		if (m_upTaskThread)
-			return ERRNO_OK;
-
 		if (!m_bRunAsyncTask.load())
 			m_bRunAsyncTask.store(true);
 
+		// StartAsyncTaskThread takes the lifecycle lock and reuses a live worker,
+		// so the joinable check there replaces the unlocked peek.
 		return StartAsyncTaskThread();
 	}
 
@@ -2241,16 +2263,42 @@ namespace MCP
 
 	int CMCPSession::StartAsyncTaskThread()
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxTaskThread);
+
 		// Stateless requests may spawn the worker before the legacy handshake
 		// completes. Reuse it instead of replacing a joinable thread, which would
 		// call std::terminate through the thread move assignment.
 		if (m_upTaskThread && m_upTaskThread->joinable())
 			return ERRNO_OK;
 
-		m_upTaskThread = std::make_unique<std::thread>(&CMCPSession::AsyncThreadProc, this);
+		m_upTaskThread.reset(new std::thread(&CMCPSession::AsyncThreadProc, this));
 		if (!m_upTaskThread)
 			return ERRNO_INTERNAL_ERROR;
 
+		return ERRNO_OK;
+	}
+
+	int CMCPSession::ResetAsyncTaskThread()
+	{
+		// Serialize with StartAsyncTaskThread so shutdown cannot join a thread
+		// another thread is about to create, or create one that is never joined.
+		std::lock_guard<std::mutex> _lock(m_mtxTaskThread);
+
+		StopAsyncTaskThread();
+
+		if (!m_upTaskThread)
+			return ERRNO_OK;
+
+		if (m_upTaskThread->joinable())
+		{
+			// A task running inside the worker must not join its own thread.
+			if (m_upTaskThread->get_id() == std::this_thread::get_id())
+				m_upTaskThread->detach();
+			else
+				m_upTaskThread->join();
+		}
+
+		m_upTaskThread.reset();
 		return ERRNO_OK;
 	}
 

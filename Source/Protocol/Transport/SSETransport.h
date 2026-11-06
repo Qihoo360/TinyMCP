@@ -55,6 +55,9 @@ namespace MCP
 		int m_iPort;
 		std::string m_strSseEndpoint;
 		std::string m_strMessageEndpoint;
+		// Rotated by the SSE stream releaser and read by the POST handler and the
+		// stream provider, which run on different httplib worker threads.
+		mutable std::mutex m_mtxSessionId;
 		std::string m_strSessionId;
 		std::vector<std::string> m_vecAllowedOrigins;
 
