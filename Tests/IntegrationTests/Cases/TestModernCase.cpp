@@ -121,7 +121,6 @@ TEST_CASE("unit.tasks")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	// Legacy requests keep their established resource-not-found code.
 	CompleteLegacyHandshake(driver, 1);
@@ -180,7 +179,6 @@ TEST_CASE("unit.caching")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 
@@ -220,7 +218,6 @@ TEST_CASE("unit.mrtr")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 
@@ -262,7 +259,6 @@ TEST_CASE("unit.subscriptions")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	// notifications is required by the listen schema.
 	Json::Value jResponse;
@@ -390,7 +386,6 @@ TEST_CASE("unit.capabilities")
 	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 
 	// Modern discover publishes completions, extensions, and caching options.
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 	CHECK(ExpectResponse(driver, MakeRequest(41, METHOD_SERVER_DISCOVER, MakeModernParams()), jResponse));
 
 	const Json::Value& jCapabilities = jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES];

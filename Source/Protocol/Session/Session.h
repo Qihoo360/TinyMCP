@@ -43,12 +43,11 @@ namespace MCP
 		int Terminate();
 		int CancelTask(const MCP::RequestId& requestId);
 
-		// Stateless era support. The stdio entry enables it explicitly; transports
-		// that keep the handshake model (for example SSE) leave it disabled.
+		// Protocol version support. The active registry is the single source of
+		// truth: it decides which versions may be discovered, negotiated and
+		// served. The default global registry serves every shipped version.
 		void SetProtocolRegistry(const CProtocolRegistry* pRegistry);
 		const CProtocolRegistry& GetProtocolRegistry() const;
-		void SetModernProtocolSupported(bool bSupported);
-		bool GetModernProtocolSupported() const;
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
 		int GetServerCacheTtlMs() const;
 		std::string GetServerCacheScope() const;
@@ -166,7 +165,6 @@ namespace MCP
 		std::shared_ptr<CMCPTransport> m_spTransport;
 
 		const CProtocolRegistry* m_pRegistry{ nullptr };
-		bool m_bModernSupported{ false };
 		int m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
 		std::string m_strServerInstructions;

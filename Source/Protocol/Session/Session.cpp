@@ -243,11 +243,11 @@ namespace MCP
 		}
 		else if (MessageCategory_Notification == spMsg->eMessageCategory)
 		{
-			if (!spMsg->ctxProtocol.IsValid() || spMsg->ctxProtocol.IsStateless())
-			{
-				if (!spMsg->ctxProtocol.IsStateless() || !m_bModernSupported)
-					return ERRNO_OK;
+			if (!spMsg->ctxProtocol.IsValid())
+				return ERRNO_OK;
 
+			if (spMsg->ctxProtocol.IsStateless())
+			{
 				return ProcessModernNotification(
 					spMsg->ctxProtocol,
 					std::dynamic_pointer_cast<MCP::Notification>(spMsg));
@@ -1412,16 +1412,6 @@ namespace MCP
 		return CProtocolRegistry::GetGlobalRegistry();
 	}
 
-	void CMCPSession::SetModernProtocolSupported(bool bSupported)
-	{
-		m_bModernSupported = bSupported;
-	}
-
-	bool CMCPSession::GetModernProtocolSupported() const
-	{
-		return m_bModernSupported;
-	}
-
 	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
 	{
 		m_iCacheTtlMs = iTtlMs;
@@ -1569,9 +1559,6 @@ namespace MCP
 		auto spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
-
-		if (!m_bModernSupported)
-			return SendErrorResponse(spRequest, ERRNO_INVALID_REQUEST, ERROR_MESSAGE_INVALID_REQUEST);
 
 		int iValidate = ValidateProtocolContext(spRequest->ctxProtocol, spRequest);
 		if (ERRNO_OK != iValidate)

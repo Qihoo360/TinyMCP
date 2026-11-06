@@ -152,10 +152,6 @@ namespace MCP
 			if (!MCP::CMCPSession::GetInstance().GetTransport())
 			{
 				MCP::CMCPSession::GetInstance().SetTransport(std::make_shared<CStdioTransport>());
-
-				// The stdio entry opts into the stateless era. Transports that keep
-				// the handshake model stay on the legacy 2024-11-05 path.
-				MCP::CMCPSession::GetInstance().SetModernProtocolSupported(true);
 			}
 			MCP::CMCPSession::GetInstance().SetServerCapabilities(m_capabilities);
 			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);

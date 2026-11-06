@@ -26,10 +26,15 @@ namespace MCP
 				server.RegisterServerInstructions("TinyMCP E2E server");
 			}
 
-			// Install stdio before Start(): CMCPServer::Start() only enables the
-			// stateless era when it installs the transport itself.
+			// Install stdio before Start(). The active registry decides which
+			// protocol versions are served; the legacy-only fixture pins it to the
+			// handshake era.
 			CMCPSession::GetInstance().SetTransport(std::make_shared<MCP::CStdioTransport>());
-			CMCPSession::GetInstance().SetModernProtocolSupported(!bLegacyOnly);
+			if (bLegacyOnly)
+			{
+				CMCPSession::GetInstance().SetProtocolRegistry(
+					&MCP::CProtocolRegistry::GetHandshakeOnlyRegistry());
+			}
 
 			int iErrCode = server.Initialize();
 			if (ERRNO_OK != iErrCode)

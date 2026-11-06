@@ -391,6 +391,10 @@ namespace MCP
 
 		static const CProtocolRegistry& GetGlobalRegistry();
 
+		// A registry that serves only the default handshake profile. Transports
+		// that do not implement the stateless era (for example SSE) pin to it.
+		static const CProtocolRegistry& GetHandshakeOnlyRegistry();
+
 		const ProtocolProfile* Find(const std::string& strVersion) const;
 		const ProtocolProfile* GetDefaultHandshakeProfile() const;
 		const ProtocolProfile* GetLatestStatelessProfile() const;

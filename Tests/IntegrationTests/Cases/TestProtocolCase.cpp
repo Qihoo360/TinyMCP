@@ -174,7 +174,6 @@ TEST_CASE("integration.discover")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_SERVER_DISCOVER,
@@ -215,7 +214,6 @@ TEST_CASE("integration.version_fallback")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 
@@ -249,18 +247,19 @@ TEST_CASE("integration.version_fallback")
 		jResponse));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
-	// A legacy-only server rejects stateless requests and keeps the handshake.
-	CMCPSession::GetInstance().SetModernProtocolSupported(false);
+	// A handshake-only registry rejects stateless requests and keeps the handshake.
+	CMCPSession::GetInstance().SetProtocolRegistry(&CProtocolRegistry::GetHandshakeOnlyRegistry());
 	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().ResetForNewClient());
 
 	CHECK(ExpectError(driver, MakeRequest(6, METHOD_SERVER_DISCOVER,
 		MakeModernParams("2026-07-28", "{}")),
-		6, ERRNO_INVALID_REQUEST, jResponse));
+		6, ERRNO_UNSUPPORTED_PROTOCOL_VERSION, jResponse));
 
 	CompleteLegacyHandshake(driver, 7);
 	CHECK(ExpectResponse(driver, MakeRequest(8, METHOD_TOOLS_LIST, std::string()), jResponse));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
+	CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
 	driver.Stop();
 }
 
@@ -270,7 +269,6 @@ TEST_CASE("integration.version_extensibility")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	ProtocolProfile legacyProfile = *CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
 
@@ -417,7 +415,6 @@ TEST_CASE("integration.modern_core")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 
@@ -659,7 +656,6 @@ TEST_CASE("integration.mrtr")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	const std::string strElicitation = "{\"elicitation\":{\"form\":{}}}";
 	Json::Value jResponse;
@@ -771,7 +767,6 @@ TEST_CASE("integration.subscriptions")
 	CTestServer::s_Instance.RegisterServerPromptsCapabilities(prompts);
 
 	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	const std::string strListen = MakeRequest(1, METHOD_SUBSCRIPTIONS_LISTEN,
 		MakeModernParams("2026-07-28", "{}", std::string(),
@@ -845,7 +840,6 @@ TEST_CASE("integration.apps")
 		if (!StartServer(driver))
 			return;
 
-		CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 		Json::Value jResponse;
 		CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_SERVER_DISCOVER,
@@ -865,7 +859,6 @@ TEST_CASE("integration.apps")
 	CTestServer::s_Instance.RegisterServerAppsCapabilities();
 	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeRequest(10, METHOD_SERVER_DISCOVER,
@@ -944,7 +937,6 @@ TEST_CASE("integration.dual_era")
 	if (!StartServer(driver))
 		return;
 
-	CMCPSession::GetInstance().SetModernProtocolSupported(true);
 
 	CompleteLegacyHandshake(driver, 1);
 

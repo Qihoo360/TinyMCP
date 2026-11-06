@@ -297,9 +297,9 @@ namespace MCP
 			CHECK(client.WaitForId(26, nCancelStart, nCancelIndex, E2E_WAIT_TIMEOUT_MS));
 			CHECK(!client.WaitForId(27, nCancelStart, nCancelIndex, 1500));
 
-			// A legacy-only server rejects stateless requests and keeps serving.
+			// A legacy-only server rejects stateless requests as unsupported.
 			CHECK(ExpectError(client, 20, METHOD_SERVER_DISCOVER,
-				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), ERRNO_INVALID_REQUEST, jResponse));
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), ERRNO_UNSUPPORTED_PROTOCOL_VERSION, jResponse));
 			CHECK(ExpectError(client, 21, METHOD_RESOURCES_READ,
 				"{\"uri\":\"test://echo/missing\"}", ERRNO_RESOURCE_NOT_FOUND, jResponse));
 			CHECK(ExpectResponse(client, 22, METHOD_PING, std::string(), jResponse));
