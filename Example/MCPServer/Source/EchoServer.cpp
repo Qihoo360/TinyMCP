@@ -63,6 +63,8 @@ namespace Implementation
 		appTool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
 		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.jInputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.jOutputSchema))
+			return MCP::ERRNO_PARSE_ERROR;
 		appTool.SetUiResourceUri(Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
 		vecTools.push_back(appTool);
 

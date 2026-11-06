@@ -263,6 +263,12 @@ namespace Implementation
 		textContent.strType = MCP::CONST_TEXT;
 		textContent.strText = u8"echo_app received: " + strInput;
 		spResult->vecTextContent.push_back(textContent);
+
+		// The Apps view consumes structuredContent; the schema above describes it.
+		Json::Value jStructured(Json::objectValue);
+		jStructured["echo"] = strInput;
+		jStructured["length"] = static_cast<Json::UInt>(strInput.size());
+		spResult->jStructuredContent = jStructured;
 		spResult->bIsError = false;
 
 		return NotifyResult(spResult);
@@ -302,13 +308,145 @@ namespace Implementation
 		MCP::TextResourceContents textContent;
 		textContent.strUri = spReadResourceRequest->strUri;
 		textContent.strMimeType = MCP::MIME_TYPE_MCP_APP;
+		// The HTML below speaks the MCP Apps View<->Host bridge. It is demo glue,
+		// not SDK code: the host owns window.parent and answers ui/initialize,
+		// tools/call and the tool-input/tool-result notifications.
 		textContent.strText =
 			u8R"(<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Echo App</title></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Echo App</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 16px; }
+  input, button { font: inherit; padding: 6px 10px; }
+  pre { padding: 8px; background: rgba(127, 127, 127, 0.15); white-space: pre-wrap; }
+</style>
+</head>
 <body>
 <h1>Echo App</h1>
-<p>This UI resource is served by the TinyMCP example server.</p>
+<p id="status">Connecting to the MCP Apps host...</p>
+<div>
+  <input id="input" value="hello from the app" size="32">
+  <button id="call">Call echo tool</button>
+</div>
+<pre id="output">No tool result yet.</pre>
+<script>
+(function () {
+  'use strict';
+
+  var pending = {};
+  var nextId = 1;
+  var statusNode = document.getElementById('status');
+  var inputNode = document.getElementById('input');
+  var outputNode = document.getElementById('output');
+
+  function post(message) {
+    window.parent.postMessage(message, '*');
+  }
+
+  function request(method, params) {
+    return new Promise(function (resolve, reject) {
+      var id = nextId++;
+      pending[id] = { resolve: resolve, reject: reject };
+      post({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
+    });
+  }
+
+  function notify(method, params) {
+    post({ jsonrpc: '2.0', method: method, params: params || {} });
+  }
+
+  function show(value) {
+    outputNode.textContent = JSON.stringify(value, null, 2);
+  }
+
+  window.addEventListener('message', function (event) {
+    var message = event.data;
+    if (!message || message.jsonrpc !== '2.0') {
+      return;
+    }
+
+    if (message.id !== undefined && pending[message.id]) {
+      var entry = pending[message.id];
+      delete pending[message.id];
+      if (message.error) {
+        entry.reject(message.error);
+      } else {
+        entry.resolve(message.result);
+      }
+      return;
+    }
+
+    if (message.method === 'ui/notifications/tool-input') {
+      var args = message.params && message.params.arguments;
+      if (args && typeof args.input === 'string') {
+        inputNode.value = args.input;
+      }
+      statusNode.textContent = 'Tool input received.';
+      return;
+    }
+
+    if (message.method === 'ui/notifications/tool-result') {
+      var result = message.params || {};
+      show(result.structuredContent !== undefined ? result.structuredContent : result);
+      statusNode.textContent = result.isError ? 'Tool reported an error.' : 'Tool result received.';
+    }
+  });
+
+  document.getElementById('call').addEventListener('click', function () {
+    statusNode.textContent = 'Calling the echo tool...';
+    request('tools/call', { name: 'echo', arguments: { input: inputNode.value } })
+      .then(function (result) {
+        show(result.structuredContent !== undefined ? result.structuredContent : result);
+        statusNode.textContent = 'Echo tool returned.';
+      })
+      .catch(function (error) {
+        show(error);
+        statusNode.textContent = 'Echo tool call failed.';
+      });
+  });
+
+  if (window.parent === window) {
+    statusNode.textContent = 'Standalone preview: no MCP Apps host detected.';
+    return;
+  }
+
+  var settled = false;
+  request('ui/initialize', {
+    protocolVersion: '2026-07-28',
+    appInfo: { name: 'echo-app', version: '1.0.0' },
+    appCapabilities: {}
+  }).then(function (result) {
+    settled = true;
+    var hostName = result && result.hostInfo && result.hostInfo.name ? result.hostInfo.name : 'host';
+    statusNode.textContent = 'Connected to ' + hostName + '.';
+    notify('ui/notifications/initialized', {});
+  }).catch(function () {
+    settled = true;
+    statusNode.textContent = 'The host did not accept ui/initialize.';
+  });
+
+  window.setTimeout(function () {
+    if (!settled) {
+      statusNode.textContent = 'No host response; running as a preview.';
+    }
+  }, 2000);
+
+  function sendSize() {
+    notify('ui/notifications/size-changed', {
+      width: Math.ceil(document.documentElement.scrollWidth),
+      height: Math.ceil(document.documentElement.scrollHeight)
+    });
+  }
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(sendSize).observe(document.body);
+  }
+  window.addEventListener('load', sendSize);
+})();
+</script>
 </body>
 </html>
 )";

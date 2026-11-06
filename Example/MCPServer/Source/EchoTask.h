@@ -61,6 +61,7 @@ namespace Implementation
 		static constexpr const char* TOOL_NAME = "echo_app";
 		static constexpr const char* TOOL_DESCRIPTION = u8"Return the echoed data together with an MCP Apps UI resource.";
 		static constexpr const char* TOOL_INPUT_SCHEMA = u8R"({"type":"object","properties":{"input":{"type":"string","description":"client input data"}},"required":["input"]})";
+		static constexpr const char* TOOL_OUTPUT_SCHEMA = u8R"({"type":"object","properties":{"echo":{"type":"string","description":"the echoed input"},"length":{"type":"integer","description":"character count of the echoed input"}},"required":["echo","length"]})";
 		static constexpr const char* TOOL_ARGUMENT_INPUT = "input";
 
 		CEchoAppTask(const std::shared_ptr<MCP::Request>& spRequest)
