@@ -294,7 +294,11 @@ namespace MCP
 		if (!spInitializeResult)
 			return ERRNO_INTERNAL_ERROR;
 		spInitializeResult->requestId = m_spRequest->requestId;
-		const ProtocolProfile* pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
+		// The context carries the negotiated handshake revision, so the response
+		// reports the version the session will actually speak.
+		const ProtocolProfile* pHandshakeProfile = m_spRequest->ctxProtocol.pProfile;
+		if (!pHandshakeProfile)
+			pHandshakeProfile = CMCPSession::GetInstance().GetProtocolRegistry().GetDefaultHandshakeProfile();
 		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;
 		spInitializeResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
 		spInitializeResult->implServerInfo = CMCPSession::GetInstance().GetServerInfo();

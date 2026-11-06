@@ -136,7 +136,8 @@ namespace MCP
 		int ParseRequest(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
 		int ParseResponse(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg);
 		int ParseNotification(const std::string& strMsg, const ProtocolContext& ctxProtocol, std::shared_ptr<MCP::Message>& spMsg);
-		ProtocolContext ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta) const;
+		ProtocolContext ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta,
+			const std::string& strRequestedVersion) const;
 		int ProcessMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessModernMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg);
 		int ProcessModernRequest(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest);

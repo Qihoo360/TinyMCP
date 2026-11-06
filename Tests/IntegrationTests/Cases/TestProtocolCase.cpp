@@ -49,10 +49,10 @@ namespace
 		return strParams;
 	}
 
-	std::string MakeLegacyInitialize(int iId)
+	std::string MakeLegacyInitialize(int iId, const std::string& strVersion = "2024-11-05")
 	{
 		return MakeRequest(iId, METHOD_INITIALIZE,
-			"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}");
+			"{\"protocolVersion\":\"" + strVersion + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}");
 	}
 
 	bool ParseJson(const std::string& strText, Json::Value& jValue)
@@ -348,7 +348,7 @@ TEST_CASE("integration.version_extensibility")
 		CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
 	}
 
-	// Profile order defines the handshake version returned by initialize.
+	// Handshake initialize negotiates to the requested version.
 	{
 		ProtocolProfile handshakeProfile;
 		handshakeProfile.strVersion = "2098-01-01";
@@ -363,7 +363,7 @@ TEST_CASE("integration.version_extensibility")
 		CMCPSession::GetInstance().SetProtocolRegistry(&registry);
 
 		Json::Value jResponse;
-		CHECK(ExpectResponse(driver, MakeLegacyInitialize(6), jResponse));
+		CHECK(ExpectResponse(driver, MakeLegacyInitialize(6, "2098-01-01"), jResponse));
 		CHECK_EQ(std::string("2098-01-01"),
 			jResponse[MSG_KEY_RESULT][MSG_KEY_PROTOCOL_VERSION].asString());
 
@@ -382,6 +382,32 @@ TEST_CASE("integration.version_extensibility")
 		CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
 	}
 
+	driver.Stop();
+}
+
+// An unknown handshake version falls back to the default handshake profile.
+TEST_CASE("integration.handshake_version_fallback")
+{
+	CDriver driver;
+	if (!StartServer(driver))
+		return;
+
+	ProtocolProfile defaultProfile = *CProtocolRegistry::GetGlobalRegistry().GetDefaultHandshakeProfile();
+	ProtocolProfile handshakeProfile = defaultProfile;
+	handshakeProfile.strVersion = "2098-01-01";
+
+	std::vector<ProtocolProfile> vecProfiles;
+	vecProfiles.push_back(handshakeProfile);
+	vecProfiles.push_back(defaultProfile);
+	CProtocolRegistry registry(vecProfiles);
+	CMCPSession::GetInstance().SetProtocolRegistry(&registry);
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeLegacyInitialize(1, "2097-01-01"), jResponse));
+	CHECK_EQ(std::string("2098-01-01"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_PROTOCOL_VERSION].asString());
+
+	CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
 	driver.Stop();
 }
 

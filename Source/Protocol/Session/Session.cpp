@@ -806,9 +806,18 @@ namespace MCP
 			jMeta = jVal[MSG_KEY_PARAMS][MSG_KEY_META];
 		}
 
+		std::string strRequestedVersion;
+		if (METHOD_INITIALIZE == strMethod
+			&& jVal.isMember(MSG_KEY_PARAMS) && jVal[MSG_KEY_PARAMS].isObject()
+			&& jVal[MSG_KEY_PARAMS].isMember(MSG_KEY_PROTOCOL_VERSION)
+			&& jVal[MSG_KEY_PARAMS][MSG_KEY_PROTOCOL_VERSION].isString())
+		{
+			strRequestedVersion = jVal[MSG_KEY_PARAMS][MSG_KEY_PROTOCOL_VERSION].asString();
+		}
+
 		// The era must be resolved from the raw message before the typed parse so
 		// version gated fields such as params._meta.logLevel survive deserialization.
-		ProtocolContext ctxProtocol = ResolveProtocolContext(strMethod, jMeta);
+		ProtocolContext ctxProtocol = ResolveProtocolContext(strMethod, jMeta, strRequestedVersion);
 
 		switch (eCategory)
 		{
@@ -1439,13 +1448,23 @@ namespace MCP
 		return m_strServerInstructions;
 	}
 
-	ProtocolContext CMCPSession::ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta) const
+	ProtocolContext CMCPSession::ResolveProtocolContext(const std::string& strMethod, const Json::Value& jMeta,
+		const std::string& strRequestedVersion) const
 	{
 		const CProtocolRegistry& registry = GetProtocolRegistry();
 
-		// initialize is always negotiated through the handshake profile.
 		if (METHOD_INITIALIZE == strMethod)
+		{
+			// Handshake negotiation: honor an explicitly requested version when the
+			// registry serves it in the handshake era. A version the registry does
+			// not know falls back to the default handshake profile, which is the
+			// version the server reports back to the client.
+			const ProtocolProfile* pRequested = registry.Find(strRequestedVersion);
+			if (pRequested && Era_Handshake == pRequested->eEra)
+				return MakeProfileContext(pRequested);
+
 			return MakeProfileContext(registry.GetDefaultHandshakeProfile());
+		}
 
 		// No io.modelcontextprotocol/* key keeps the legacy handshake flow. Only
 		// progressToken/toolCallId style metadata stays in that era.
@@ -1475,7 +1494,12 @@ namespace MCP
 		Json::Value jMeta(Json::objectValue);
 		spRequest->meta.DoSerialize(jMeta);
 
-		return ResolveProtocolContext(spRequest->strMethod, jMeta);
+		std::string strRequestedVersion;
+		auto spInitializeRequest = std::dynamic_pointer_cast<MCP::InitializeRequest>(spRequest);
+		if (spInitializeRequest)
+			strRequestedVersion = spInitializeRequest->strProtocolVer;
+
+		return ResolveProtocolContext(spRequest->strMethod, jMeta, strRequestedVersion);
 	}
 
 	int CMCPSession::ValidateProtocolContext(const ProtocolContext& ctxProtocol, const std::shared_ptr<MCP::Request>& spRequest)

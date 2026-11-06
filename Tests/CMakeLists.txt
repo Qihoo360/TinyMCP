@@ -69,6 +69,8 @@ add_test(NAME integration.version_fallback COMMAND TinyMCPTests --case version_f
 set_tests_properties(integration.version_fallback PROPERTIES TIMEOUT 30)
 add_test(NAME integration.version_extensibility COMMAND TinyMCPTests --case version_extensibility)
 set_tests_properties(integration.version_extensibility PROPERTIES TIMEOUT 30)
+add_test(NAME integration.handshake_version_fallback COMMAND TinyMCPTests --case handshake_version_fallback)
+set_tests_properties(integration.handshake_version_fallback PROPERTIES TIMEOUT 30)
 add_test(NAME integration.modern_core COMMAND TinyMCPTests --case modern_core)
 set_tests_properties(integration.modern_core PROPERTIES TIMEOUT 30)
 add_test(NAME integration.mrtr COMMAND TinyMCPTests --case mrtr)
