@@ -1399,17 +1399,14 @@ namespace MCP
 		return m_spTransport->Write(strNotification);
 	}
 
-	void CMCPSession::SetProtocolRegistry(const CProtocolRegistry* pRegistry)
+	void CMCPSession::SetProtocolRegistry(const CProtocolRegistry& registry)
 	{
-		m_pRegistry = pRegistry;
+		m_registry = registry;
 	}
 
 	const CProtocolRegistry& CMCPSession::GetProtocolRegistry() const
 	{
-		if (m_pRegistry)
-			return *m_pRegistry;
-
-		return CProtocolRegistry::GetGlobalRegistry();
+		return m_registry;
 	}
 
 	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)

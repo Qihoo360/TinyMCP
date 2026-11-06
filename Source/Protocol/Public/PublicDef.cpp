@@ -134,13 +134,6 @@ namespace MCP
 		return s_Registry;
 	}
 
-	const CProtocolRegistry& CProtocolRegistry::GetHandshakeOnlyRegistry()
-	{
-		static const CProtocolRegistry s_Registry(
-			std::vector<ProtocolProfile>{ MakeLegacyProfile() });
-		return s_Registry;
-	}
-
 	const ProtocolProfile* CProtocolRegistry::Find(const std::string& strVersion) const
 	{
 		for (size_t i = 0; i < m_vecProfiles.size(); ++i)

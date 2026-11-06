@@ -194,7 +194,7 @@ namespace Implementation
                     continue;
                 iTicks = 0;
 
-                if (!MCP::CMCPSession::GetInstance().GetTransport())
+                if (!CEchoServer::GetInstance().GetTransport())
                     continue;
 
                 Json::Value jParams(Json::objectValue);
@@ -202,7 +202,7 @@ namespace Implementation
 
                 // Only active subscriptions/listen registrations receive this
                 // notification; a server without listeners sends nothing.
-                MCP::CMCPSession::GetInstance().SendSubscriptionNotification(
+                CEchoServer::GetInstance().SendSubscriptionNotification(
                     MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jParams,
                     Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
             }

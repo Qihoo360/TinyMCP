@@ -28,27 +28,26 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 | [2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/index) | stdio, HTTP+SSE | Handshake with a session state machine |
 | [2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/index) | stdio only | Stateless, per-request `_meta` |
 
-`2026-07-28` is served over **stdio only**; this release does not implement the streamable HTTP transport. The legacy HTTP+SSE transport keeps working unchanged for 2024-11-05 clients. Existing 2024-11-05 clients see no behavioral change; a server that used to disable the stateless era now pins `GetHandshakeOnlyRegistry()` instead (see below).
+`2026-07-28` is served over **stdio only**; this release does not implement the streamable HTTP transport. The legacy HTTP+SSE transport keeps working unchanged for 2024-11-05 clients. Existing 2024-11-05 clients see no behavioral change.
 
 ### Selecting protocol versions
-The active `CProtocolRegistry` is the single source of truth: it decides which versions are discovered, negotiated and served. The default global registry serves every version in the table above, so no extra call is needed.
+Declare the revisions your server serves through `CMCPServer`; the SDK builds the internal profile table from that declaration, so registry and profile types never appear in application code.
 
 ```cpp
-// Serve both shipped versions (default).
-MCP::CMCPSession::GetInstance().SetProtocolRegistry(nullptr);
+// Serve every shipped version (default when this call is omitted).
+server.SetSupportedProtocolVersions({
+    MCP::PROTOCOL_VER_2024_11_05,
+    MCP::PROTOCOL_VER_2026_07_28,
+});
 
-// Serve only the handshake era (used by the HTTP+SSE entry point).
-MCP::CMCPSession::GetInstance().SetProtocolRegistry(
-    &MCP::CProtocolRegistry::GetHandshakeOnlyRegistry());
+// Serve only the handshake era.
+server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2024_11_05 });
 
-// Serve a custom set. Copy profiles from the global registry and add or drop
-// entries; the list order picks the default handshake / latest stateless profile.
-static MCP::CProtocolRegistry custom(std::vector<MCP::ProtocolProfile>{
-    *MCP::CProtocolRegistry::GetGlobalRegistry().Find(MCP::PROTOCOL_VER_2026_07_28) });
-MCP::CMCPSession::GetInstance().SetProtocolRegistry(&custom);
+// Serve only the stateless era.
+server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2026_07_28 });
 ```
 
-The registry must outlive the session (static, global, or a long-lived member). A request whose `_meta` names a version the active registry does not serve is rejected with `-32022`, and the error data lists the supported versions. The example pins the `sse` branch to `GetHandshakeOnlyRegistry()` and leaves the `stdio` branch on the global registry.
+Call it before `Start()`. Unknown revisions are rejected with `ERRNO_INVALID_PARAMS` instead of being silently ignored. The transport is checked too: declaring `2026-07-28` while using the HTTP+SSE transport fails at `Start()`, while leaving the call out simply serves every revision that transport can carry. A request whose `_meta` names a version the server does not serve is rejected with `-32022`, and the error data lists the supported versions.
 
 ### Per-request `_meta`
 Stateless requests carry their version and client information in `params._meta`. `protocolVersion` and `clientCapabilities` are required; if any `io.modelcontextprotocol/*` key is present but a required one is missing, the server returns `-32602` and does **not** fill in defaults.

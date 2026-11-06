@@ -27,11 +27,10 @@ int LaunchEchoServer(const std::string& strTransport, const std::string& strHost
     {
         if (strTransport == "sse")
         {
-            // 2026-07-28 is stdio-only in this SDK; the SSE entry pins the active
-            // registry to the 2024-11-05 handshake model.
+            // 2026-07-28 needs a stateless transport, so the SSE entry serves the
+            // 2024-11-05 handshake model only.
             server.SetTransport(std::make_shared<MCP::CSSETransport>(strHost, iPort));
-            MCP::CMCPSession::GetInstance().SetProtocolRegistry(
-                &MCP::CProtocolRegistry::GetHandshakeOnlyRegistry());
+            server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2024_11_05 });
         }
         // 2. Start the Server.
         server.Start();

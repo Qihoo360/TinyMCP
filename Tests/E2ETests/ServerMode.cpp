@@ -26,15 +26,12 @@ namespace MCP
 				server.RegisterServerInstructions("TinyMCP E2E server");
 			}
 
-			// Install stdio before Start(). The active registry decides which
-			// protocol versions are served; the legacy-only fixture pins it to the
-			// handshake era.
+			// Install stdio before Start(). The declared versions decide which
+			// protocol revisions are served; the legacy-only fixture asks for the
+			// handshake era alone.
 			CMCPSession::GetInstance().SetTransport(std::make_shared<MCP::CStdioTransport>());
 			if (bLegacyOnly)
-			{
-				CMCPSession::GetInstance().SetProtocolRegistry(
-					&MCP::CProtocolRegistry::GetHandshakeOnlyRegistry());
-			}
+				server.SetSupportedProtocolVersions({ PROTOCOL_VER_2024_11_05 });
 
 			int iErrCode = server.Initialize();
 			if (ERRNO_OK != iErrCode)

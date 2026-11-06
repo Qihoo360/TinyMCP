@@ -36,6 +36,10 @@ namespace MCP
 		int Write(const std::string& strIn) override;
 		int Error(const std::string& strIn) override;
 
+		// SSE keeps the 2024-11-05 handshake model; stateless revisions are not
+		// served over this transport.
+		bool SupportsStatelessProtocol() const override { return false; }
+
 	private:
 		// Non-copyable
 		CSSETransport(const CSSETransport&) = delete;

@@ -43,10 +43,9 @@ namespace MCP
 		int Terminate();
 		int CancelTask(const MCP::RequestId& requestId);
 
-		// Protocol version support. The active registry is the single source of
-		// truth: it decides which versions may be discovered, negotiated and
-		// served. The default global registry serves every shipped version.
-		void SetProtocolRegistry(const CProtocolRegistry* pRegistry);
+		// Internal to the SDK. CMCPServer builds the registry from the versions
+		// the application declares, so callers never construct profiles.
+		void SetProtocolRegistry(const CProtocolRegistry& registry);
 		const CProtocolRegistry& GetProtocolRegistry() const;
 		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
 		int GetServerCacheTtlMs() const;
@@ -164,7 +163,7 @@ namespace MCP
 		SessionState m_eSessionState{ SessionState_Original };
 		std::shared_ptr<CMCPTransport> m_spTransport;
 
-		const CProtocolRegistry* m_pRegistry{ nullptr };
+		CProtocolRegistry m_registry{ CProtocolRegistry::GetGlobalRegistry() };
 		int m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
 		std::string m_strServerInstructions;

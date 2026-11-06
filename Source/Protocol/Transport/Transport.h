@@ -18,6 +18,11 @@ namespace MCP
 		virtual int Read(std::string& strOut) = 0;
 		virtual int Write(const std::string& strIn) = 0;
 		virtual int Error(const std::string& strIn) = 0;
+
+		// Stateless requests only need a line-oriented message stream. Transports
+		// that carry MCP inside a session-based channel (for example HTTP+SSE)
+		// report false so the server can refuse stateless revisions up front.
+		virtual bool SupportsStatelessProtocol() const { return true; }
 	};
 
 	class CStdioTransport : public CMCPTransport

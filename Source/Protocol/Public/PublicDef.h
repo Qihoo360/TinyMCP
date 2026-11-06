@@ -382,6 +382,10 @@ namespace MCP
 		bool SupportsMethod(const std::string& strMethod) const;
 	};
 
+	// Internal to the SDK. Applications declare the revisions they serve through
+	// CMCPServer::SetSupportedProtocolVersions; the registry is built from that
+	// declaration, so profile data stays an implementation detail.
+	//
 	// Read-only version table. Version differences are declared as profile data;
 	// the order of the profile list defines version priority.
 	class CProtocolRegistry
@@ -390,10 +394,6 @@ namespace MCP
 		explicit CProtocolRegistry(const std::vector<ProtocolProfile>& vecProfiles);
 
 		static const CProtocolRegistry& GetGlobalRegistry();
-
-		// A registry that serves only the default handshake profile. Transports
-		// that do not implement the stateless era (for example SSE) pin to it.
-		static const CProtocolRegistry& GetHandshakeOnlyRegistry();
 
 		const ProtocolProfile* Find(const std::string& strVersion) const;
 		const ProtocolProfile* GetDefaultHandshakeProfile() const;

@@ -2,7 +2,10 @@
 // To ensure good cross-platform compatibility, all code within the MCP namespace is written in standard C++.
 // The use of platform-specific system APIs is prohibited unless necessary.
 
+#include <algorithm>
 #include <memory>
+#include <string>
+#include <vector>
 #include "../Public/PublicDef.h"
 #include "../Session/Session.h"
 #include "../Transport/Transport.h"
@@ -28,6 +31,47 @@ namespace MCP
 		void SetTransport(const std::shared_ptr<MCP::CMCPTransport>& spTransport)
 		{
 			MCP::CMCPSession::GetInstance().SetTransport(spTransport);
+		}
+
+		std::shared_ptr<MCP::CMCPTransport> GetTransport() const
+		{
+			return MCP::CMCPSession::GetInstance().GetTransport();
+		}
+
+		// Server-initiated notifications. Only active listeners receive them, so a
+		// server without subscriptions sends nothing.
+		int SendResourceListChanged()
+		{
+			return MCP::CMCPSession::GetInstance().SendResourceListChanged();
+		}
+
+		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams,
+			const std::string& strMatchUri = std::string())
+		{
+			return MCP::CMCPSession::GetInstance().SendSubscriptionNotification(strMethod, jParams, strMatchUri);
+		}
+
+		// Declares the protocol revisions this server serves. Call it before
+		// Start(); leaving it unused means every revision the transport can
+		// carry. Revisions unknown to this SDK are rejected instead of being
+		// silently dropped, so a typo cannot narrow the surface by accident.
+		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
+		{
+			if (vecVersions.empty())
+				return ERRNO_INVALID_PARAMS;
+
+			std::vector<std::string> vecSupported;
+			for (const auto& strVersion : vecVersions)
+			{
+				if (!MCP::CProtocolRegistry::GetGlobalRegistry().Find(strVersion))
+					return ERRNO_INVALID_PARAMS;
+
+				if (std::find(vecSupported.begin(), vecSupported.end(), strVersion) == vecSupported.end())
+					vecSupported.push_back(strVersion);
+			}
+
+			m_vecSupportedProtocolVersions = vecSupported;
+			return ERRNO_OK;
 		}
 
 		void RegisterServerToolsCapabilities(const MCP::Tools& tools)
@@ -153,6 +197,11 @@ namespace MCP
 			{
 				MCP::CMCPSession::GetInstance().SetTransport(std::make_shared<CStdioTransport>());
 			}
+
+			int iErrCode = ApplySupportedProtocolVersions();
+			if (ERRNO_OK != iErrCode)
+				return iErrCode;
+
 			MCP::CMCPSession::GetInstance().SetServerCapabilities(m_capabilities);
 			MCP::CMCPSession::GetInstance().SetServerCallToolsTasks(m_hashCallToolsTasks);
 			MCP::CMCPSession::GetInstance().SetServerReadResourceTasks(m_hashReadResourceTasks);
@@ -160,7 +209,7 @@ namespace MCP
 			MCP::CMCPSession::GetInstance().SetServerGetPromptTasks(m_hashGetPromptTasks);
 			MCP::CMCPSession::GetInstance().SetServerCompleteTasks(m_hashCompleteTasks);
 
-			int iErrCode = MCP::CMCPSession::GetInstance().Ready();
+			iErrCode = MCP::CMCPSession::GetInstance().Ready();
 			if (ERRNO_OK != iErrCode)
 				return iErrCode;
 
@@ -172,10 +221,54 @@ namespace MCP
 			return MCP::CMCPSession::GetInstance().Terminate();
 		}
 
+	private:
+		// Translates the declared revision list into the internal registry. An
+		// explicitly requested stateless revision over a handshake-only transport
+		// is a configuration error; the implicit default is filtered instead.
+		int ApplySupportedProtocolVersions()
+		{
+			std::shared_ptr<MCP::CMCPTransport> spTransport = MCP::CMCPSession::GetInstance().GetTransport();
+			if (!spTransport)
+				return ERRNO_INTERNAL_ERROR;
+
+			const MCP::CProtocolRegistry& registry = MCP::CProtocolRegistry::GetGlobalRegistry();
+			const bool bStatelessSupported = spTransport->SupportsStatelessProtocol();
+			const bool bExplicit = !m_vecSupportedProtocolVersions.empty();
+
+			std::vector<std::string> vecVersions = bExplicit
+				? m_vecSupportedProtocolVersions
+				: registry.GetSupportedVersions();
+
+			std::vector<MCP::ProtocolProfile> vecProfiles;
+			for (const auto& strVersion : vecVersions)
+			{
+				const MCP::ProtocolProfile* pProfile = registry.Find(strVersion);
+				if (!pProfile)
+					return ERRNO_INVALID_PARAMS;
+
+				if (!bStatelessSupported && MCP::Era_Stateless == pProfile->eEra)
+				{
+					if (bExplicit)
+						return ERRNO_INVALID_PARAMS;
+
+					continue;
+				}
+
+				vecProfiles.push_back(*pProfile);
+			}
+
+			if (vecProfiles.empty())
+				return ERRNO_INVALID_PARAMS;
+
+			MCP::CMCPSession::GetInstance().SetProtocolRegistry(MCP::CProtocolRegistry(vecProfiles));
+			return ERRNO_OK;
+		}
+
 	protected:
 		CMCPServer() = default;
 		~CMCPServer() = default;
 
+		std::vector<std::string> m_vecSupportedProtocolVersions;
 		MCP::ServerCapabilities m_capabilities;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
