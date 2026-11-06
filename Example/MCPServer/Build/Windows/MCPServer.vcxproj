@@ -201,6 +201,8 @@
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\MessageAccess.h" />
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\Protocol.h" />
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\SessionAccess.h" />
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\TaskAccess.h" />
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\TaskServices.h" />
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\VersionExtras.h" />
     <ClInclude Include="..\..\..\..\Source\Protocol\Public\PublicDef.h" />
     <ClInclude Include="..\..\..\..\Source\Protocol\Public\StringHelper.h" />

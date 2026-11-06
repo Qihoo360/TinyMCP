@@ -9,6 +9,12 @@
 
 namespace MCP
 {
+	// Declared here, defined in Internal/TaskServices.h. The session binds the
+	// services when it dispatches the task, so this header only forward declares
+	// them.
+	struct TaskServices;
+	struct TaskServicesAccess;
+
 	class ProcessRequest : public MCP::CMCPTask
 	{
 	public:
@@ -28,6 +34,10 @@ namespace MCP
 		int NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData);
 
 	protected:
+		// Session-side services for this dispatch. Never null for a task the
+		// session created; IsValid() reports false otherwise.
+		const std::shared_ptr<MCP::TaskServices>& GetTaskServices() const;
+
 		// Copies the request era onto the result and applies server defaults
 		// before the result is serialized.
 		int SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse);
@@ -42,6 +52,12 @@ namespace MCP
 		int SendMissingClientCapability(const Json::Value& jRequiredCapabilities);
 
 		std::shared_ptr<MCP::Request> m_spRequest;
+
+	private:
+		friend struct TaskServicesAccess;
+		void SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices);
+
+		std::shared_ptr<MCP::TaskServices> m_spServices;
 	};
 
 	class ProcessPingRequest : public ProcessRequest

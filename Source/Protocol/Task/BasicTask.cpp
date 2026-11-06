@@ -1,8 +1,8 @@
 ﻿#include "BasicTask.h"
-#include "../Session/Session.h"
 #include "../Message/Notification.h"
 #include "../Internal/MessageAccess.h"
-#include "../Internal/SessionAccess.h"
+#include "../Internal/TaskServices.h"
+#include "../Internal/TaskAccess.h"
 
 namespace MCP
 {
@@ -34,7 +34,7 @@ namespace MCP
 	// ProcessRequest
 	bool ProcessRequest::IsValid() const
 	{
-		if (!m_spRequest)
+		if (!m_spRequest || !m_spServices)
 			return false;
 
 		return m_spRequest->IsValid();
@@ -70,8 +70,21 @@ namespace MCP
 		return m_spRequest;
 	}
 
+	void ProcessRequest::SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices)
+	{
+		m_spServices = spServices;
+	}
+
+	const std::shared_ptr<MCP::TaskServices>& ProcessRequest::GetTaskServices() const
+	{
+		return m_spServices;
+	}
+
 	int ProcessRequest::NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData)
 	{
+		if (!m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
 		MCP::LoggingLevel level;
 		level.eLevel = eLevel;
 
@@ -91,18 +104,18 @@ namespace MCP
 			if (static_cast<int>(eLevel) < static_cast<int>(requestLevel.eLevel))
 				return ERRNO_OK;
 
-			return MCP::CMCPSession::GetInstance().WriteLogNotification(level, strLogger, jData);
+			return GetTaskServices()->WriteLogNotification(level, strLogger, jData);
 		}
 
-		return MCP::CMCPSession::GetInstance().SendLogMessage(level, strLogger, jData);
+		return GetTaskServices()->SendLogMessage(level, strLogger, jData);
 	}
 
 	int ProcessRequest::SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse)
 	{
-		if (!spResult)
+		if (!spResult || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		MCP::CMCPSession::GetInstance().PrepareResult(m_spRequest, spResult);
+		GetTaskServices()->PrepareResult(m_spRequest, spResult);
 
 		return spResult->Serialize(strResponse);
 	}
@@ -173,7 +186,7 @@ namespace MCP
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -194,6 +207,8 @@ namespace MCP
 		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
 		if (!spTask)
 			return ERRNO_INTERNAL_ERROR;
+
+		TaskServicesAccess::Set(*spTask, m_spServices);
 
 		spTask->SetErrorCode(ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY);
 		spTask->SetErrorMessage(ERROR_MESSAGE_MISSING_REQUIRED_CLIENT_CAPABILITY);
@@ -221,7 +236,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -280,7 +295,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -324,14 +339,14 @@ namespace MCP
 		// reports the version the session will actually speak.
 		std::shared_ptr<const ProtocolProfile> pHandshakeProfile = MessageContextAccess::Get(*m_spRequest).pProfile;
 		if (!pHandshakeProfile)
-			pHandshakeProfile = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetDefaultHandshakeProfile();
+			pHandshakeProfile = GetTaskServices()->GetDefaultHandshakeProfile();
 		spInitializeResult->strProtocolVersion = pHandshakeProfile ? pHandshakeProfile->strVersion : PROTOCOL_VER;
-		spInitializeResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
-		spInitializeResult->implServerInfo = CMCPSession::GetInstance().GetServerInfo();
+		spInitializeResult->capabilities = GetTaskServices()->GetServerCapabilities();
+		spInitializeResult->implServerInfo = GetTaskServices()->GetServerInfo();
 		std::string strResponse;
 		if (ERRNO_OK != SerializeResult(spInitializeResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -359,7 +374,7 @@ namespace MCP
 		std::shared_ptr<ListToolsResult> spListToolsResult = nullptr;
 		std::string strResponse;
 
-		bool bPagination = CMCPSession::GetInstance().GetServerToolsPagination();		
+		bool bPagination = GetTaskServices()->GetServerToolsPagination();		
 		if (bPagination)
 		{
 			if (!spListToolRequest->strCursor.empty())
@@ -379,7 +394,7 @@ namespace MCP
 					bValidCursor = false;
 				}
 
-				auto vecServerTools = CMCPSession::GetInstance().GetServerTools();
+				auto vecServerTools = GetTaskServices()->GetServerTools();
 				if (bValidCursor)
 				{
 					if (nCursor >= vecServerTools.size())
@@ -413,7 +428,7 @@ namespace MCP
 				if (!spListToolsResult)
 					return ERRNO_INTERNAL_ERROR;
 				spListToolsResult->requestId = spListToolRequest->requestId;
-				auto vecServerTools = CMCPSession::GetInstance().GetServerTools();
+				auto vecServerTools = GetTaskServices()->GetServerTools();
 				spListToolsResult->vecTools.clear();
 				if (vecServerTools.size() > 0)
 					spListToolsResult->vecTools.push_back(vecServerTools[0]);
@@ -427,7 +442,7 @@ namespace MCP
 			if (!spListToolsResult)
 				return ERRNO_INTERNAL_ERROR;
 			spListToolsResult->requestId = spListToolRequest->requestId;
-			spListToolsResult->vecTools = CMCPSession::GetInstance().GetServerTools();
+			spListToolsResult->vecTools = GetTaskServices()->GetServerTools();
 		}
 
 		if (spListToolsResult)
@@ -438,7 +453,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strResponse))
@@ -489,7 +504,7 @@ namespace MCP
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
 				return ERRNO_INTERNAL_ERROR;
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strNotification))
@@ -509,7 +524,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -563,7 +578,7 @@ namespace MCP
 		std::shared_ptr<ListResourcesResult> spListResourcesResult = nullptr;
 		std::string strResponse;
 
-		bool bPagination = CMCPSession::GetInstance().GetServerResourcesPagination();
+		bool bPagination = GetTaskServices()->GetServerResourcesPagination();
 		if (bPagination)
 		{
 			if (!spListResourcesRequest->strCursor.empty())
@@ -583,7 +598,7 @@ namespace MCP
 					bValidCursor = false;
 				}
 
-				auto vecServerResources = CMCPSession::GetInstance().GetServerResources();
+				auto vecServerResources = GetTaskServices()->GetServerResources();
 				if (bValidCursor)
 				{
 					if (nCursor >= vecServerResources.size())
@@ -617,7 +632,7 @@ namespace MCP
 				if (!spListResourcesResult)
 					return ERRNO_INTERNAL_ERROR;
 				spListResourcesResult->requestId = spListResourcesRequest->requestId;
-				auto vecServerResources = CMCPSession::GetInstance().GetServerResources();
+				auto vecServerResources = GetTaskServices()->GetServerResources();
 				spListResourcesResult->vecResources.clear();
 				if (vecServerResources.size() > 0)
 					spListResourcesResult->vecResources.push_back(vecServerResources[0]);
@@ -631,7 +646,7 @@ namespace MCP
 			if (!spListResourcesResult)
 				return ERRNO_INTERNAL_ERROR;
 			spListResourcesResult->requestId = spListResourcesRequest->requestId;
-			spListResourcesResult->vecResources = CMCPSession::GetInstance().GetServerResources();
+			spListResourcesResult->vecResources = GetTaskServices()->GetServerResources();
 		}
 
 		if (spListResourcesResult)
@@ -642,7 +657,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strResponse))
@@ -693,7 +708,7 @@ namespace MCP
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
 				return ERRNO_INTERNAL_ERROR;
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strNotification))
@@ -713,7 +728,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -731,6 +746,7 @@ namespace MCP
 		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
 		if (spTask)
 		{
+			TaskServicesAccess::Set(*spTask, GetTaskServices());
 			spTask->SetErrorCode(iCode);
 			spTask->SetErrorMessage(strMessage);
 			spTask->SetErrorData(jErrData);
@@ -788,7 +804,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -812,7 +828,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -835,7 +851,7 @@ namespace MCP
 		std::string strNotification;
 		if (ERRNO_OK != spResourceUpdatedNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strNotification))
@@ -867,7 +883,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -889,7 +905,7 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 		if (ERRNO_OK != spTransport->Write(strResponse))
@@ -908,7 +924,7 @@ namespace MCP
 		if (!IsValid())
 			return ERRNO_INTERNAL_ERROR;
 
-		int iErrCode = CMCPSession::GetInstance().CancelTask(m_requestIdToUnsubscribe);
+		int iErrCode = GetTaskServices()->CancelTask(m_requestIdToUnsubscribe);
 		if (MCP::ERRNO_OK == iErrCode)
 		{
 			NotifyResult();
@@ -946,7 +962,7 @@ namespace MCP
 		std::shared_ptr<ListResourceTemplatesResult> spListResourceTemplatesResult = nullptr;
 		std::string strResponse;
 
-		bool bPagination = CMCPSession::GetInstance().GetServerResourceTemplatesPagination();
+		bool bPagination = GetTaskServices()->GetServerResourceTemplatesPagination();
 		if (bPagination)
 		{
 			if (!spListResourceTemplatesRequest->strCursor.empty())
@@ -966,7 +982,7 @@ namespace MCP
 					bValidCursor = false;
 				}
 
-				auto vecServerResourceTemplates = CMCPSession::GetInstance().GetServerResourceTemplates();
+				auto vecServerResourceTemplates = GetTaskServices()->GetServerResourceTemplates();
 				if (bValidCursor)
 				{
 					if (nCursor >= vecServerResourceTemplates.size())
@@ -1000,7 +1016,7 @@ namespace MCP
 				if (!spListResourceTemplatesResult)
 					return ERRNO_INTERNAL_ERROR;
 				spListResourceTemplatesResult->requestId = spListResourceTemplatesRequest->requestId;
-				auto vecServerResourceTemplates = CMCPSession::GetInstance().GetServerResourceTemplates();
+				auto vecServerResourceTemplates = GetTaskServices()->GetServerResourceTemplates();
 				spListResourceTemplatesResult->vecResourceTemplates.clear();
 				if (vecServerResourceTemplates.size() > 0)
 					spListResourceTemplatesResult->vecResourceTemplates.push_back(vecServerResourceTemplates[0]);
@@ -1014,7 +1030,7 @@ namespace MCP
 			if (!spListResourceTemplatesResult)
 				return ERRNO_INTERNAL_ERROR;
 			spListResourceTemplatesResult->requestId = spListResourceTemplatesRequest->requestId;
-			spListResourceTemplatesResult->vecResourceTemplates = CMCPSession::GetInstance().GetServerResourceTemplates();
+			spListResourceTemplatesResult->vecResourceTemplates = GetTaskServices()->GetServerResourceTemplates();
 		}
 
 		if (spListResourceTemplatesResult)
@@ -1025,7 +1041,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strResponse))
@@ -1054,7 +1070,7 @@ namespace MCP
 		std::shared_ptr<ListPromptsResult> spListPromptsResult = nullptr;
 		std::string strResponse;
 
-		bool bPagination = CMCPSession::GetInstance().GetServerPromptsPagination();
+		bool bPagination = GetTaskServices()->GetServerPromptsPagination();
 		if (bPagination)
 		{
 			if (!spListPromptsRequest->strCursor.empty())
@@ -1074,7 +1090,7 @@ namespace MCP
 					bValidCursor = false;
 				}
 
-				auto vecServerPrompts = CMCPSession::GetInstance().GetServerPrompts();
+				auto vecServerPrompts = GetTaskServices()->GetServerPrompts();
 				if (bValidCursor)
 				{
 					if (nCursor >= vecServerPrompts.size())
@@ -1108,7 +1124,7 @@ namespace MCP
 				if (!spListPromptsResult)
 					return ERRNO_INTERNAL_ERROR;
 				spListPromptsResult->requestId = spListPromptsRequest->requestId;
-				auto vecServerPrompts = CMCPSession::GetInstance().GetServerPrompts();
+				auto vecServerPrompts = GetTaskServices()->GetServerPrompts();
 				spListPromptsResult->vecPrompts.clear();
 				if (vecServerPrompts.size() > 0)
 					spListPromptsResult->vecPrompts.push_back(vecServerPrompts[0]);
@@ -1122,7 +1138,7 @@ namespace MCP
 			if (!spListPromptsResult)
 				return ERRNO_INTERNAL_ERROR;
 			spListPromptsResult->requestId = spListPromptsRequest->requestId;
-			spListPromptsResult->vecPrompts = CMCPSession::GetInstance().GetServerPrompts();
+			spListPromptsResult->vecPrompts = GetTaskServices()->GetServerPrompts();
 		}
 
 		if (spListPromptsResult)
@@ -1133,7 +1149,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = CMCPSession::GetInstance().GetTransport();
+			auto spTransport = GetTaskServices()->GetTransport();
 			if (!spTransport)
 				return ERRNO_INTERNAL_ERROR;
 			if (ERRNO_OK != spTransport->Write(strResponse))
@@ -1190,7 +1206,7 @@ namespace MCP
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1214,7 +1230,7 @@ namespace MCP
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1242,7 +1258,7 @@ namespace MCP
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1322,7 +1338,7 @@ namespace MCP
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1346,7 +1362,7 @@ namespace MCP
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1374,7 +1390,7 @@ namespace MCP
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1405,15 +1421,15 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		spDiscoverResult->requestId = m_spRequest->requestId;
-		spDiscoverResult->vecSupportedVersions = ProtocolRegistryAccess::Get(CMCPSession::GetInstance()).GetSupportedVersions();
-		spDiscoverResult->capabilities = CMCPSession::GetInstance().GetServerCapabilities();
-		spDiscoverResult->strInstructions = CMCPSession::GetInstance().GetServerInstructions();
+		spDiscoverResult->vecSupportedVersions = GetTaskServices()->GetSupportedProtocolVersions();
+		spDiscoverResult->capabilities = GetTaskServices()->GetServerCapabilities();
+		spDiscoverResult->strInstructions = GetTaskServices()->GetServerInstructions();
 
 		std::string strResponse;
 		if (ERRNO_OK != SerializeResult(spDiscoverResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1436,7 +1452,7 @@ namespace MCP
 		if (!spSetLevelRequest)
 			return ERRNO_INTERNAL_ERROR;
 
-		CMCPSession::GetInstance().SetLoggingLevel(spSetLevelRequest->level);
+		GetTaskServices()->SetLoggingLevel(spSetLevelRequest->level);
 
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
 		if (!spEmptyResponse)
@@ -1447,7 +1463,7 @@ namespace MCP
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = CMCPSession::GetInstance().GetTransport();
+		auto spTransport = GetTaskServices()->GetTransport();
 		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 

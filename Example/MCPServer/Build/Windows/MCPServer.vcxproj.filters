@@ -181,6 +181,12 @@
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\SessionAccess.h">
       <Filter>MCP\Protocol\Internal</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\TaskAccess.h">
+      <Filter>MCP\Protocol\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\Source\Protocol\Internal\TaskServices.h">
+      <Filter>MCP\Protocol\Internal</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\..\Source\Protocol\Internal\VersionExtras.h">
       <Filter>MCP\Protocol\Internal</Filter>
     </ClInclude>

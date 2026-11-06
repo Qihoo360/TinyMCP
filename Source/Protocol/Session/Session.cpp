@@ -9,6 +9,9 @@
 #include "../Internal/Protocol.h"
 #include "../Internal/VersionExtras.h"
 #include "../Internal/MessageAccess.h"
+#include "../Internal/SessionAccess.h"
+#include "../Internal/TaskServices.h"
+#include "../Internal/TaskAccess.h"
 
 #include <memory>
 #include <algorithm>
@@ -101,6 +104,116 @@ namespace MCP
 
 			return false;
 		}
+
+		// Adapter handed to every dispatched task. It keeps the task layer free of
+		// the session singleton while the session stays the only owner of the
+		// transport, the registrations and the protocol registry.
+		class CSessionTaskServices final : public TaskServices
+		{
+		public:
+			explicit CSessionTaskServices(CMCPSession& session)
+				: m_session(session)
+			{
+			}
+
+			std::shared_ptr<CMCPTransport> GetTransport() const override
+			{
+				return m_session.GetTransport();
+			}
+
+			void PrepareResult(const std::shared_ptr<MCP::Request>& spRequest, const std::shared_ptr<MCP::Response>& spResponse) override
+			{
+				m_session.PrepareResult(spRequest, spResponse);
+			}
+
+			int SendLogMessage(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData) override
+			{
+				return m_session.SendLogMessage(level, strLogger, jData);
+			}
+
+			int WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData) override
+			{
+				return m_session.WriteLogNotification(level, strLogger, jData);
+			}
+
+			int CancelTask(const MCP::RequestId& requestId) override
+			{
+				return m_session.CancelTask(requestId);
+			}
+
+			MCP::Implementation GetServerInfo() const override
+			{
+				return m_session.GetServerInfo();
+			}
+
+			MCP::ServerCapabilities GetServerCapabilities() const override
+			{
+				return m_session.GetServerCapabilities();
+			}
+
+			std::string GetServerInstructions() const override
+			{
+				return m_session.GetServerInstructions();
+			}
+
+			bool GetServerToolsPagination() const override
+			{
+				return m_session.GetServerToolsPagination();
+			}
+
+			std::vector<MCP::Tool> GetServerTools() const override
+			{
+				return m_session.GetServerTools();
+			}
+
+			bool GetServerResourcesPagination() const override
+			{
+				return m_session.GetServerResourcesPagination();
+			}
+
+			std::vector<MCP::Resource> GetServerResources() const override
+			{
+				return m_session.GetServerResources();
+			}
+
+			bool GetServerResourceTemplatesPagination() const override
+			{
+				return m_session.GetServerResourceTemplatesPagination();
+			}
+
+			std::vector<MCP::ResourceTemplate> GetServerResourceTemplates() const override
+			{
+				return m_session.GetServerResourceTemplates();
+			}
+
+			bool GetServerPromptsPagination() const override
+			{
+				return m_session.GetServerPromptsPagination();
+			}
+
+			std::vector<MCP::Prompt> GetServerPrompts() const override
+			{
+				return m_session.GetServerPrompts();
+			}
+
+			void SetLoggingLevel(const MCP::LoggingLevel& level) override
+			{
+				m_session.SetLoggingLevel(level);
+			}
+
+			std::shared_ptr<const ProtocolProfile> GetDefaultHandshakeProfile() const override
+			{
+				return ProtocolRegistryAccess::Get(m_session).GetDefaultHandshakeProfile();
+			}
+
+			std::vector<std::string> GetSupportedProtocolVersions() const override
+			{
+				return ProtocolRegistryAccess::Get(m_session).GetSupportedVersions();
+			}
+
+		private:
+			CMCPSession& m_session;
+		};
 	}
 
 	CMCPSession CMCPSession::s_Instance;
@@ -108,6 +221,23 @@ namespace MCP
 	CMCPSession::CMCPSession()
 		: m_upRegistry(new CProtocolRegistry(CProtocolRegistry::GetGlobalRegistry()))
 	{
+		m_spTaskServices = std::make_shared<CSessionTaskServices>(*this);
+	}
+
+	template <typename TTask>
+	std::shared_ptr<TTask> CMCPSession::MakeProcessTask(const std::shared_ptr<MCP::Request>& spRequest)
+	{
+		auto spTask = std::make_shared<TTask>(spRequest);
+		TaskServicesAccess::Set(*spTask, m_spTaskServices);
+
+		return spTask;
+	}
+
+	void CMCPSession::BindTaskServices(const std::shared_ptr<MCP::CMCPTask>& spTask)
+	{
+		auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
+		if (spProcessTask)
+			TaskServicesAccess::Set(*spProcessTask, m_spTaskServices);
 	}
 
 	CMCPSession::~CMCPSession() = default;
@@ -332,7 +462,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessInitializeRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessInitializeRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -356,7 +486,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessListToolsRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessListToolsRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -400,6 +530,7 @@ namespace MCP
 				goto PROC_END;
 			}
 			spNewProcessCallToolRequest->SetRequest(spRequest);
+			BindTaskServices(spNewProcessCallToolRequest);
 			iErrCode = CommitAsyncTask(spNewProcessCallToolRequest);
 
 		} break;
@@ -411,7 +542,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessPingRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessPingRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -429,7 +560,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessListResourcesRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessListResourcesRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -473,6 +604,7 @@ namespace MCP
 				goto PROC_END;
 			}
 			spNewProcessReadResourceRequest->SetRequest(spRequest);
+			BindTaskServices(spNewProcessReadResourceRequest);
 			iErrCode = CommitAsyncTask(spNewProcessReadResourceRequest);
 
 		} break;
@@ -510,6 +642,7 @@ namespace MCP
 				goto PROC_END;
 			}
 			spNewProcessSubscribeResourceRequest->SetRequest(spRequest);
+			BindTaskServices(spNewProcessSubscribeResourceRequest);
 			iErrCode = CommitAsyncTask(spNewProcessSubscribeResourceRequest);
 			if (MCP::ERRNO_OK == iErrCode)
 			{
@@ -531,7 +664,7 @@ namespace MCP
 				iErrCode = ERRNO_INTERNAL_ERROR;
 				goto PROC_END;
 			}
-			auto spTask = std::make_shared<ProcessUnsubscribeResourceRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessUnsubscribeResourceRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -558,7 +691,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessListResourceTemplatesRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessListResourceTemplatesRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -576,7 +709,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessListPromptsRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessListPromptsRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -620,6 +753,7 @@ namespace MCP
 				goto PROC_END;
 			}
 			spNewProcessGetPromptRequest->SetRequest(spRequest);
+			BindTaskServices(spNewProcessGetPromptRequest);
 			iErrCode = CommitAsyncTask(spNewProcessGetPromptRequest);
 
 		} break;
@@ -672,6 +806,7 @@ namespace MCP
 				goto PROC_END;
 			}
 			spNewProcessCompleteRequest->SetRequest(spRequest);
+			BindTaskServices(spNewProcessCompleteRequest);
 			iErrCode = CommitAsyncTask(spNewProcessCompleteRequest);
 
 		} break;
@@ -683,7 +818,7 @@ namespace MCP
 				goto PROC_END;
 			}
 
-			auto spTask = std::make_shared<ProcessSetLevelRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessSetLevelRequest>(spRequest);
 			if (!spTask)
 			{
 				iErrCode = ERRNO_INTERNAL_ERROR;
@@ -709,7 +844,7 @@ namespace MCP
 	PROC_END:
 		if (ERRNO_OK != iErrCode)
 		{
-			auto spTask = std::make_shared<ProcessErrorRequest>(spRequest);
+			auto spTask = MakeProcessTask<ProcessErrorRequest>(spRequest);
 			if (spTask)
 			{
 				spTask->SetErrorCode(iErrCode);
@@ -1598,7 +1733,7 @@ namespace MCP
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTask = std::make_shared<ProcessErrorRequest>(spRequest);
+		auto spTask = MakeProcessTask<ProcessErrorRequest>(spRequest);
 		if (!spTask)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -1667,6 +1802,7 @@ namespace MCP
 				return ERRNO_INTERNAL_ERROR;
 
 			spNewProcessTask->SetRequest(spRequest);
+			BindTaskServices(spNewProcessTask);
 
 			return CommitAsyncTask(spNewProcessTask);
 		};
@@ -1675,7 +1811,7 @@ namespace MCP
 		{
 			case MessageType_DiscoverRequest:
 			{
-				auto spTask = std::make_shared<ProcessDiscoverRequest>(spRequest);
+				auto spTask = MakeProcessTask<ProcessDiscoverRequest>(spRequest);
 				if (!spTask)
 					return ERRNO_INTERNAL_ERROR;
 
@@ -1692,13 +1828,13 @@ namespace MCP
 			{
 				std::shared_ptr<MCP::ProcessRequest> spTask;
 				if (MessageType_ListToolsRequest == spRequest->eMessageType)
-					spTask = std::make_shared<ProcessListToolsRequest>(spRequest);
+					spTask = MakeProcessTask<ProcessListToolsRequest>(spRequest);
 				else if (MessageType_ListResourcesRequest == spRequest->eMessageType)
-					spTask = std::make_shared<ProcessListResourcesRequest>(spRequest);
+					spTask = MakeProcessTask<ProcessListResourcesRequest>(spRequest);
 				else if (MessageType_ListResourceTemplatesRequest == spRequest->eMessageType)
-					spTask = std::make_shared<ProcessListResourceTemplatesRequest>(spRequest);
+					spTask = MakeProcessTask<ProcessListResourceTemplatesRequest>(spRequest);
 				else
-					spTask = std::make_shared<ProcessListPromptsRequest>(spRequest);
+					spTask = MakeProcessTask<ProcessListPromptsRequest>(spRequest);
 
 				if (!spTask)
 					return ERRNO_INTERNAL_ERROR;

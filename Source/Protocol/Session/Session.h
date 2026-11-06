@@ -26,6 +26,7 @@ namespace MCP
 	struct ProtocolContext;
 	class CProtocolRegistry;
 	struct ProtocolRegistryAccess;
+	struct TaskServices;
 
 	class CMCPSession
 	{
@@ -169,12 +170,19 @@ namespace MCP
 		int StopAsyncTaskThread();
 		int AsyncThreadProc();
 
+		// Tasks never reach back to the session singleton. The session binds the
+		// services they need when it creates or clones them for dispatch.
+		template <typename TTask>
+		std::shared_ptr<TTask> MakeProcessTask(const std::shared_ptr<MCP::Request>& spRequest);
+		void BindTaskServices(const std::shared_ptr<MCP::CMCPTask>& spTask);
+
 		static CMCPSession s_Instance;
 
 		SessionState m_eSessionState{ SessionState_Original };
 		std::shared_ptr<CMCPTransport> m_spTransport;
 
 		std::unique_ptr<CProtocolRegistry> m_upRegistry;
+		std::shared_ptr<TaskServices> m_spTaskServices;
 		int m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
 		std::string m_strServerInstructions;
