@@ -313,15 +313,6 @@ namespace MCP
 		MessageType_ToolResultContent,
 	};
 
-	// Protocol-era types (ProtocolEra, ProtocolFeature, ProtocolProfile,
-	// ProtocolContext and CProtocolRegistry) live in Internal/Protocol.h. Public
-	// headers only forward declare them, so applications consuming this SDK never
-	// see the versioning mechanism; the SDK builds profiles from the versions the
-	// application declares through CMCPServer::SetSupportedProtocolVersions.
-	struct ProtocolContext;
-	class CProtocolRegistry;
-	struct MessageContextAccess;
-
 	enum class LoggingLevelValue
 	{
 		LoggingLevel_Unknown,

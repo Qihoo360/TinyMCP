@@ -21,6 +21,11 @@
 
 namespace MCP
 {
+	// Declared here, defined in Internal/Protocol.h. Session hands the registry to
+	// the message layer but neither type is visible outside the SDK.
+	struct ProtocolContext;
+	class CProtocolRegistry;
+
 	class CMCPSession
 	{
 	public:

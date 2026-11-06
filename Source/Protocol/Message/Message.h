@@ -8,6 +8,11 @@
 
 namespace MCP
 {
+	// Declared here, defined in Internal/Protocol.h. The context stays opaque to
+	// anyone outside the SDK; MessageContextAccess is the only way in.
+	struct ProtocolContext;
+	struct MessageContextAccess;
+
 	struct Message
 	{
 	public:
