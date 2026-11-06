@@ -407,11 +407,29 @@ TEST_CASE("integration.modern_core")
 		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
 	CHECK(jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
 
+	const Json::Value& jTemplates = jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCE_TEMPLATES];
+	CHECK_EQ(1, static_cast<int>(jTemplates.size()));
+	CHECK_EQ(std::string("Echo files"), jTemplates[0][MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("test://echo/{name}"), jTemplates[0][MSG_KEY_URI_TEMPLATE].asString());
+	CHECK_EQ(std::string("Legacy test resource template"),
+		jTemplates[0][MSG_KEY_DESCRIPTION].asString());
+	CHECK_EQ(std::string("text/plain"), jTemplates[0][MSG_KEY_MIMETYPE].asString());
+
 	CHECK(ExpectResponse(driver, MakeRequest(4, METHOD_PROMPTS_LIST,
 		MakeModernParams("2026-07-28", "{}")), jResponse));
 	CHECK_EQ(std::string(RESULT_TYPE_COMPLETE),
 		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
 	CHECK(jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
+
+	const Json::Value& jPrompts = jResponse[MSG_KEY_RESULT][MSG_KEY_PROMPTS];
+	CHECK_EQ(1, static_cast<int>(jPrompts.size()));
+	CHECK_EQ(std::string(CTestServer::PROMPT_NAME), jPrompts[0][MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("Echo test prompt"), jPrompts[0][MSG_KEY_DESCRIPTION].asString());
+	CHECK_EQ(1, static_cast<int>(jPrompts[0][MSG_KEY_ARGUMENTS].size()));
+	CHECK_EQ(std::string("text"), jPrompts[0][MSG_KEY_ARGUMENTS][0][MSG_KEY_NAME].asString());
+	CHECK_EQ(std::string("Text to echo"),
+		jPrompts[0][MSG_KEY_ARGUMENTS][0][MSG_KEY_DESCRIPTION].asString());
+	CHECK(jPrompts[0][MSG_KEY_ARGUMENTS][0][MSG_KEY_REQUIRED].asBool());
 
 	// Every modern content block is serialized behind its feature gate.
 	CHECK(ExpectResponse(driver, MakeRequest(5, METHOD_TOOLS_CALL,
@@ -486,6 +504,115 @@ TEST_CASE("integration.modern_core")
 	if (pHandshakeProfile)
 		CHECK_EQ(pHandshakeProfile->strVersion, jResponse[MSG_KEY_RESULT][MSG_KEY_PROTOCOL_VERSION].asString());
 	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_EXTENSIONS));
+
+	// prompts/get resolves the registered prompt and returns its messages.
+	CHECK(ExpectResponse(driver, MakeRequest(14, METHOD_PROMPTS_GET,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"" + std::string(CTestServer::PROMPT_NAME) + "\","
+			"\"arguments\":{\"text\":\"hi\"}")), jResponse));
+	CHECK_EQ(std::string(RESULT_TYPE_COMPLETE),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+	CHECK_EQ(std::string("Echo test prompt"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_DESCRIPTION].asString());
+	CHECK_EQ(1, static_cast<int>(jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES].size()));
+	CHECK_EQ(std::string(CONST_USER),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES][0][MSG_KEY_ROLE].asString());
+	CHECK_EQ(std::string(CONST_TEXT),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES][0][MSG_KEY_CONTENT][MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("hello from prompt"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES][0][MSG_KEY_CONTENT][MSG_KEY_TEXT].asString());
+
+	// An unknown prompt is a parameter error, not a method error.
+	CHECK(ExpectError(driver, MakeRequest(15, METHOD_PROMPTS_GET,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"missing_prompt\",\"arguments\":{}")),
+		15, ERRNO_INVALID_PARAMS, jResponse));
+
+	// completion/complete on a resource reference reports a truncated page.
+	CHECK(ExpectResponse(driver, MakeRequest(16, METHOD_COMPLETION_COMPLETE,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"ref\":{\"type\":\"ref/resource\",\"uri\":\"" + std::string(CTestServer::RESOURCE_URI) + "\"},"
+			"\"argument\":{\"name\":\"text\",\"value\":\"g\"}")), jResponse));
+	const Json::Value& jResourceCompletion = jResponse[MSG_KEY_RESULT][MSG_KEY_COMPLETION];
+	CHECK_EQ(std::string(RESULT_TYPE_COMPLETE),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+	CHECK_EQ(2, static_cast<int>(jResourceCompletion[MSG_KEY_VALUES].size()));
+	CHECK_EQ(std::string("gamma"), jResourceCompletion[MSG_KEY_VALUES][0].asString());
+	CHECK_EQ(5, jResourceCompletion[MSG_KEY_TOTAL].asInt());
+	CHECK(jResourceCompletion[MSG_KEY_HAS_MORE].asBool());
+
+	// Progress: params._meta.progressToken makes the task emit
+	// notifications/progress before the tool result.
+	size_t nProgressStart = driver.GetOutputCount();
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(17, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", "\"progressToken\":\"progress-1\"",
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"progress\"}"))));
+	CHECK(driver.WaitForOutputCount(nProgressStart + 2, WAIT_TIMEOUT_MS));
+
+	Json::Value jProgress;
+	CHECK(ParseJson(driver.GetOutput(nProgressStart), jProgress));
+	CHECK_EQ(std::string(METHOD_NOTIFICATION_PROGRESS), jProgress[MSG_KEY_METHOD].asString());
+	CHECK(!jProgress.isMember(MSG_KEY_ID));
+	CHECK_EQ(std::string("progress-1"),
+		jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS_TOKEN].asString());
+	CHECK_EQ(5, jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS].asInt());
+	CHECK_EQ(10, jProgress[MSG_KEY_PARAMS][MSG_KEY_TOTAL].asInt());
+
+	CHECK(ParseJson(driver.GetOutput(nProgressStart + 1), jResponse));
+	CHECK_EQ(17, jResponse[MSG_KEY_ID].asInt());
+	CHECK_EQ(std::string("progress-done"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+	// MRTR can carry a server-to-client sampling request.
+	CHECK(ExpectResponse(driver, MakeRequest(18, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{\"sampling\":{}}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"}")), jResponse));
+	CHECK_EQ(std::string(RESULT_TYPE_INPUT_REQUIRED),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+	CHECK_EQ(std::string(METHOD_SAMPLING_CREATE_MESSAGE),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_INPUT_REQUESTS]["sample"][MSG_KEY_METHOD].asString());
+	CHECK_EQ(std::string("sampling-state"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_REQUEST_STATE].asString());
+
+	CHECK(ExpectResponse(driver, MakeRequest(19, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"},"
+			"\"inputResponses\":{\"sample\":{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"ok\"}}},"
+			"\"requestState\":\"sampling-state\"")), jResponse));
+	CHECK_EQ(std::string("sampled"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+	// Without the sampling capability the server reports what is missing.
+	CHECK(ExpectError(driver, MakeRequest(20, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"}")),
+		20, ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY, jResponse));
+	CHECK(jResponse[MSG_KEY_ERROR][MSG_KEY_DATA][MSG_KEY_REQUIRED_CAPABILITIES]
+		[MSG_KEY_SAMPLING].isObject());
+
+	// MRTR can carry a server-to-client roots/list request.
+	CHECK(ExpectResponse(driver, MakeRequest(21, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{\"roots\":{}}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"}")), jResponse));
+	CHECK_EQ(std::string(RESULT_TYPE_INPUT_REQUIRED),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+	CHECK_EQ(std::string(METHOD_ROOTS_LIST),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_INPUT_REQUESTS]["roots"][MSG_KEY_METHOD].asString());
+
+	CHECK(ExpectResponse(driver, MakeRequest(22, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"},"
+			"\"inputResponses\":{\"roots\":{\"roots\":[]}},"
+			"\"requestState\":\"roots-state\"")), jResponse));
+	CHECK_EQ(std::string("roots-ok"),
+		jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+	CHECK(ExpectError(driver, MakeRequest(23, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"}")),
+		23, ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY, jResponse));
+	CHECK(jResponse[MSG_KEY_ERROR][MSG_KEY_DATA][MSG_KEY_REQUIRED_CAPABILITIES]
+		[MSG_KEY_ROOTS].isObject());
 
 	driver.Stop();
 }

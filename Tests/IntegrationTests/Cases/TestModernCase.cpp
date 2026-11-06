@@ -312,6 +312,18 @@ TEST_CASE("unit.subscriptions")
 	CHECK(bSawNumeric);
 	CHECK(bSawString);
 
+	// Only the first subscription granted promptsListChanged, so the event
+	// reaches just that subscription.
+	nBefore = driver.GetOutputCount();
+	CHECK_EQ(ERRNO_OK, CMCPSession::GetInstance().SendPromptListChanged());
+	CHECK(driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS));
+	CHECK(ParseJson(driver.GetOutput(nBefore), jResponse));
+	CHECK_EQ(std::string(METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED),
+		jResponse[MSG_KEY_METHOD].asString());
+	CHECK_EQ(31, jResponse[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
+	std::this_thread::sleep_for(std::chrono::milliseconds(QUIET_WAIT_MS));
+	CHECK_EQ(nBefore + 1, driver.GetOutputCount());
+
 	// Resource updates require an exact URI match.
 	const std::string strChildUri = std::string(CTestServer::RESOURCE_URI) + "/child";
 	nBefore = driver.GetOutputCount();

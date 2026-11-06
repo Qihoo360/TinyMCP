@@ -489,7 +489,8 @@ namespace MCP
 			size_t nListenStart = client.GetOutputCount();
 			CHECK_EQ(ERRNO_OK, client.Send(MakeRequest(17, METHOD_SUBSCRIPTIONS_LISTEN,
 				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
-					"\"notifications\":{\"toolsListChanged\":true,\"resourcesListChanged\":true,"
+					"\"notifications\":{\"toolsListChanged\":true,\"promptsListChanged\":true,"
+					"\"resourcesListChanged\":true,"
 					"\"resourceSubscriptions\":[\"" + std::string(CTestServer::RESOURCE_URI) + "\"]}"))));
 
 			size_t nAckIndex = 0;
@@ -498,6 +499,7 @@ namespace MCP
 			Json::Value jAck;
 			CHECK(ParseJson(client.GetOutput(nAckIndex), jAck));
 			CHECK_EQ(17, jAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
+			CHECK(jAck[MSG_KEY_PARAMS][MSG_KEY_NOTIFICATIONS][MSG_KEY_PROMPTS_LIST_CHANGED].asBool());
 			CHECK(jAck[MSG_KEY_PARAMS][MSG_KEY_NOTIFICATIONS][MSG_KEY_RESOURCES_LIST_CHANGED].asBool());
 			CHECK_EQ(1, static_cast<int>(jAck[MSG_KEY_PARAMS][MSG_KEY_NOTIFICATIONS]
 				[MSG_KEY_RESOURCE_SUBSCRIPTIONS].size()));
@@ -529,6 +531,19 @@ namespace MCP
 			CHECK_EQ(std::string(CTestServer::RESOURCE_URI), jUpdated[MSG_KEY_PARAMS][MSG_KEY_URI].asString());
 			CHECK_EQ(17, jUpdated[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
 
+			// A granted promptsListChanged event is delivered to the subscription.
+			size_t nPromptEventStart = client.GetOutputCount();
+			CHECK(ExpectResponse(client, 23, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"notify_prompt_list_changed\"}"),
+				jResponse));
+			size_t nPromptEventIndex = 0;
+			CHECK(client.WaitForMethod(METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED,
+				nPromptEventStart, nPromptEventIndex, E2E_WAIT_TIMEOUT_MS));
+			Json::Value jPromptEvent;
+			CHECK(ParseJson(client.GetOutput(nPromptEventIndex), jPromptEvent));
+			CHECK_EQ(17, jPromptEvent[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
+
 			// Cancelling the listen request stops the delivery. Stateless
 			// notifications must carry their own _meta to reach the handler.
 			CHECK_EQ(ERRNO_OK, client.Send(
@@ -557,6 +572,123 @@ namespace MCP
 			CHECK(jStringAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].isString());
 			CHECK_EQ(std::string("e2e-sub"),
 				jStringAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asString());
+
+			// resource templates keep their content, not just the envelope.
+			CHECK(ExpectResponse(client, 31, METHOD_RESOURCES_TEMPLATES_LIST,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), jResponse));
+			const Json::Value& jTemplates = jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCE_TEMPLATES];
+			CHECK_EQ(1, static_cast<int>(jTemplates.size()));
+			CHECK_EQ(std::string("Echo files"), jTemplates[0][MSG_KEY_NAME].asString());
+			CHECK_EQ(std::string("test://echo/{name}"), jTemplates[0][MSG_KEY_URI_TEMPLATE].asString());
+			CHECK_EQ(std::string("text/plain"), jTemplates[0][MSG_KEY_MIMETYPE].asString());
+
+			// prompts/list keeps its arguments, prompts/get returns the messages.
+			CHECK(ExpectResponse(client, 32, METHOD_PROMPTS_LIST,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), jResponse));
+			const Json::Value& jPrompts = jResponse[MSG_KEY_RESULT][MSG_KEY_PROMPTS];
+			CHECK_EQ(1, static_cast<int>(jPrompts.size()));
+			CHECK_EQ(std::string(CTestServer::PROMPT_NAME), jPrompts[0][MSG_KEY_NAME].asString());
+			CHECK_EQ(std::string("Text to echo"),
+				jPrompts[0][MSG_KEY_ARGUMENTS][0][MSG_KEY_DESCRIPTION].asString());
+			CHECK(jPrompts[0][MSG_KEY_ARGUMENTS][0][MSG_KEY_REQUIRED].asBool());
+
+			CHECK(ExpectResponse(client, 33, METHOD_PROMPTS_GET,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"" + std::string(CTestServer::PROMPT_NAME) + "\","
+					"\"arguments\":{\"text\":\"hi\"}"), jResponse));
+			CHECK_EQ(std::string("Echo test prompt"),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_DESCRIPTION].asString());
+			CHECK_EQ(std::string(CONST_USER),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES][0][MSG_KEY_ROLE].asString());
+			CHECK_EQ(std::string("hello from prompt"),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_MESSAGES][0][MSG_KEY_CONTENT][MSG_KEY_TEXT].asString());
+
+			CHECK(ExpectError(client, 34, METHOD_PROMPTS_GET,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"missing_prompt\",\"arguments\":{}"),
+				ERRNO_INVALID_PARAMS, jResponse));
+
+			// completion on a resource reference reports a truncated page.
+			CHECK(ExpectResponse(client, 35, METHOD_COMPLETION_COMPLETE,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"ref\":{\"type\":\"ref/resource\",\"uri\":\"" + std::string(CTestServer::RESOURCE_URI) + "\"},"
+					"\"argument\":{\"name\":\"text\",\"value\":\"g\"}"), jResponse));
+			const Json::Value& jResourceCompletion = jResponse[MSG_KEY_RESULT][MSG_KEY_COMPLETION];
+			CHECK_EQ(2, static_cast<int>(jResourceCompletion[MSG_KEY_VALUES].size()));
+			CHECK_EQ(std::string("gamma"), jResourceCompletion[MSG_KEY_VALUES][0].asString());
+			CHECK_EQ(5, jResourceCompletion[MSG_KEY_TOTAL].asInt());
+			CHECK(jResourceCompletion[MSG_KEY_HAS_MORE].asBool());
+
+			// notifications/progress is written only when params._meta carries a token.
+			size_t nProgressStart = client.GetOutputCount();
+			CHECK(SendRequest(client, 30, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", "\"progressToken\":\"e2e-progress\"",
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"progress\"}")));
+			size_t nProgressIndex = 0;
+			CHECK(client.WaitForMethod(METHOD_NOTIFICATION_PROGRESS,
+				nProgressStart, nProgressIndex, E2E_WAIT_TIMEOUT_MS));
+			Json::Value jProgress;
+			CHECK(ParseJson(client.GetOutput(nProgressIndex), jProgress));
+			CHECK(!jProgress.isMember(MSG_KEY_ID));
+			CHECK_EQ(std::string("e2e-progress"),
+				jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS_TOKEN].asString());
+			CHECK_EQ(5, jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS].asInt());
+			CHECK_EQ(10, jProgress[MSG_KEY_PARAMS][MSG_KEY_TOTAL].asInt());
+
+			size_t nProgressResultIndex = 0;
+			CHECK(client.WaitForId(30, nProgressStart, nProgressResultIndex, E2E_WAIT_TIMEOUT_MS));
+			Json::Value jProgressResult;
+			CHECK(ParseJson(client.GetOutput(nProgressResultIndex), jProgressResult));
+			CHECK_EQ(std::string("progress-done"),
+				jProgressResult[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+			// MRTR can carry a server-to-client sampling request.
+			CHECK(ExpectResponse(client, 36, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{\"sampling\":{}}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"}"), jResponse));
+			CHECK_EQ(std::string(RESULT_TYPE_INPUT_REQUIRED),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+			CHECK_EQ(std::string(METHOD_SAMPLING_CREATE_MESSAGE),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_INPUT_REQUESTS]["sample"][MSG_KEY_METHOD].asString());
+
+			CHECK(ExpectResponse(client, 37, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"},"
+					"\"inputResponses\":{\"sample\":{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"ok\"}}},"
+					"\"requestState\":\"sampling-state\""), jResponse));
+			CHECK_EQ(std::string("sampled"),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+			CHECK(ExpectError(client, 38, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_sampling\"}"),
+				ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY, jResponse));
+			CHECK(jResponse[MSG_KEY_ERROR][MSG_KEY_DATA][MSG_KEY_REQUIRED_CAPABILITIES]
+				[MSG_KEY_SAMPLING].isObject());
+
+			// The same round trip for roots/list.
+			CHECK(ExpectResponse(client, 39, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{\"roots\":{}}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"}"), jResponse));
+			CHECK_EQ(std::string(RESULT_TYPE_INPUT_REQUIRED),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
+			CHECK_EQ(std::string(METHOD_ROOTS_LIST),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_INPUT_REQUESTS]["roots"][MSG_KEY_METHOD].asString());
+
+			CHECK(ExpectResponse(client, 40, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"},"
+					"\"inputResponses\":{\"roots\":{\"roots\":[]}},"
+					"\"requestState\":\"roots-state\""), jResponse));
+			CHECK_EQ(std::string("roots-ok"),
+				jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+			CHECK(ExpectError(client, 41, METHOD_TOOLS_CALL,
+				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}", std::string(),
+					"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"input_roots\"}"),
+				ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY, jResponse));
+			CHECK(jResponse[MSG_KEY_ERROR][MSG_KEY_DATA][MSG_KEY_REQUIRED_CAPABILITIES]
+				[MSG_KEY_ROOTS].isObject());
 
 			// Closing stdin shuts the server down and completes the live listen.
 			CHECK_EQ(ERRNO_OK, client.Stop(0));

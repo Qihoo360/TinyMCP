@@ -15,6 +15,19 @@ namespace MCP
 		{
 			bool s_bRegisterModernFixtures = false;
 
+			Json::Value MakeSingleInputRequest(const std::string& strKey, const std::string& strMethod,
+				const Json::Value& jParams)
+			{
+				Json::Value jInput(Json::objectValue);
+				jInput[MCP::MSG_KEY_METHOD] = strMethod;
+				jInput[MCP::MSG_KEY_PARAMS] = jParams;
+
+				Json::Value jInputRequests(Json::objectValue);
+				jInputRequests[strKey] = jInput;
+
+				return jInputRequests;
+			}
+
 			Json::Value MakeElicitationInputRequests()
 			{
 				Json::Value jParams(Json::objectValue);
@@ -267,7 +280,8 @@ namespace MCP
 
 					// Subscription probes used by the E2E client: the client cannot call
 					// the session directly, so a tool call drives the server-side push.
-					if ("notify_resource" == strAction || "notify_list_changed" == strAction)
+					if ("notify_resource" == strAction || "notify_list_changed" == strAction
+						|| "notify_prompt_list_changed" == strAction)
 					{
 						if ("notify_resource" == strAction)
 						{
@@ -276,9 +290,13 @@ namespace MCP
 							MCP::CMCPSession::GetInstance().SendSubscriptionNotification(
 								MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdated, CTestServer::RESOURCE_URI);
 						}
-						else
+						else if ("notify_list_changed" == strAction)
 						{
 							MCP::CMCPSession::GetInstance().SendResourceListChanged();
+						}
+						else
+						{
+							MCP::CMCPSession::GetInstance().SendPromptListChanged();
 						}
 
 						auto spNotifyResult = BuildResult();
@@ -291,6 +309,73 @@ namespace MCP
 						spNotifyResult->vecTextContent.push_back(notifyContent);
 
 						return NotifyResult(spNotifyResult);
+					}
+
+					// Progress probe: the notification is only written when the
+					// request carried a progressToken in params._meta.
+					if ("progress" == strAction)
+					{
+						int iErrCode = NotifyProgress(5, 10);
+						if (MCP::ERRNO_OK != iErrCode)
+							return iErrCode;
+
+						auto spProgressResult = BuildResult();
+						if (!spProgressResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent progressContent;
+						progressContent.strType = MCP::CONST_TEXT;
+						progressContent.strText = "progress-done";
+						spProgressResult->vecTextContent.push_back(progressContent);
+
+						return NotifyResult(spProgressResult);
+					}
+
+					// MRTR probes for the server-to-client sampling and roots
+					// requests. ValidateInputRequired gates them on the client
+					// capabilities declared in params._meta.
+					if ("input_sampling" == strAction || "input_roots" == strAction)
+					{
+						const bool bSampling = ("input_sampling" == strAction);
+
+						if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+						{
+							Json::Value jParams(Json::objectValue);
+							if (bSampling)
+							{
+								Json::Value jMessage(Json::objectValue);
+								jMessage[MCP::MSG_KEY_ROLE] = MCP::CONST_USER;
+								jMessage[MCP::MSG_KEY_CONTENT][MCP::MSG_KEY_TYPE] = MCP::CONST_TEXT;
+								jMessage[MCP::MSG_KEY_CONTENT][MCP::MSG_KEY_TEXT] = "sample me";
+								jParams[MCP::MSG_KEY_MESSAGES].append(jMessage);
+							}
+
+							int iErrCode = NotifyInputRequired(
+								MakeSingleInputRequest(bSampling ? "sample" : "roots",
+									bSampling ? MCP::METHOD_SAMPLING_CREATE_MESSAGE : MCP::METHOD_ROOTS_LIST,
+									jParams),
+								bSampling ? "sampling-state" : "roots-state");
+							if (MCP::ERRNO_OK == iErrCode)
+								return MCP::ERRNO_OK;
+
+							Json::Value jRequiredCapabilities(Json::objectValue);
+							jRequiredCapabilities[bSampling ? MCP::MSG_KEY_SAMPLING : MCP::MSG_KEY_ROOTS]
+								= Json::Value(Json::objectValue);
+
+							return NotifyMissingClientCapability(jRequiredCapabilities);
+						}
+
+						auto spMrtrResult = BuildResult();
+						if (!spMrtrResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent mrtrContent;
+						mrtrContent.strType = MCP::CONST_TEXT;
+						mrtrContent.strText = bSampling ? "sampled" : "roots-ok";
+						spMrtrResult->vecTextContent.push_back(mrtrContent);
+						spMrtrResult->bIsError = false;
+
+						return NotifyResult(spMrtrResult);
 					}
 
 					// Gives the E2E client a window to queue a second request and
@@ -616,6 +701,18 @@ namespace MCP
 					spResult->vecValues.push_back("beta");
 					spResult->iTotal = static_cast<int>(spResult->vecValues.size());
 					spResult->bHasMore = false;
+
+					// The resource reference branch reports a truncated page so the
+					// client side hasMore handling is observable. Legacy callers only
+					// use ref/prompt, so the golden payload stays unchanged.
+					if (MCP::CONST_REF_RESOURCE == spCompleteRequest->strRefType)
+					{
+						spResult->vecValues.clear();
+						spResult->vecValues.push_back("gamma");
+						spResult->vecValues.push_back("delta");
+						spResult->iTotal = 5;
+						spResult->bHasMore = true;
+					}
 
 					return NotifyResult(spResult);
 				}
