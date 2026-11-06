@@ -15,12 +15,15 @@ namespace MCP
 			Stop();
 		}
 
-		int CDriver::Start(int iTimeoutMs)
+		int CDriver::Start(int iTimeoutMs, bool bStatelessTransport)
 		{
 			if (m_bStarted)
 				return ERRNO_OK;
 
-			m_spTransport = std::make_shared<CMemoryTransport>();
+			if (bStatelessTransport)
+				m_spTransport = std::make_shared<CMemoryTransport>();
+			else
+				m_spTransport = std::make_shared<CNoStatelessMemoryTransport>();
 			if (!m_spTransport)
 				return ERRNO_INTERNAL_ERROR;
 

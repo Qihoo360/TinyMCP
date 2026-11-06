@@ -39,7 +39,9 @@ namespace MCP
 		friend struct VersionExtrasAccess;
 
 		// Writes every 2026-07-28 result level field behind its feature gate.
-		void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo) const;
+		// bForceCacheHints lets discover emit its schema-required cache fields even
+		// when the profile does not declare the general caching feature.
+		void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo, bool bForceCacheHints = false) const;
 	};
 
 	struct EmptyResponse : public MCP::Response

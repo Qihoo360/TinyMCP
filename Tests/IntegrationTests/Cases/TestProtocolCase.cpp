@@ -94,6 +94,10 @@ namespace
 	{
 		CMCPSession::GetInstance().ResetForNewClient();
 
+		// Modern support is opt-in; integration scenarios exercise both eras.
+		CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.SetSupportedProtocolVersions(
+			{ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 }));
+
 		int iErrCode = CTestServer::s_Instance.Initialize();
 		CHECK_EQ(ERRNO_OK, iErrCode);
 		if (ERRNO_OK != iErrCode)
@@ -350,6 +354,36 @@ TEST_CASE("integration.version_extensibility")
 		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
 	}
 
+	// Discover carries its mandatory cache hints even when the profile does not
+	// declare the general caching feature.
+	{
+		ProtocolProfile discoverProfile;
+		discoverProfile.strVersion = "2097-06-01";
+		discoverProfile.eEra = Era_Stateless;
+		discoverProfile.bitsFeatures.set(Feature_Discover);
+		discoverProfile.setSupportedMethods.insert(METHOD_SERVER_DISCOVER);
+		discoverProfile.setSupportedMethods.insert(METHOD_TOOLS_LIST);
+
+		std::vector<std::shared_ptr<const ProtocolProfile>> vecProfiles;
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(discoverProfile));
+		vecProfiles.push_back(std::make_shared<const ProtocolProfile>(legacyProfile));
+		CProtocolRegistry registry(vecProfiles);
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), registry);
+
+		Json::Value jResponse;
+		CHECK(ExpectResponse(driver, MakeRequest(50, METHOD_SERVER_DISCOVER,
+			MakeModernParams("2097-06-01", "{}")), jResponse));
+		CHECK(jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
+		CHECK(jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
+
+		CHECK(ExpectResponse(driver, MakeRequest(51, METHOD_TOOLS_LIST,
+			MakeModernParams("2097-06-01", "{}")), jResponse));
+		CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
+		CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
+
+		ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
+	}
+
 	// Handshake initialize negotiates to the requested version.
 	{
 		ProtocolProfile handshakeProfile;
@@ -552,14 +586,12 @@ TEST_CASE("integration.modern_core")
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
 
-	// Legacy-only and unknown methods are not part of the profile; ping is.
+	// Legacy-only, removed (ping) and unknown methods are not part of the profile.
 	CHECK(ExpectError(driver, MakeRequest(9, METHOD_LOGGING_SET_LEVEL,
 		MakeModernParams("2026-07-28", "{}", std::string(), "\"level\":\"info\"")),
 		9, ERRNO_METHOD_NOT_FOUND, jResponse));
-	CHECK(ExpectResponse(driver, MakeRequest(10, METHOD_PING,
-		MakeModernParams("2026-07-28", "{}")), jResponse));
-	CHECK_EQ(10, jResponse[MSG_KEY_ID].asInt());
-	CHECK(!jResponse.isMember(MSG_KEY_ERROR));
+	CHECK(ExpectError(driver, MakeRequest(10, METHOD_PING,
+		MakeModernParams("2026-07-28", "{}")), 10, ERRNO_METHOD_NOT_FOUND, jResponse));
 	CHECK(ExpectError(driver, MakeRequest(11, METHOD_RESOURCES_SUBSCRIBE,
 		MakeModernParams("2026-07-28", "{}", std::string(),
 			"\"uri\":\"" + std::string(CTestServer::RESOURCE_URI) + "\"")),
@@ -724,6 +756,13 @@ TEST_CASE("integration.mrtr")
 	CHECK_EQ(std::string("input-only-confirmed"),
 		jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
+	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
+
+	// Without the elicitation capability the server reports -32021.
+	CHECK(ExpectError(driver, MakeRequest(11, METHOD_TOOLS_CALL,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"confirm_input_only\"}")),
+		11, ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY, jResponse));
 
 	// An MRTR result with neither member is rejected by the SDK.
 	CHECK(ExpectError(driver, MakeRequest(3, METHOD_TOOLS_CALL,
@@ -801,6 +840,8 @@ TEST_CASE("integration.subscriptions")
 {
 	CDriver driver;
 	CMCPSession::GetInstance().ResetForNewClient();
+	CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.SetSupportedProtocolVersions(
+		{ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 }));
 	CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.Initialize());
 
 	// Withdraw the prompts capability so the listen request must not grant
@@ -869,8 +910,41 @@ TEST_CASE("integration.subscriptions")
 	Json::Value jUpdated;
 	CHECK(ParseJson(driver.GetOutput(nBeforeGrantedUri), jUpdated));
 	CHECK_EQ(std::string(METHOD_NOTIFICATION_RESOURCES_UPDATED), jUpdated[MSG_KEY_METHOD].asString());
+	CHECK_EQ(1, jUpdated[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
 
+	// Cancelling the listen request stops every push it granted. The cancel must
+	// carry modern metadata so it is routed through the stateless path.
+	const std::string strCancel = "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+		std::string(METHOD_NOTIFICATION_CANCELLED) +
+		"\",\"params\":{\"requestId\":1,\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+		"\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+	CHECK_EQ(ERRNO_OK, driver.Send(strCancel));
+	Json::Value jSync;
+	CHECK(ExpectResponse(driver, MakeRequest(2, METHOD_TOOLS_LIST,
+		MakeModernParams("2026-07-28", "{}")), jSync));
+
+	size_t nBeforeCancelled = driver.GetOutputCount();
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendResourceListChanged());
+	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
+		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI));
+	WaitQuiet();
+	CHECK_EQ(nBeforeCancelled, driver.GetOutputCount());
+
+	// A fresh listen request is completed with resultType=complete on terminate.
+	const std::string strListenAgain = MakeRequest(2, METHOD_SUBSCRIPTIONS_LISTEN,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"notifications\":{\"toolsListChanged\":true}"));
+	size_t nBeforeListenAgain = driver.GetOutputCount();
+	CHECK_EQ(ERRNO_OK, driver.Send(strListenAgain));
+	CHECK(driver.WaitForOutputCount(nBeforeListenAgain + 1, WAIT_TIMEOUT_MS));
+
+	size_t nBeforeTerminate = driver.GetOutputCount();
 	driver.Stop();
+	CHECK(driver.WaitForOutputCount(nBeforeTerminate + 1, WAIT_TIMEOUT_MS));
+	Json::Value jComplete;
+	CHECK(ParseJson(driver.GetOutput(nBeforeTerminate), jComplete));
+	CHECK_EQ(2, jComplete[MSG_KEY_ID].asInt());
+	CHECK_EQ(std::string(RESULT_TYPE_COMPLETE), jComplete[MSG_KEY_RESULT][MSG_KEY_RESULT_TYPE].asString());
 }
 
 TEST_CASE("integration.apps")
@@ -898,10 +972,20 @@ TEST_CASE("integration.apps")
 	// Phase 2: register the extension and verify the whole surface.
 	CDriver driver;
 	CMCPSession::GetInstance().ResetForNewClient();
+	CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.SetSupportedProtocolVersions(
+		{ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 }));
 	CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.Initialize());
 	CTestServer::s_Instance.RegisterServerAppsCapabilities();
 	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
 
+	// Legacy initialize passes explicitly registered extensions through.
+	Json::Value jLegacyInit;
+	CHECK(ExpectResponse(driver, MakeLegacyInitialize(1), jLegacyInit));
+	const Json::Value& jLegacyExtensions =
+		jLegacyInit[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS];
+	CHECK(jLegacyExtensions.isObject());
+	CHECK(jLegacyExtensions.isMember(EXTENSION_MCP_APPS_UI));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeRequest(10, METHOD_SERVER_DISCOVER,

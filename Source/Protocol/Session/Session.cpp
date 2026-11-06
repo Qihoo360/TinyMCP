@@ -1565,8 +1565,20 @@ namespace MCP
 
 		// The declaration is a set: callers may repeat a version, but it must only
 		// contribute one profile to the registry.
+		std::vector<std::string> vecDefault;
+		if (!bExplicit)
+		{
+			// Modern revisions are opt-in. Without an explicit declaration the
+			// session keeps the handshake behavior it had before 2026-07-28.
+			std::shared_ptr<const ProtocolProfile> pDefaultHandshake = registry.GetDefaultHandshakeProfile();
+			if (pDefaultHandshake)
+				vecDefault.push_back(pDefaultHandshake->strVersion);
+			else
+				vecDefault = registry.GetSupportedVersions();
+		}
+
 		std::vector<std::string> vecEffective;
-		for (const auto& strVersion : (bExplicit ? vecVersions : registry.GetSupportedVersions()))
+		for (const auto& strVersion : (bExplicit ? vecVersions : vecDefault))
 		{
 			if (std::find(vecEffective.begin(), vecEffective.end(), strVersion) == vecEffective.end())
 				vecEffective.push_back(strVersion);
@@ -1775,6 +1787,12 @@ namespace MCP
 		auto spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
+
+		// A transport that carries MCP inside a session-based channel cannot host
+		// stateless revisions at all, so a modern request is an invalid request
+		// rather than an unsupported version.
+		if (m_spTransport && !m_spTransport->SupportsStatelessProtocol())
+			return SendErrorResponse(spRequest, ERRNO_INVALID_REQUEST, ERROR_MESSAGE_INVALID_REQUEST);
 
 		int iValidate = ValidateProtocolContext(MessageContextAccess::GetShared(*spRequest), spRequest);
 		if (ERRNO_OK != iValidate)
@@ -1997,6 +2015,13 @@ namespace MCP
 
 		if (bHasSubscriptions)
 			return SendSubscriptionNotification(strMethod, Json::Value());
+
+		// The unsubscribed fallback is the legacy push contract. A stateless-era
+		// connection must stay quiet until it authorizes the notification type
+		// through subscriptions/listen.
+		const bool bStatelessServed = !GetProtocolRegistry().GetSupportedVersions(Era_Stateless).empty();
+		if (bStatelessServed && SessionState_Initialized != GetSessionState())
+			return ERRNO_OK;
 
 		std::shared_ptr<MCP::Notification> spNotification;
 		if (MessageType_ToolListChangedNotification == eMessageType)

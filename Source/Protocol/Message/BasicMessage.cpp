@@ -630,10 +630,10 @@ namespace MCP
 			jMsg[MSG_KEY_COMPLETIONS] = jCompletions;
 		}
 
-		// Extensions belong to the stateless era: a handshake profile that does
-		// not declare the feature never publishes the container, even when the
-		// application registered an extension for other revisions.
-		if (!mapExtensions.empty() && ctxProtocol.Supports(Feature_Extensions))
+		// Extensions belong to the stateless era by default, but an explicit
+		// registration is an application opt-in that legacy initialize must also
+		// advertise.
+		if (!mapExtensions.empty() && (ctxProtocol.Supports(Feature_Extensions) || bExtensionPassthrough))
 		{
 			Json::Value jExtensions(Json::objectValue);
 			for (const auto& pair : mapExtensions)

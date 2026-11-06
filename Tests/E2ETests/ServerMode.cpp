@@ -32,6 +32,8 @@ namespace MCP
 			CMCPSession::GetInstance().SetTransport(std::make_shared<MCP::CStdioTransport>());
 			if (bLegacyOnly)
 				server.SetSupportedProtocolVersions({ PROTOCOL_VER_2024_11_05 });
+			else
+				server.SetSupportedProtocolVersions({ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 });
 
 			int iErrCode = server.Initialize();
 			if (ERRNO_OK != iErrCode)

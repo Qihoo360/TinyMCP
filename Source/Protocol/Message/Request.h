@@ -53,6 +53,9 @@ namespace MCP
 
 		std::string strProtocolVer;
 		Implementation clientInfo;
+		// Legacy initialize still negotiates extensions through
+		// params.capabilities.extensions; keep them queryable by the server.
+		ClientCapabilities clientCapabilities;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

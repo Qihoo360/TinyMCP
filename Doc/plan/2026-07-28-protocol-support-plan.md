@@ -1,4 +1,4 @@
-# TinyMCP 2026-07-28 协议支持实施计划
+﻿# TinyMCP 2026-07-28 协议支持实施计划
 
 ## 1. 目标与范围
 
@@ -21,6 +21,17 @@
 | OAuth / 授权 | 不涉及。 |
 | MCP Apps 的 View↔Host `postMessage` 协议 | 不实现。该协议运行在宿主与 iframe 之间，不是 MCP Server SDK 的职责。 |
 | 客户端 SDK | 不实现，项目仍为 Server-only。 |
+
+### 实施修订（最终落地口径）
+
+后续分层与封装重构对本文若干设计点做了收敛，落地时以本节为准：
+
+1. 版本模型类型（`ProtocolEra/ProtocolFeature/ProtocolProfile/ProtocolContext/CProtocolRegistry`）最终位于 `Source/Protocol/Internal/`，不出现在公共头；对外仅通过 `CMCPServer` 暴露能力。
+2. Step 4 的 `SetModernProtocolSupported(bool)` 与 `m_bModernSupported` 已删除；现代版本改为通过 `CMCPServer::SetSupportedProtocolVersions` 显式声明，未声明时仅服务 2024-11-05（现代支持 opt-in）。
+3. `SetProtocolRegistry` 不再对外公开；测试通过内部 `ProtocolRegistryAccess` 注入假版本注册表。
+4. 已声明但不在会话注册表中的现代版本返回 `-32022`（带 `supported`/`requested`）；会话型传输（HTTP+SSE）上的现代请求返回 `-32600`。
+5. 2026-07-28 不提供 `ping`；现代 `ping` 返回 `-32601`。
+6. 显式注册扩展后，legacy `initialize` 也会在 `capabilities.extensions` 中透传；未注册时不出现。
 
 ## 2. 规范依据（实施时逐条对照）
 
@@ -155,14 +166,14 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 **目标**：本期只实现 `2024-11-05` 与 `2026-07-28`，但识别、分发、序列化不得写死“只有两个版本/二选一”。新增更老或更新版本时，优先只增加版本 profile 数据，不改主干。注册表只描述“版本与能力开关”，**不定义任何规范之外的协议字段**；所有字段仍以 `Doc/modelcontextprotocol/specification/2026-07-28` 与 `schema/2026-07-28` 为准。
 
-**版本模型**（新增于现有 `PublicDef.h/.cpp`，不新建目录）：
+**版本模型**（最终位于 `Source/Protocol/Internal/Protocol.h/.cpp`，公共头不暴露）：
 
 - `enum ProtocolEra { Era_Handshake, Era_Stateless };`
   - `Era_Handshake`：`initialize` + 会话状态机（2024-11-05）。
   - `Era_Stateless`：请求级 `_meta`、无会话（2026-07-28；未来版本通常沿用此模型）。
   - 时代表示“交互模型”，不是版本序号；不得用“新/旧”布尔值代替。
   - **唯一的架构级扩展点**：只有出现第三种交互模型（既非 Handshake 也非 Stateless）时才需新增 `ProtocolEra` 枚举值与一处时代分支；仅新增版本号不需要改本枚举。这一边界必须在评审时显式确认。
-- `CProtocolRegistry`/`ProtocolProfile`/`ProtocolContext` 是现有 `PublicDef.h/.cpp` 内的轻量配置类型，不是新目录、新类族或新基建；仅使用标准库 `std::bitset`/`std::set`，不引入外部依赖。
+- `CProtocolRegistry`/`ProtocolProfile`/`ProtocolContext` 是轻量配置类型，位于内部目录且不对外公开；仅使用标准库 `std::bitset`/`std::set`，不引入外部依赖。
 - `enum ProtocolFeature`：按能力/字段组划分，例如 `Feature_ResultMeta`、`Feature_EntityMeta`、`Feature_ImplementationExtras`、`Feature_ResultType`、`Feature_Discover`、`Feature_Caching`、`Feature_Mrtr`、`Feature_ListenSubscriptions`、`Feature_Extensions`、`Feature_CompletionsCapability`、`Feature_ToolTitle`、`Feature_ToolAnnotations`、`Feature_StructuredContent`、`Feature_ContentAudio`、`Feature_ContentResourceLink`、`Feature_ContentToolUse`、`Feature_ContentAnnotations`、`Feature_LogLevelInMeta`。新增版本时按需增加枚举值。请求侧 `_meta` 的解析由 `Era_Stateless` 直接驱动，不设 feature 位。
 - `struct ProtocolProfile`
   - `std::string strVersion`
@@ -230,7 +241,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 在 `MCP::Message`（被 `Request`/`Response`/`Notification` 继承）新增 `ProtocolContext ctxProtocol`，默认 `2024-11-05 / Era_Handshake`：
 
 - 由 `ParseMessage` 解析后设置到请求/通知对象；任务构建结果时从请求复制到结果；`Clone()`/`SetRequest()` 必须一并复制，避免异步任务丢失版本上下文。
-- 本次对 `Message`/`CMCPSession` 只**追加成员**（`ctxProtocol`、`m_pRegistry`、`m_bModernSupported`）与追加方法，不改变任何现有成员语义、方法签名与默认参数；约束目标是“旧代码重新编译即可、功能不变”，不承诺跨编译器版本的二进制 ABI 兼容。
+- 本次对 `Message`/`CMCPSession` 只**追加成员**（`ctxProtocol`、注册表快照等）与追加方法，不改变任何现有成员语义、方法签名与默认参数；约束目标是“旧代码重新编译即可、功能不变”，不承诺跨编译器版本的二进制 ABI 兼容。
 - 字段门控一律使用 `ctxProtocol.Supports(Feature_X)`，**禁止使用 `IsStateless()` 或版本字符串比较来门控字段**。这样未来版本增加/移除字段只需调整 profile 的 feature 位。
 - 现代专属字段只有在对应 feature 为真时序列化，包括：
   - `Feature_ResultType` → `resultType`；`Feature_Mrtr` → `inputRequests`/`requestState`；`Feature_StructuredContent` → `structuredContent`；`_meta.serverInfo` 由 `Feature_ResultMeta` 控制；
@@ -561,8 +572,8 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 新增成员与函数：
 
 - 版本类型统一引用 4.1 的 `ProtocolEra`/`ProtocolFeature`/`ProtocolProfile`/`ProtocolContext`/`CProtocolRegistry`，**不得在本文件内重新定义 `enum ProtocolEra` 或任何“新/旧”布尔开关**。
-- `void SetProtocolRegistry(const CProtocolRegistry*)`：默认为全局实例，供测试注入假版本注册表；文档中标注“高级/测试用途，实例生命周期须覆盖 Session”。
-- `void SetModernProtocolSupported(bool)`：默认 `false`；stdio 入口设为 `true`，SSE 入口保持 `false`。`Era_Stateless` 分支先检查该标志，为 `false` 时直接回 `-32600`；这样 `unit.session` 无需真实传输即可验证非 stdio 边界。
+- `void SetSupportedProtocolVersions(const std::vector<std::string>&)`：声明本服务支持的协议版本；省略时仅服务默认 Handshake 版本（2024-11-05）。显式声明非注册表版本返回 `ERRNO_INVALID_PARAMS`。
+- 现代版本是 opt-in：stdio 入口显式声明两个版本；SSE 入口只声明 2024-11-05，收到现代请求时回 `-32600`。unknown/未声明的现代版本回 `-32022`。
 - `ProtocolContext ResolveProtocolContext(const std::shared_ptr<MCP::Message>&) const`：按 4.1 的识别规则，用 `CProtocolRegistry::Find()` 解析版本并返回上下文；不做 `2026-07-28` 专属字符串比较，也不硬编码版本列表。无法识别时返回 `ProtocolContext::Invalid(version)`（`IsValid() == false`），由调用方决定错误码。
 - 现代逻辑全部在现有 `CMCPSession` 内实现，不新建 Session/Server/分发器；legacy 的 `ProcessMessage` 调用链保持原样。
 - `Clone()`/`SetRequest()` 复制 `ctxProtocol`、`meta`（含 `logLevel`）；`ctxProtocol` 是异步任务保持现代语义的唯一来源。
@@ -585,14 +596,14 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
    - `server/discover` 在无现代 `_meta` 时按通用 `Request` 返回（legacy 分支据此回 `-32601`）；有现代 `_meta` 时按 `DiscoverRequest` 解析。
 3. 解析 `ProtocolContext` 并设置到消息对象（`ctxProtocol`）；解析结果只依赖注册表 profile，不依赖版本号分支。`method == "initialize"` 先行判定为 `Era_Handshake`（即使带现代 `_meta`），取会话注册表的 `GetDefaultHandshakeProfile()`，使新增更老/更新 Handshake 版本时 `initialize` 结果自动使用注册表版本；其余 Handshake 请求同样取该 profile。
 4. `Era_Stateless`：
-   - `m_bModernSupported == false` → 直接写 `ErrorResponse(-32600)`，带上 `id`。
+   - 会话注册表不含该版本 → 写 `ErrorResponse(-32022)`（带 `supported`/`requested`）；传输不支持无状态（如 SSE）→ 写 `ErrorResponse(-32600)`。
    - 版本校验失败 → 直接写 `ErrorResponse(-32022)`，带上 `id`；`data.supported` 来自 `CProtocolRegistry::GetSupportedVersions()`。
    - 必填 `_meta` 缺失 → 写 `ErrorResponse(-32602)`，带上 `id`，不补默认值。
    - 请求 → `ProcessModernRequest`；通知 → `ProcessModernNotification`。
 5. `Era_Handshake`：走现有 `ProcessMessage` 逻辑，不做任何行为变更；唯一新增例外是 `server/discover` 直接回 `-32601`（用于版本回退探测），其余未知 method 保持原静默行为。
 6. **通知不强制按 `_meta` 分流**：`notifications/cancelled` 不携带现代 `_meta` 时仍走现有取消逻辑（若 `requestId` 命中订阅则先移除订阅）；其余无 `_meta` 通知维持 legacy 行为。通知的“现代”判定不得依赖客户端额外补 `_meta`。
 7. 现代请求**不写入** `m_hashMessage`（或仅在明确上限内保留），避免长期运行无限增长；legacy 维持现状。
-8. **传输边界**：2026-07-28 本期只声明 stdio。stdio 入口显式调用 `SetModernProtocolSupported(true)`，SSE 入口保持 `false`；因此 SSE 连接上收到携带现代 `_meta` 的请求会由 `CMCPSession` 的 `m_bModernSupported` 检查回 `-32600` 并记录警告，不得静默按现代语义执行；legacy 请求在 SSE 上完全保持现状。
+8. **传输边界**：2026-07-28 本期只声明 stdio。stdio 入口显式声明 `2024-11-05` 与 `2026-07-28`；SSE 入口只声明 `2024-11-05`；因此 SSE 连接上收到携带现代 `_meta` 的请求会回 `-32600`，不得静默按现代语义执行；legacy 请求在 SSE 上完全保持现状。
 
 `ProcessModernRequest` 分发：按当前 `ProtocolContext` 的 profile 判定，**禁止写 `if (strVersion == "...")`**。
 
@@ -689,7 +700,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
   - `echo_app` 工具：`_meta.ui.resourceUri = "ui://echo/app.html"`，同时返回文本 `content`（优雅降级）。
   - 注册 `completions`，并通过 `RegisterServerAppsCapabilities()` 显式启用 `io.modelcontextprotocol/ui`（默认关闭）。
   - 现代订阅示例：listen 请求用数字 `id`，过滤器写在 `params.notifications`；服务端先回 ack（带数字 `subscriptionId`），再由定时器调用 `SendSubscriptionNotification("notifications/resources/updated", params, "echo://...")` 推送；未订阅时不推送。
-- `MCPServer.cpp` 的参数解析保持 `--transport stdio|sse`；不新增传输。`--transport stdio` 分支调用 `CMCPSession::GetInstance().SetModernProtocolSupported(true)`，`sse` 分支保持默认 `false`。
+- `MCPServer.cpp` 的参数解析保持 `--transport stdio|sse`；不新增传输。`--transport stdio` 分支显式声明 `{2024-11-05, 2026-07-28}`，`sse` 分支只声明 `{2024-11-05}`。
 
 ### Step 8：构建文件
 
@@ -708,7 +719,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 - `Readme.md` 增加“协议版本支持”一节：
   - 2026-07-28 仅 stdio；2024-11-05 支持 stdio + HTTP+SSE。
-  - **启用方式**：现代协议默认关闭，库使用者必须在 stdio 入口调用 `CMCPSession::GetInstance().SetModernProtocolSupported(true)`；SSE 入口保持关闭（`-32600`）。示例已按此配置。
+  - **启用方式**：现代协议默认关闭，库使用者必须在 stdio 入口通过 `SetSupportedProtocolVersions` 显式声明 `2026-07-28`；SSE 入口只声明 `2024-11-05`（现代请求 `-32600`）。示例已按此配置。
   - 现代请求 `_meta` 示例、`server/discover` 示例、MRTR 示例、订阅示例。
   - 可缓存结果清单（6 类）与“MRTR 重试结果不缓存”。
   - 必填 `_meta` 缺失返回 `-32602`、不补默认值；`-32001` 与 `-32020` 的区别。
@@ -772,7 +783,7 @@ ctest --test-dir build-tests --output-on-failure
 - 门禁：每个编码单元完成后先运行对应 `unit.*`；每个特性完成后运行对应 `integration.*`；全部完成后运行全量 CTest。
 - 失败处理：任何用例失败即停止后续开发，修复后从失败用例开始重跑，再跑全量回归。
 - 真实 stdio 冒烟（可选，不属于日常门禁）：`Tests/scripts/stdio_smoke.ps1` 启动 `MCPServer.exe`，依次写入 legacy 与 modern 请求并断言关键字段；SSE 冒烟同属脚本，不注册为 CTest。
-- 测试宿主默认模拟 stdio：`CTestServer`/`MemoryTransport` 初始化时调用 `SetModernProtocolSupported(true)`；仅“非 stdio 拒绝现代请求”用例显式设为 `false`。
+- 测试宿主默认模拟 stdio：`CTestServer`/`MemoryTransport` 场景显式声明两个版本；仅“非 stdio 拒绝现代请求”用例使用不支持无状态的 MemoryTransport 子类。
 
 ### 7.1 构建
 
@@ -820,7 +831,7 @@ ctest --test-dir build-tests --output-on-failure
 
 2. 版本不支持：`protocolVersion = "2025-06-18"` → `-32022`，`data.supported` 与 `CProtocolRegistry::GetSupportedVersions()` 完全一致、`data.requested` 为原值。
 3. 缺 `protocolVersion`/`clientCapabilities` → `-32602`；先用 legacy `initialize` 完成握手后，再发只带 `progressToken` 的 legacy 请求仍按 2024-11-05 处理。
-4. 现代客户端对 legacy 服务端的回退路径（模拟）：`CTestServer` 提供“legacy-only”配置（`SetModernProtocolSupported(false)` 且不注册现代方法），携带现代 `_meta` 的 `server/discover` 返回任一非现代错误（本实现为 `-32600`，纯旧服务端可能为 `-32601`）；客户端改发 `initialize` 后可继续工作。断言回退判定不依赖具体错误码。
+4. 现代客户端对 legacy 服务端的回退路径（模拟）：`CTestServer` 提供“legacy-only”配置（只声明 `2024-11-05` 且不注册现代方法），携带现代 `_meta` 的 `server/discover` 返回 `-32022`（版本未声明）；客户端改发 `initialize` 后可继续工作。断言回退判定不依赖具体错误码。
 
 **`integration.modern_core`**
 
@@ -836,7 +847,7 @@ ctest --test-dir build-tests --output-on-failure
 
 **`integration.version_extensibility`**（验证“未来版本只加 profile”）
 
-13. 测试内置一个假版本 profile（如 `2099-01-01`，`Era_Stateless`，开启 `Feature_ResultType`、`Feature_ResultMeta`、`Feature_Discover`、`Feature_Caching`，方法集只含 `server/discover` 与 `tools/list`），通过 `SetProtocolRegistry` 注入自定义 `CProtocolRegistry` 实例（同一实例保留 `2024-11-05` Handshake profile，保证默认 `ProtocolContext` 与 legacy 输出仍有效）：
+13. 测试内置一个假版本 profile（如 `2099-01-01`，`Era_Stateless`，开启 `Feature_ResultType`、`Feature_ResultMeta`、`Feature_Discover`、`Feature_Caching`，方法集只含 `server/discover` 与 `tools/list`），通过内部 `ProtocolRegistryAccess` 注入自定义 `CProtocolRegistry` 实例（同一实例保留 `2024-11-05` Handshake profile，保证默认 `ProtocolContext` 与 legacy 输出仍有效）：
     - `server/discover` 的 `supportedVersions` 自动包含该假版本；`-32022.data.supported` 同步包含。
     - 用假版本发 `tools/list` → 成功，结果含 `resultType`、`ttlMs`、`cacheScope`（与 schema 对可缓存结果的要求一致）。
     - 用假版本发 `tools/call` → `-32601`（未在方法集登记）。

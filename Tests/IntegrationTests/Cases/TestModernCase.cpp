@@ -82,6 +82,10 @@ namespace
 		// in any order inside a single process (--unit).
 		CMCPSession::GetInstance().ResetForNewClient();
 
+		// Modern support is opt-in; these scenarios exercise both eras.
+		CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.SetSupportedProtocolVersions(
+			{ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 }));
+
 		int iErrCode = CTestServer::s_Instance.Initialize();
 		CHECK_EQ(ERRNO_OK, iErrCode);
 		if (ERRNO_OK != iErrCode)
@@ -209,6 +213,19 @@ TEST_CASE("unit.caching")
 		MakeModernParams("{\"name\":\"echo\",\"arguments\":{\"input\":\"hello\"}}")), jResponse));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_CACHE_SCOPE));
+
+	// Every schema-defined cacheable result kind carries the hints.
+	const std::vector<std::string> vecCacheableMethods = {
+		METHOD_RESOURCES_LIST, METHOD_RESOURCES_TEMPLATES_LIST,
+		METHOD_PROMPTS_LIST, METHOD_SERVER_DISCOVER };
+	for (size_t i = 0; i < vecCacheableMethods.size(); ++i)
+	{
+		CHECK(ExpectResponse(driver, MakeRequest(static_cast<int>(14 + i),
+			vecCacheableMethods[i], MakeModernParams()), jResponse));
+		CHECK_EQ(120, jResponse[MSG_KEY_RESULT][MSG_KEY_TTL_MS].asInt());
+		CHECK_EQ(std::string(CACHE_SCOPE_PUBLIC),
+			jResponse[MSG_KEY_RESULT][MSG_KEY_CACHE_SCOPE].asString());
+	}
 
 	CMCPSession::GetInstance().SetServerCacheOptions(0, CACHE_SCOPE_PRIVATE);
 
@@ -380,11 +397,14 @@ TEST_CASE("unit.capabilities")
 	if (!StartServer(driver))
 		return;
 
-	// Legacy initialize never advertises extensions: the container belongs to
-	// the stateless era profile even when the application registered one.
+	// An explicitly registered extension is passed through to legacy initialize;
+	// the modern-only completions capability stays out of the handshake surface.
 	Json::Value jResponse;
 	CHECK(ExpectResponse(driver, MakeLegacyInitialize(40), jResponse));
-	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_EXTENSIONS));
+	const Json::Value& jLegacyExtensions =
+		jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS];
+	CHECK(jLegacyExtensions["example/echo"].isObject());
+	CHECK(jLegacyExtensions[EXTENSION_MCP_APPS_UI].isObject());
 	CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES].isMember(MSG_KEY_COMPLETIONS));
 	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 

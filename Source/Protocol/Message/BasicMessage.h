@@ -243,6 +243,10 @@ namespace MCP
 		MCP::Logging logging;
 		bool bCompletions{ false };
 		std::map<std::string, Json::Value> mapExtensions;
+		// A registered extension is explicitly opted in by the application, so a
+		// handshake-era initialize response must pass it through even though the
+		// legacy profile does not declare Feature_Extensions.
+		bool bExtensionPassthrough{ false };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

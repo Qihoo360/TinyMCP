@@ -43,5 +43,13 @@ namespace MCP
 			bool m_bInputClosed{ false };
 			bool m_bConnected{ false };
 		};
+		// Models a session-based channel (for example HTTP+SSE) that cannot carry
+		// stateless revisions.
+		class CNoStatelessMemoryTransport : public CMemoryTransport
+		{
+		public:
+			bool SupportsStatelessProtocol() const override { return false; }
+		};
+
 	}
 }

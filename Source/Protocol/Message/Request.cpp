@@ -170,6 +170,11 @@ namespace MCP
 			return ERRNO_INVALID_REQUEST;
 		auto& jClientInfo = jParams[MSG_KEY_CLIENT_INFO];
 
+		if (jParams.isMember(MSG_KEY_CAPABILITIES) && jParams[MSG_KEY_CAPABILITIES].isObject())
+		{
+			clientCapabilities.DoDeserialize(jParams[MSG_KEY_CAPABILITIES]);
+		}
+
 		return clientInfo.DoDeserialize(jClientInfo);
 	}
 
@@ -225,7 +230,33 @@ namespace MCP
 	// CallToolRequest
 	int CallToolRequest::DoSerialize(Json::Value& jMsg) const
 	{
-		return Request::DoSerialize(jMsg);
+		int iErrCode = Request::DoSerialize(jMsg);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		Json::Value& jParams = jMsg[MSG_KEY_PARAMS];
+		if (!jParams.isObject())
+			jParams = Json::Value(Json::objectValue);
+
+		if (!strName.empty())
+		{
+			jParams[MSG_KEY_NAME] = strName;
+			if (jArguments.isObject())
+				jParams[MSG_KEY_ARGUMENTS] = jArguments;
+		}
+
+		// The retry round trip of an MRTR tool call carries the original
+		// toolCallId back in params._meta; it must survive serialization.
+		if (toolCallId.IsValid())
+		{
+			Json::Value& jMeta = jParams[MSG_KEY_META];
+			if (!jMeta.isObject())
+				jMeta = Json::Value(Json::objectValue);
+
+			toolCallId.DoSerialize(jMeta);
+		}
+
+		return ERRNO_OK;
 	}
 
 	int CallToolRequest::DoDeserialize(const Json::Value& jMsg)

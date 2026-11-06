@@ -32,6 +32,13 @@ int LaunchEchoServer(const std::string& strTransport, const std::string& strHost
             server.SetTransport(std::make_shared<MCP::CSSETransport>(strHost, iPort));
             server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2024_11_05 });
         }
+        else
+        {
+            // stdio carries stateless revisions, so both eras are offered. The
+            // declaration is explicit because modern support is opt-in.
+            server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2024_11_05,
+                MCP::PROTOCOL_VER_2026_07_28 });
+        }
         // 2. Start the Server.
         server.Start();
         // 3. Stop the Server.

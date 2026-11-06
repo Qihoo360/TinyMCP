@@ -382,6 +382,18 @@ namespace MCP
 				// 17. params._meta compatibility of the legacy request objects.
 				CheckLegacyMeta();
 
+				// 18. Server-initiated legacy notifications are still pushed
+				// without any subscription handshake.
+				size_t nBeforeNotification = driver.GetOutputCount();
+				CHECK_EQ(MCP::ERRNO_OK, CTestServer::GetInstance().SendToolListChanged());
+				CHECK(driver.WaitForOutputCount(nBeforeNotification + 1, WAIT_TIMEOUT_MS));
+
+				Json::Value jNotification;
+				CHECK(ParseJson(driver.GetOutput(nBeforeNotification), jNotification));
+				CHECK_EQ(std::string(MCP::METHOD_NOTIFICATION_TOOLS_LIST_CHANGED),
+					jNotification["method"].asString());
+				CHECK(!jNotification.isMember("id"));
+
 				driver.Stop();
 
 				return MCP::ERRNO_OK;

@@ -39,7 +39,7 @@ namespace MCP
 		return false;
 	}
 
-	void Response::WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo) const
+	void Response::WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctxProtocol, const Json::Value& jServerInfo, bool bForceCacheHints) const
 	{
 		if (ctxProtocol.Supports(Feature_ResultType))
 		{
@@ -58,7 +58,7 @@ namespace MCP
 
 		// Cache hints are only defined for complete results of read methods and
 		// must not be reused by an MRTR retry round trip.
-		if (ctxProtocol.Supports(Feature_Caching)
+		if ((ctxProtocol.Supports(Feature_Caching) || bForceCacheHints)
 			&& IsCacheableResult()
 			&& (strResultType.empty() || strResultType == RESULT_TYPE_COMPLETE)
 			&& !bMrtrRetry)
@@ -719,9 +719,9 @@ namespace MCP
 			jResult[MSG_KEY_INSTRUCTIONS] = jInstructions;
 		}
 
-		// Cache hints and result meta are emitted by the shared result writer so
-		// discover follows the same caching feature gate as every other method.
-		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
+		// Discover itself requires cache hints, independently of the general
+		// caching feature: the schema makes ttlMs/cacheScope mandatory here.
+		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo, ctxProtocol.Supports(Feature_Discover));
 
 		jMsg[MSG_KEY_RESULT] = jResult;
 

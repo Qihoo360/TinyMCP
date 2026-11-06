@@ -34,20 +34,21 @@ Please check the [wiki](https://github.com/Qihoo360/TinyMCP/wiki) for more infor
 Declare the revisions your server serves through `CMCPServer`; the SDK builds the internal profile table from that declaration, so registry and profile types never appear in application code.
 
 ```cpp
-// Serve every shipped version (default when this call is omitted).
+// Serve both eras over stdio. Modern support is opt-in, so the declaration is
+// required for 2026-07-28 even though 2024-11-05 works by default.
 server.SetSupportedProtocolVersions({
     MCP::PROTOCOL_VER_2024_11_05,
     MCP::PROTOCOL_VER_2026_07_28,
 });
 
-// Serve only the handshake era.
+// Handshake era only (the default when this call is omitted).
 server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2024_11_05 });
 
 // Serve only the stateless era.
 server.SetSupportedProtocolVersions({ MCP::PROTOCOL_VER_2026_07_28 });
 ```
 
-Call it before `Start()`. Unknown revisions are rejected with `ERRNO_INVALID_PARAMS` instead of being silently ignored. The transport is checked too: declaring `2026-07-28` while using the HTTP+SSE transport fails at `Start()`, while leaving the call out simply serves every revision that transport can carry. A request whose `_meta` names a version the server does not serve is rejected with `-32022`, and the error data lists the supported versions.
+Call it before `Start()`. Unknown revisions are rejected with `ERRNO_INVALID_PARAMS` instead of being silently ignored. The transport is checked too: declaring `2026-07-28` while using the HTTP+SSE transport fails at `Start()`, while leaving the call out serves only 2024-11-05. A stateless request whose `_meta` names a version the server does not serve is rejected with `-32022` and the error data lists the supported versions; a stateless request on a session-based transport such as HTTP+SSE is rejected with `-32600`.
 
 ### Per-request `_meta`
 Stateless requests carry their version and client information in `params._meta`. `protocolVersion` and `clientCapabilities` are required; if any `io.modelcontextprotocol/*` key is present but a required one is missing, the server returns `-32602` and does **not** fill in defaults.
@@ -137,6 +138,7 @@ Only these six `resultType: "complete"` results must carry `ttlMs` (>= 0) and `c
 Defaults are `ttlMs = 0` and `cacheScope = "private"`; override them with `SetServerCacheOptions(ttlMs, cacheScope)`. `tools/call`, `prompts/get`, `completion/complete`, `subscriptions/listen`, `input_required` results, and MRTR retries never carry cache fields.
 
 ### Errors
+* `-32600`: invalid request, including any stateless request received on a session-based transport such as HTTP+SSE.
 * `-32602`: malformed parameters, including a missing required `_meta` field, an unknown tool/resource, or an invalid cursor on modern requests. No defaults are filled in.
 * `-32022`: unsupported protocol version; `error.data.supported` lists the revisions the server declares (see `SetSupportedProtocolVersions`).
 * `-32601`: unknown method, including modern-only methods on a profile that does not support them.
@@ -147,12 +149,12 @@ Defaults are `ttlMs = 0` and `cacheScope = "private"`; override them with `SetSe
 Modern `resources/read` reports a missing resource as `-32602`, while legacy keeps `-32002`.
 
 ### Extensions and MCP Apps
-The only extension implemented today is MCP Apps (`io.modelcontextprotocol/ui`). Extensions are off by default: call `RegisterServerAppsCapabilities()` (or `RegisterServerExtensionsCapabilities()`) to advertise them. Without that call neither `server/discover` nor legacy `initialize` mentions the extension.
+The only extension implemented today is MCP Apps (`io.modelcontextprotocol/ui`). Extensions are off by default: call `RegisterServerAppsCapabilities()` (or `RegisterServerExtensionsCapabilities()`) to advertise them. With that call both `server/discover` and legacy `initialize` advertise the registered extension; without it neither mentions it.
 
 MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool to a `ui://` resource, and `Resource._meta.ui` carries `csp` and `permissions` verbatim. Tools must still return meaningful text content so that hosts without Apps support degrade gracefully. The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK.
 
 ### Deprecated features
-`logging`, `roots`, and `sampling` are deprecated in 2026-07-28. This release still implements them as specified: request-level `_meta.logLevel` for logging (requests without it receive no `notifications/message`), and MRTR for roots/sampling. New implementations should prefer stderr or OpenTelemetry, tool parameters or resource URIs, and direct LLM API calls. Legacy `logging/setLevel` remains available only on 2024-11-05 sessions. SSE connections do not accept modern requests.
+`logging`, `roots`, and `sampling` are deprecated in 2026-07-28. This release still implements them as specified: request-level `_meta.logLevel` for logging (requests without it receive no `notifications/message`), and MRTR for roots/sampling. New implementations should prefer stderr or OpenTelemetry, tool parameters or resource URIs, and direct LLM API calls. Legacy `logging/setLevel` remains available only on 2024-11-05 sessions. SSE connections reject modern requests with `-32600`.
 
 ## 🗂️ Code structure brief
 | directory | brief |

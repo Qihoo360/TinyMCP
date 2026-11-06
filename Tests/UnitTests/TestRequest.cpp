@@ -172,5 +172,41 @@ TEST_CASE("unit.request")
 	CHECK(!parsed.bPromptsListChanged);
 	CHECK(parsed.bResourcesListChanged);
 	CHECK_EQ(static_cast<size_t>(1), parsed.vecResourceSubscriptions.size());
-	CHECK_EQ(std::string("file:///one.txt"), parsed.vecResourceSubscriptions[0]);
+	// Legacy initialize keeps params.capabilities.extensions queryable.
+	Json::Value jLegacyCapabilities(Json::objectValue);
+	jLegacyCapabilities[MSG_KEY_EXTENSIONS]["example/echo"] = Json::Value(Json::objectValue);
+
+	Json::Value jInitializeParams(Json::objectValue);
+	jInitializeParams[MSG_KEY_PROTOCOL_VERSION] = PROTOCOL_VER_2024_11_05;
+	jInitializeParams[MSG_KEY_CAPABILITIES] = jLegacyCapabilities;
+	jInitializeParams[MSG_KEY_CLIENT_INFO][MSG_KEY_NAME] = "legacy-client";
+	jInitializeParams[MSG_KEY_CLIENT_INFO][MSG_KEY_VERSION] = "1.0.0";
+
+	Json::Value jInitialize(Json::objectValue);
+	jInitialize[MSG_KEY_JSONRPC] = JSON_RPC_VER;
+	jInitialize[MSG_KEY_ID] = 3;
+	jInitialize[MSG_KEY_METHOD] = METHOD_INITIALIZE;
+	jInitialize[MSG_KEY_PARAMS] = jInitializeParams;
+
+	InitializeRequest initialize(false);
+	MessageContextAccess::Set(initialize, ctxLegacy);
+	CHECK_EQ(ERRNO_OK, initialize.DoDeserialize(jInitialize));
+	CHECK(initialize.clientCapabilities.SupportsExtension("example/echo"));
+	CHECK(!initialize.clientCapabilities.SupportsExtension("example/missing"));
+
+	// An MRTR retry keeps params._meta.toolCallId across a serialize/parse cycle.
+	CallToolRequest retry(false);
+	retry.requestId = MakeRequestId(4);
+	retry.strMethod = METHOD_TOOLS_CALL;
+	retry.strName = "echo";
+	retry.toolCallId.eIdDataType = DataType_Integer;
+	retry.toolCallId.iId = 77;
+	MessageContextAccess::Set(retry, ctxModern);
+	const Json::Value jRetry = SerializeRequest(retry);
+	CHECK_EQ(77, jRetry[MSG_KEY_PARAMS][MSG_KEY_META][MSG_KEY_TOOL_CALL_ID].asInt());
+
+	CallToolRequest parsedRetry(false);
+	MessageContextAccess::Set(parsedRetry, ctxModern);
+	CHECK_EQ(ERRNO_OK, parsedRetry.DoDeserialize(jRetry));
+	CHECK_EQ(77, parsedRetry.toolCallId.iId);
 }

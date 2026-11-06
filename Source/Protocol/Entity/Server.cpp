@@ -107,6 +107,7 @@ namespace MCP
 		for (const auto& pair : mapExtensions)
 			capabilities.mapExtensions[pair.first] = pair.second;
 
+		capabilities.bExtensionPassthrough = !capabilities.mapExtensions.empty();
 		Session().SetServerCapabilities(capabilities);
 	}
 
@@ -114,6 +115,7 @@ namespace MCP
 	{
 		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
 		capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+		capabilities.bExtensionPassthrough = true;
 		Session().SetServerCapabilities(capabilities);
 	}
 

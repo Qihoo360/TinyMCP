@@ -135,11 +135,9 @@ TEST_CASE("unit.session")
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 	CHECK(!jResponse[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));
 
-	// Methods outside the stateless profile are not found.
+	// Methods outside the stateless profile are not found, including legacy ping.
 	CHECK(ExpectError(driver, MakeRequest(6, "acme/unknown", MakeModernMeta()), 6, ERRNO_METHOD_NOT_FOUND, jResponse));
-	CHECK(ExpectResponse(driver, MakeRequest(7, METHOD_PING, MakeModernMeta()), jResponse));
-	CHECK_EQ(7, jResponse[MSG_KEY_ID].asInt());
-	CHECK(!jResponse.isMember(MSG_KEY_ERROR));
+	CHECK(ExpectError(driver, MakeRequest(7, METHOD_PING, MakeModernMeta()), 7, ERRNO_METHOD_NOT_FOUND, jResponse));
 	CHECK(ExpectError(driver, MakeRequest(8, METHOD_RESOURCES_SUBSCRIBE, MakeModernParams("{\"uri\":\"test://echo/resource\"}")),
 		8, ERRNO_METHOD_NOT_FOUND, jResponse));
 
@@ -170,4 +168,15 @@ TEST_CASE("unit.session")
 		"{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\"}}"), 11, ERRNO_INVALID_PARAMS, jResponse));
 
 	driver.Stop();
+
+	// A session-based transport refuses stateless requests as invalid requests,
+	// independently of which versions the session declares.
+	{
+		CDriver sessionDriver;
+		CMCPSession::GetInstance().ResetForNewClient();
+		CHECK_EQ(ERRNO_OK, sessionDriver.Start(WAIT_TIMEOUT_MS, false));
+		CHECK(ExpectError(sessionDriver, MakeRequest(12, METHOD_TOOLS_LIST, MakeModernMeta()),
+			12, ERRNO_INVALID_REQUEST, jResponse));
+		sessionDriver.Stop();
+	}
 }

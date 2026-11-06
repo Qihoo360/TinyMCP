@@ -21,7 +21,7 @@ namespace MCP
 			CDriver(const CDriver&) = delete;
 			CDriver& operator=(const CDriver&) = delete;
 
-			int Start(int iTimeoutMs = 5000);
+			int Start(int iTimeoutMs = 5000, bool bStatelessTransport = true);
 			int Stop();
 
 			int Send(const std::string& strLine);
