@@ -4,7 +4,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include "../Public/PublicDef.h"
 #include "../Message/BasicMessage.h"
@@ -37,7 +36,9 @@ namespace MCP
 		// Declares the protocol revisions this server serves. Call it before
 		// Start(); leaving it unused means every revision the transport can
 		// carry. Only an empty declaration is rejected here: which revisions the
-		// SDK knows is a registry question, so Start() owns that decision.
+		// SDK knows is a registry question, so Start() owns that decision. This is
+		// the single pre-Start setting; every other registration takes effect at
+		// once and stays effective after Start().
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
 
 		void RegisterServerToolsCapabilities(const MCP::Tools& tools);
@@ -80,13 +81,9 @@ namespace MCP
 		CMCPServerBase() = default;
 		~CMCPServerBase() = default;
 
+		// The registry owns every other setting once registered; only the version
+		// declaration is kept here because Start() is where it is applied.
 		std::vector<std::string> m_vecSupportedProtocolVersions;
-		MCP::ServerCapabilities m_capabilities;
-		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
-		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
-		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
-		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>> m_hashGetPromptTasks;
-		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>> m_hashCompleteTasks;
 	};
 
 	template <class T>

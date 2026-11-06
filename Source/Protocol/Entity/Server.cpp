@@ -61,43 +61,60 @@ namespace MCP
 
 	void CMCPServerBase::RegisterServerToolsCapabilities(const MCP::Tools& tools)
 	{
-		m_capabilities.tools = tools;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.tools = tools;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerResourcesCapabilities(const MCP::Resources& resources)
 	{
-		m_capabilities.resources = resources;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.resources = resources;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerPromptsCapabilities(const MCP::Prompts& prompts)
 	{
-		m_capabilities.prompts = prompts;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.prompts = prompts;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerExperimentalCapabilities(const MCP::Experimental& experimental)
 	{
-		m_capabilities.experimental = experimental;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.experimental = experimental;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerLoggingCapabilities()
 	{
-		m_capabilities.logging.bExist = true;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.logging.bExist = true;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerCompletionsCapability()
 	{
-		m_capabilities.bCompletions = true;
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.bCompletions = true;
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>& mapExtensions)
 	{
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
 		for (const auto& pair : mapExtensions)
-			m_capabilities.mapExtensions[pair.first] = pair.second;
+			capabilities.mapExtensions[pair.first] = pair.second;
+
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerAppsCapabilities()
 	{
-		m_capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+		Session().SetServerCapabilities(capabilities);
 	}
 
 	void CMCPServerBase::RegisterServerInstructions(const std::string& strInstructions)
@@ -141,27 +158,27 @@ namespace MCP
 
 	void CMCPServerBase::RegisterToolsTasks(const std::string& strToolName, std::shared_ptr<MCP::ProcessCallToolRequest> spTask)
 	{
-		m_hashCallToolsTasks[strToolName] = spTask;
+		Session().SetServerCallToolsTask(strToolName, spTask);
 	}
 
 	void CMCPServerBase::RegisterReadResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessReadResourceRequest> spTask)
 	{
-		m_hashReadResourceTasks[strResourceUri] = spTask;
+		Session().SetServerReadResourceTask(strResourceUri, spTask);
 	}
 
 	void CMCPServerBase::RegisterSubscribeResourceTasks(const std::string& strResourceUri, std::shared_ptr<MCP::ProcessSubscribeResourceRequest> spTask)
 	{
-		m_hashSubscribeResourceTasks[strResourceUri] = spTask;
+		Session().SetServerSubscribeResourceTask(strResourceUri, spTask);
 	}
 
 	void CMCPServerBase::RegisterGetPromptTasks(const std::string& strPromptName, std::shared_ptr<MCP::ProcessGetPromptRequest> spTask)
 	{
-		m_hashGetPromptTasks[strPromptName] = spTask;
+		Session().SetServerGetPromptTask(strPromptName, spTask);
 	}
 
 	void CMCPServerBase::RegisterCompleteTasks(const std::string& strTaskKey, std::shared_ptr<MCP::ProcessCompleteRequest> spTask)
 	{
-		m_hashCompleteTasks[strTaskKey] = spTask;
+		Session().SetServerCompleteTask(strTaskKey, spTask);
 	}
 
 	int CMCPServerBase::Start()
@@ -169,16 +186,11 @@ namespace MCP
 		if (!Session().GetTransport())
 			Session().SetTransport(std::make_shared<CStdioTransport>());
 
+		// Everything else was already written through to the session by its
+		// registration call; only the version declaration is applied here.
 		int iErrCode = Session().SetSupportedProtocolVersions(m_vecSupportedProtocolVersions);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
-
-		Session().SetServerCapabilities(m_capabilities);
-		Session().SetServerCallToolsTasks(m_hashCallToolsTasks);
-		Session().SetServerReadResourceTasks(m_hashReadResourceTasks);
-		Session().SetServerSubscribeResourceTasks(m_hashSubscribeResourceTasks);
-		Session().SetServerGetPromptTasks(m_hashGetPromptTasks);
-		Session().SetServerCompleteTasks(m_hashCompleteTasks);
 
 		iErrCode = Session().Ready();
 		if (ERRNO_OK != iErrCode)

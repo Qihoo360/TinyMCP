@@ -1358,6 +1358,31 @@ namespace MCP
 		m_hashCompleteTasks = hashCompleteTasks;
 	}
 
+	void CMCPSession::SetServerCallToolsTask(const std::string& strToolName, const std::shared_ptr<MCP::ProcessCallToolRequest>& spTask)
+	{
+		m_hashCallToolsTasks[strToolName] = spTask;
+	}
+
+	void CMCPSession::SetServerReadResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessReadResourceRequest>& spTask)
+	{
+		m_hashReadResourceTasks[strResourceUri] = spTask;
+	}
+
+	void CMCPSession::SetServerSubscribeResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessSubscribeResourceRequest>& spTask)
+	{
+		m_hashSubscribeResourceTasks[strResourceUri] = spTask;
+	}
+
+	void CMCPSession::SetServerGetPromptTask(const std::string& strPromptName, const std::shared_ptr<MCP::ProcessGetPromptRequest>& spTask)
+	{
+		m_hashGetPromptTasks[strPromptName] = spTask;
+	}
+
+	void CMCPSession::SetServerCompleteTask(const std::string& strTaskKey, const std::shared_ptr<MCP::ProcessCompleteRequest>& spTask)
+	{
+		m_hashCompleteTasks[strTaskKey] = spTask;
+	}
+
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
 		return m_serverInfo;

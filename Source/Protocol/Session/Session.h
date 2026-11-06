@@ -81,6 +81,14 @@ namespace MCP
 		void SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks);
 		void SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks);
 		void SetServerCompleteTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>>& hashCompleteTasks);
+
+		// Per-entry registration. The server facade writes through immediately so
+		// registering after Start() takes effect like every other registration.
+		void SetServerCallToolsTask(const std::string& strToolName, const std::shared_ptr<MCP::ProcessCallToolRequest>& spTask);
+		void SetServerReadResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessReadResourceRequest>& spTask);
+		void SetServerSubscribeResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessSubscribeResourceRequest>& spTask);
+		void SetServerGetPromptTask(const std::string& strPromptName, const std::shared_ptr<MCP::ProcessGetPromptRequest>& spTask);
+		void SetServerCompleteTask(const std::string& strTaskKey, const std::shared_ptr<MCP::ProcessCompleteRequest>& spTask);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
 		bool GetServerToolsPagination() const;
