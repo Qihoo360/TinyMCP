@@ -263,6 +263,34 @@ namespace MCP
 						return NotifyResult(spLogResult);
 					}
 
+					// Subscription probes used by the E2E client: the client cannot call
+					// the session directly, so a tool call drives the server-side push.
+					if ("notify_resource" == strAction || "notify_list_changed" == strAction)
+					{
+						if ("notify_resource" == strAction)
+						{
+							Json::Value jUpdated(Json::objectValue);
+							jUpdated[MCP::MSG_KEY_URI] = CTestServer::RESOURCE_URI;
+							MCP::CMCPSession::GetInstance().SendSubscriptionNotification(
+								MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdated, CTestServer::RESOURCE_URI);
+						}
+						else
+						{
+							MCP::CMCPSession::GetInstance().SendResourceListChanged();
+						}
+
+						auto spNotifyResult = BuildResult();
+						if (!spNotifyResult)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						MCP::TextContent notifyContent;
+						notifyContent.strType = MCP::CONST_TEXT;
+						notifyContent.strText = "notified";
+						spNotifyResult->vecTextContent.push_back(notifyContent);
+
+						return NotifyResult(spNotifyResult);
+					}
+
 					auto spResult = BuildResult();
 					if (!spResult)
 						return MCP::ERRNO_INTERNAL_ERROR;

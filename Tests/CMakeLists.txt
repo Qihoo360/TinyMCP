@@ -30,6 +30,9 @@ add_executable(TinyMCPTests
 	IntegrationTests/Cases/TestSessionCase.cpp
 	IntegrationTests/Cases/TestModernCase.cpp
 	IntegrationTests/Cases/TestProtocolCase.cpp
+	E2ETests/StdioClient.cpp
+	E2ETests/ServerMode.cpp
+	E2ETests/Cases/TestE2ECase.cpp
 	${TINYMCP_PROTOCOL_SOURCES}
 	${TINYMCP_JSONCPP_SOURCES}
 )
@@ -90,3 +93,9 @@ add_test(NAME unit.capabilities COMMAND TinyMCPTests --unit capabilities)
 set_tests_properties(unit.capabilities PROPERTIES TIMEOUT 30)
 add_test(NAME unit.apps COMMAND TinyMCPTests --unit apps)
 set_tests_properties(unit.apps PROPERTIES TIMEOUT 30)
+add_test(NAME e2e.legacy_stdio COMMAND TinyMCPTests --case e2e.legacy_stdio)
+set_tests_properties(e2e.legacy_stdio PROPERTIES TIMEOUT 60)
+add_test(NAME e2e.modern_stdio COMMAND TinyMCPTests --case e2e.modern_stdio)
+set_tests_properties(e2e.modern_stdio PROPERTIES TIMEOUT 60)
+add_test(NAME e2e.dual_era_stdio COMMAND TinyMCPTests --case e2e.dual_era_stdio)
+set_tests_properties(e2e.dual_era_stdio PROPERTIES TIMEOUT 60)

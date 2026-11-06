@@ -171,6 +171,9 @@
     <ClCompile Include="IntegrationTests\Cases\TestSessionCase.cpp" />
     <ClCompile Include="IntegrationTests\Cases\TestModernCase.cpp" />
     <ClCompile Include="IntegrationTests\Cases\TestProtocolCase.cpp" />
+    <ClCompile Include="E2ETests\StdioClient.cpp" />
+    <ClCompile Include="E2ETests\ServerMode.cpp" />
+    <ClCompile Include="E2ETests\Cases\TestE2ECase.cpp" />
     <ClCompile Include="..\Source\Protocol\Entity\Server.cpp" />
     <ClCompile Include="..\Source\Protocol\Message\BasicMessage.cpp" />
     <ClCompile Include="..\Source\Protocol\Message\Message.cpp" />
@@ -191,6 +194,8 @@
     <ClInclude Include="IntegrationTests\Golden.h" />
     <ClInclude Include="IntegrationTests\MemoryTransport.h" />
     <ClInclude Include="IntegrationTests\TestServer.h" />
+    <ClInclude Include="E2ETests\StdioClient.h" />
+    <ClInclude Include="E2ETests\ServerMode.h" />
     <ClInclude Include="..\Source\Protocol\Entity\Server.h" />
     <ClInclude Include="..\Source\Protocol\Message\BasicMessage.h" />
     <ClInclude Include="..\Source\Protocol\Message\Message.h" />

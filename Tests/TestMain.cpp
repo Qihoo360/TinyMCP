@@ -1,4 +1,6 @@
 ﻿#include "TestHarness.h"
+#include "E2ETests/ServerMode.h"
+#include "E2ETests/StdioClient.h"
 #include "IntegrationTests/Golden.h"
 
 #include <cstring>
@@ -30,7 +32,9 @@ namespace
 		"  TinyMCPTests --unit <module>        Run a single unit module (unit.<module>).\n"
 		"  TinyMCPTests --case <name>          Run a single integration scenario (integration.<name>).\n"
 		"  TinyMCPTests --list                 List all registered test cases.\n"
-		"  TinyMCPTests --generate-golden      Regenerate the legacy golden baseline.\n";
+		"  TinyMCPTests --generate-golden      Regenerate the legacy golden baseline.\n"
+		"  TinyMCPTests --server [--legacy-only]\n"
+		"                                      Internal: run the E2E server over stdio.\n";
 
 	int ListCases()
 	{
@@ -86,6 +90,20 @@ int main(int argc, char** argv)
 {
 	ConfigureCrashReporting();
 
+	if (argc > 0)
+		MCP::Test::SetExecutablePath(argv[0]);
+
+	// Internal E2E server mode: the test executable re-launches itself as the
+	// server under test so no extra build target or path lookup is required.
+	for (int i = 1; i < argc; ++i)
+	{
+		if (0 == std::strcmp(argv[i], "--server"))
+		{
+			bool bLegacyOnly = (i + 1 < argc && 0 == std::strcmp(argv[i + 1], "--legacy-only"));
+			return MCP::Test::RunE2EServer(bLegacyOnly);
+		}
+	}
+
 	if (argc < 2)
 	{
 		std::cout << USAGE;
@@ -120,7 +138,7 @@ int main(int argc, char** argv)
 			}
 
 			std::string strName = argv[i + 1];
-			if (0 != strName.compare(0, 12, "integration."))
+			if (0 != strName.compare(0, 12, "integration.") && 0 != strName.compare(0, 4, "e2e."))
 				strName = std::string("integration.") + strName;
 
 			return RunSelected({ strName });
