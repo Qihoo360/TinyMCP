@@ -2,8 +2,10 @@
 
 #include <Public/PublicDef.h>
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace MCP
 {
@@ -289,6 +291,13 @@ namespace MCP
 						spNotifyResult->vecTextContent.push_back(notifyContent);
 
 						return NotifyResult(spNotifyResult);
+					}
+
+					// Gives the E2E client a window to queue a second request and
+					// cancel it before the async worker reaches it.
+					if ("slow" == strAction)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(800));
 					}
 
 					auto spResult = BuildResult();

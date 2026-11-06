@@ -262,8 +262,42 @@ namespace MCP
 				}
 			}
 
-			// A legacy-only server rejects stateless requests and keeps serving.
+			// Legacy push: a subscribed client receives resources/list_changed.
 			Json::Value jResponse;
+			CHECK(ExpectResponse(client, 23, METHOD_RESOURCES_SUBSCRIBE,
+				"{\"uri\":\"test://echo/resource\"}", jResponse));
+
+			size_t nPushStart = client.GetOutputCount();
+			CHECK(ExpectResponse(client, 24, METHOD_TOOLS_CALL,
+				"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"notify_list_changed\"}}", jResponse));
+
+			size_t nPushIndex = 0;
+			CHECK(client.WaitForMethod(METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED,
+				nPushStart, nPushIndex, E2E_WAIT_TIMEOUT_MS));
+			Json::Value jPushEvent;
+			CHECK(ParseJson(client.GetOutput(nPushIndex), jPushEvent));
+			CHECK(!jPushEvent.isMember(MSG_KEY_ID));
+
+			CHECK(ExpectResponse(client, 25, METHOD_RESOURCES_UNSUBSCRIBE,
+				"{\"uri\":\"test://echo/resource\"}", jResponse));
+
+			// Legacy cancellation: a queued call cancelled before the worker reaches
+			// it is dropped and produces no response.
+			size_t nCancelStart = client.GetOutputCount();
+			CHECK(SendRequest(client, 26, METHOD_TOOLS_CALL,
+				"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"slow\"}}"));
+			std::this_thread::sleep_for(std::chrono::milliseconds(150));
+			CHECK(SendRequest(client, 27, METHOD_TOOLS_CALL,
+				"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\"}}"));
+			CHECK_EQ(ERRNO_OK, client.Send(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":27}}"));
+			CHECK(ExpectResponse(client, 28, METHOD_PING, std::string(), jResponse));
+
+			size_t nCancelIndex = 0;
+			CHECK(client.WaitForId(26, nCancelStart, nCancelIndex, E2E_WAIT_TIMEOUT_MS));
+			CHECK(!client.WaitForId(27, nCancelStart, nCancelIndex, 1500));
+
+			// A legacy-only server rejects stateless requests and keeps serving.
 			CHECK(ExpectError(client, 20, METHOD_SERVER_DISCOVER,
 				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), ERRNO_INVALID_REQUEST, jResponse));
 			CHECK(ExpectError(client, 21, METHOD_RESOURCES_READ,

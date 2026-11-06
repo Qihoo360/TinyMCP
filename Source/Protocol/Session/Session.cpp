@@ -2096,6 +2096,30 @@ namespace MCP
 						}
 					}
 				});
+
+			// A cancellation that arrives before the worker starts a queued task
+			// must drop it: the task has not observed the request yet, so no
+			// response may be produced for the abandoned request.
+			vecTasks.erase(
+				std::remove_if(vecTasks.begin(), vecTasks.end(), [this](auto& spTask)
+					{
+						auto spProcessRequestTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
+						if (!spProcessRequestTask)
+							return false;
+
+						auto spRequest = spProcessRequestTask->GetRequest();
+						if (!spRequest)
+							return false;
+
+						auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest](auto& requestId)
+							{
+								return requestId.IsEqual(spRequest->requestId);
+							});
+
+						return itrFound != m_vecCancelledTaskIds.end();
+					}),
+				vecTasks.end());
+
 			m_vecCancelledTaskIds.clear();
 			_lock.unlock();
 
