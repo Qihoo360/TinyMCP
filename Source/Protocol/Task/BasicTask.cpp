@@ -70,6 +70,28 @@ namespace MCP
 		return m_spRequest;
 	}
 
+	ProcessRequest::ProcessRequest(const ProcessRequest& other)
+		: CMCPTask(other)
+		, m_spRequest(other.m_spRequest)
+		, m_spServices(other.m_spServices)
+		, m_nStateFlags(other.m_nStateFlags.load())
+		, m_nAsyncSequence(other.m_nAsyncSequence)
+	{
+	}
+
+	ProcessRequest& ProcessRequest::operator=(const ProcessRequest& other)
+	{
+		if (this != &other)
+		{
+			m_spRequest = other.m_spRequest;
+			m_spServices = other.m_spServices;
+			m_nStateFlags.store(other.m_nStateFlags.load());
+			m_nAsyncSequence = other.m_nAsyncSequence;
+		}
+
+		return *this;
+	}
+
 	void ProcessRequest::SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices)
 	{
 		m_spServices = spServices;
@@ -78,16 +100,6 @@ namespace MCP
 	const std::shared_ptr<MCP::TaskServices>& ProcessRequest::GetTaskServices() const
 	{
 		return m_spServices;
-	}
-
-	void ProcessRequest::SetSelfKeepAlive(const std::shared_ptr<MCP::CMCPTask>& spSelf)
-	{
-		m_wpSelf = spSelf;
-	}
-
-	std::shared_ptr<CMCPTask> ProcessRequest::GetSelfKeepAlive() const
-	{
-		return m_wpSelf.lock();
 	}
 
 	uint64_t ProcessRequest::GetAsyncSequence() const
@@ -102,18 +114,58 @@ namespace MCP
 
 	bool ProcessRequest::IsStale() const
 	{
-		return m_bStale;
+		return 0 != (m_nStateFlags.load() & StateFlag_Stale);
 	}
 
 	void ProcessRequest::MarkStale()
 	{
-		m_bStale = true;
+		m_nStateFlags.fetch_or(StateFlag_Stale);
+	}
+
+	void ProcessRequest::MarkFinished()
+	{
+		m_nStateFlags.fetch_or(StateFlag_Finished);
+	}
+
+	bool ProcessRequest::IsFinishedFlag() const
+	{
+		return 0 != (m_nStateFlags.load() & StateFlag_Finished);
+	}
+
+	void ProcessRequest::MarkCancelledFlag()
+	{
+		m_nStateFlags.fetch_or(StateFlag_Cancelled);
+	}
+
+	bool ProcessRequest::IsCancelledFlag() const
+	{
+		return 0 != (m_nStateFlags.load() & StateFlag_Cancelled);
+	}
+
+	int ProcessRequest::WriteToClient(const std::string& strMessage)
+	{
+		// A task retired by a session reset must stay silent: its client is gone and
+		// the transport now belongs to someone else.
+		if (IsStale())
+			return ERRNO_OK;
+
+		if (!m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spTransport = m_spServices->GetTransport();
+		if (!spTransport)
+			return ERRNO_INTERNAL_ERROR;
+
+		return spTransport->Write(strMessage);
 	}
 
 	int ProcessRequest::NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData)
 	{
 		if (!m_spServices)
 			return ERRNO_INTERNAL_ERROR;
+
+		if (IsStale())
+			return ERRNO_OK;
 
 		MCP::LoggingLevel level;
 		level.eLevel = eLevel;
@@ -142,7 +194,7 @@ namespace MCP
 
 	int ProcessRequest::SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse)
 	{
-		if (!spResult || !m_spServices || m_bStale)
+		if (!spResult || !m_spServices || IsStale())
 			return ERRNO_INTERNAL_ERROR;
 
 		GetTaskServices()->PrepareResult(m_spRequest, spResult);
@@ -208,8 +260,7 @@ namespace MCP
 		if (!spResult || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 			return ERRNO_OK;
 
 		spResult->strResultType = RESULT_TYPE_INPUT_REQUIRED;
@@ -220,11 +271,7 @@ namespace MCP
 		if (ERRNO_OK != SerializeResult(spResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		return WriteToClient(strResponse);
 	}
 
 	int ProcessRequest::SendMissingClientCapability(const Json::Value& jRequiredCapabilities)
@@ -234,6 +281,9 @@ namespace MCP
 
 		if (!jRequiredCapabilities.isObject() || jRequiredCapabilities.empty())
 			return ERRNO_INVALID_PARAMS;
+
+		if (IsStale())
+			return ERRNO_OK;
 
 		Json::Value jErrorData(Json::objectValue);
 		jErrorData[MSG_KEY_REQUIRED_CAPABILITIES] = jRequiredCapabilities;
@@ -270,13 +320,8 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -329,13 +374,8 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	void ProcessErrorRequest::SetErrorCode(int iCode)
@@ -380,13 +420,8 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != SerializeResult(spInitializeResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -487,10 +522,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strResponse))
+			if (ERRNO_OK != WriteToClient(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -501,12 +533,12 @@ namespace MCP
 	// ProcessCallToolRequest
 	bool ProcessCallToolRequest::IsFinished() const
 	{
-		return m_bFinished;
+		return IsFinishedFlag();
 	}
 
 	bool ProcessCallToolRequest::IsCancelled() const
 	{
-		return m_bCancelled;
+		return IsCancelledFlag();
 	}
 
 	std::shared_ptr<MCP::CallToolResult> ProcessCallToolRequest::BuildResult()
@@ -532,8 +564,7 @@ namespace MCP
 			if (!m_spServices)
 				return ERRNO_INTERNAL_ERROR;
 
-			auto spSelf = GetSelfKeepAlive();
-			if (m_bStale)
+			if (IsStale())
 				return ERRNO_OK;
 
 			MCP::ProgressNotification progressNotification(false);
@@ -545,11 +576,8 @@ namespace MCP
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
 				return ERRNO_INTERNAL_ERROR;
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strNotification))
-				return ERRNO_INTERNAL_ERROR;
+
+			return WriteToClient(strNotification);
 		}
 
 		return ERRNO_OK;
@@ -557,33 +585,26 @@ namespace MCP
 
 	int ProcessCallToolRequest::NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult)
 	{
-		// Keep the task alive until the response is fully written: the async
-		// worker may reap a finished task as soon as m_bFinished flips.
-		auto spSelf = GetSelfKeepAlive();
-
 		if (!spResult)
 		{
-			m_bFinished = true;
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
 		}
 
 		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
 		if (ERRNO_OK == SerializeResult(spResult, strResponse))
-		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			iErrCode = spTransport ? spTransport->Write(strResponse) : ERRNO_INTERNAL_ERROR;
-		}
+			iErrCode = WriteToClient(strResponse);
 
-		// Finish only after the write attempt so a background callback cannot be
-		// destroyed halfway through NotifyResult.
-		m_bFinished = true;
+		// Mark finished only after the write attempt, so the worker never reaps a
+		// task that is still producing its response.
+		MarkFinished();
 		return iErrCode;
 	}
 
 	int ProcessCallToolRequest::NotifyCancelled()
 	{
-		m_bCancelled = true;
+		MarkCancelledFlag();
 		return ERRNO_OK;
 	}
 
@@ -598,14 +619,14 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
-		m_bFinished = true;
+		MarkFinished();
 		return iSendErrCode;
 	}
 
 	int ProcessCallToolRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
 		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
-		m_bFinished = true;
+		MarkFinished();
 		return iErrCode;
 	}
 
@@ -707,10 +728,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strResponse))
+			if (ERRNO_OK != WriteToClient(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -721,12 +739,12 @@ namespace MCP
 	// ProcessReadResourceRequest
 	bool ProcessReadResourceRequest::IsFinished() const
 	{
-		return m_bFinished;
+		return IsFinishedFlag();
 	}
 
 	bool ProcessReadResourceRequest::IsCancelled() const
 	{
-		return m_bCancelled;
+		return IsCancelledFlag();
 	}
 
 	std::shared_ptr<MCP::ReadResourceResult> ProcessReadResourceRequest::BuildResult()
@@ -749,6 +767,12 @@ namespace MCP
 
 		if (m_spRequest->progressToken.IsValid())
 		{
+			if (!m_spServices)
+				return ERRNO_INTERNAL_ERROR;
+
+			if (IsStale())
+				return ERRNO_OK;
+
 			MCP::ProgressNotification progressNotification(false);
 			progressNotification.strMethod = METHOD_NOTIFICATION_PROGRESS;
 			progressNotification.progressToken = m_spRequest->progressToken;
@@ -758,11 +782,8 @@ namespace MCP
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
 				return ERRNO_INTERNAL_ERROR;
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strNotification))
-				return ERRNO_INTERNAL_ERROR;
+
+			return WriteToClient(strNotification);
 		}
 
 		return ERRNO_OK;
@@ -770,45 +791,49 @@ namespace MCP
 
 	int ProcessReadResourceRequest::NotifyResult(std::shared_ptr<MCP::ReadResourceResult> spResult)
 	{
-		m_bFinished = true;
-
 		if (!spResult)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != SerializeResult(spResult, strResponse))
-			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == SerializeResult(spResult, strResponse))
+			iErrCode = WriteToClient(strResponse);
 
-		return ERRNO_OK;
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessReadResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
+		if (IsStale())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
+
 		// The error code for a missing resource is owned by the active profile.
 		if (ERRNO_RESOURCE_NOT_FOUND == iCode && m_spRequest && MessageContextAccess::Get(*m_spRequest).pProfile)
 			iCode = MessageContextAccess::Get(*m_spRequest).pProfile->iResourceNotFoundCode;
 
 		auto spTask = std::make_shared<ProcessErrorRequest>(m_spRequest);
-		if (spTask)
-		{
-			TaskServicesAccess::Set(*spTask, GetTaskServices());
-			spTask->SetErrorCode(iCode);
-			spTask->SetErrorMessage(strMessage);
-			spTask->SetErrorData(jErrData);
-			return spTask->Execute();
-		}
+		if (!spTask)
+			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		TaskServicesAccess::Set(*spTask, GetTaskServices());
+		spTask->SetErrorCode(iCode);
+		spTask->SetErrorMessage(strMessage);
+		spTask->SetErrorData(jErrData);
+		int iErrCode = spTask->Execute();
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessReadResourceRequest::NotifyCancelled()
 	{
-		m_bCancelled = true;
+		MarkCancelledFlag();
 		return ERRNO_OK;
 	}
 
@@ -822,14 +847,15 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
-		m_bFinished = true;
-		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		MarkFinished();
+		return iSendErrCode;
 	}
 
 	int ProcessReadResourceRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
 		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
-		m_bFinished = true;
+		MarkFinished();
 		return iErrCode;
 	}
 
@@ -837,12 +863,12 @@ namespace MCP
 	// ProcessSubscribeResourceRequest
 	bool ProcessSubscribeResourceRequest::IsFinished() const
 	{
-		return m_bFinished;
+		return IsFinishedFlag();
 	}
 
 	bool ProcessSubscribeResourceRequest::IsCancelled() const
 	{
-		return m_bCancelled;
+		return IsCancelledFlag();
 	}
 
 	int ProcessSubscribeResourceRequest::NotifyResult()
@@ -850,8 +876,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 			return ERRNO_OK;
 
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
@@ -862,34 +887,28 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	int ProcessSubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
 		if (!m_spRequest || !m_spServices)
 		{
-			m_bFinished = true;
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
 		}
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 		{
-			m_bFinished = true;
+			MarkFinished();
 			return ERRNO_OK;
 		}
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
 		{
-			m_bFinished = true;
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
 		}
 		spErrorResponse->requestId = m_spRequest->requestId;
@@ -897,15 +916,12 @@ namespace MCP
 		spErrorResponse->strMesage = strMessage;
 		spErrorResponse->jErrorData = jErrData;
 
-		std::string strResponse;
 		int iErrCode = ERRNO_INTERNAL_ERROR;
+		std::string strResponse;
 		if (ERRNO_OK == spErrorResponse->Serialize(strResponse))
-		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			iErrCode = spTransport ? spTransport->Write(strResponse) : ERRNO_INTERNAL_ERROR;
-		}
+			iErrCode = WriteToClient(strResponse);
 
-		m_bFinished = true;
+		MarkFinished();
 		return iErrCode;
 	}
 
@@ -914,8 +930,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 			return ERRNO_OK;
 
 		auto spResourceUpdatedNotification = std::make_shared<ResourceUpdatedNotification>(false);
@@ -930,18 +945,13 @@ namespace MCP
 		std::string strNotification;
 		if (ERRNO_OK != spResourceUpdatedNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strNotification))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strNotification);
 	}
 
 	int ProcessSubscribeResourceRequest::NotifyCancelled()
 	{
-		m_bCancelled = true;
+		MarkCancelledFlag();
 		return ERRNO_OK;
 	}
 
@@ -957,8 +967,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 			return ERRNO_OK;
 
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
@@ -969,13 +978,8 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	int ProcessUnsubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
@@ -983,8 +987,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spSelf = GetSelfKeepAlive();
-		if (m_bStale)
+		if (IsStale())
 			return ERRNO_OK;
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
@@ -998,13 +1001,8 @@ namespace MCP
 		std::string strResponse;
 		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
 
-		return ERRNO_OK;
+		return WriteToClient(strResponse);
 	}
 
 	std::shared_ptr<CMCPTask> ProcessUnsubscribeResourceRequest::Clone() const
@@ -1134,10 +1132,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strResponse))
+			if (ERRNO_OK != WriteToClient(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -1242,10 +1237,7 @@ namespace MCP
 
 		if (!strResponse.empty())
 		{
-			auto spTransport = GetTaskServices()->GetTransport();
-			if (!spTransport)
-				return ERRNO_INTERNAL_ERROR;
-			if (ERRNO_OK != spTransport->Write(strResponse))
+			if (ERRNO_OK != WriteToClient(strResponse))
 				return ERRNO_INTERNAL_ERROR;
 		}
 
@@ -1256,12 +1248,12 @@ namespace MCP
 	// ProcessGetPromptRequest
 	bool ProcessGetPromptRequest::IsFinished() const
 	{
-		return m_bFinished;
+		return IsFinishedFlag();
 	}
 
 	bool ProcessGetPromptRequest::IsCancelled() const
 	{
-		return m_bCancelled;
+		return IsCancelledFlag();
 	}
 
 	std::shared_ptr<MCP::GetPromptResult> ProcessGetPromptRequest::BuildResult()
@@ -1287,6 +1279,12 @@ namespace MCP
 		if (!spRequest->progressToken.IsValid())
 			return ERRNO_OK;
 
+		if (!m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (IsStale())
+			return ERRNO_OK;
+
 		auto spProgressNotification = std::make_shared<ProgressNotification>(false);
 		if (!spProgressNotification)
 			return ERRNO_INTERNAL_ERROR;
@@ -1299,68 +1297,74 @@ namespace MCP
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strNotification);
+		return WriteToClient(strNotification);
 	}
 
 	int ProcessGetPromptRequest::NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult)
 	{
 		if (!spResult)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
-
-		m_bFinished = true;
+		}
 
 		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
 		if (!spRequest)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
 
 		spResult->requestId = spRequest->requestId;
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != SerializeResult(spResult, strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == SerializeResult(spResult, strResponse))
+			iErrCode = WriteToClient(strResponse);
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessGetPromptRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
-		m_bFinished = true;
-
 		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
 		if (!spRequest)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
+
+		if (IsStale())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
 
 		spErrorResponse->requestId = spRequest->requestId;
 		spErrorResponse->iCode = iCode;
 		spErrorResponse->strMesage = strMessage;
 		spErrorResponse->jErrorData = jErrData;
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == spErrorResponse->Serialize(strResponse))
+			iErrCode = WriteToClient(strResponse);
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessGetPromptRequest::NotifyCancelled()
 	{
-		m_bCancelled = true;
+		MarkCancelledFlag();
 		return ERRNO_OK;
 	}
 
@@ -1374,14 +1378,15 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
-		m_bFinished = true;
-		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		MarkFinished();
+		return iSendErrCode;
 	}
 
 	int ProcessGetPromptRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
 		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
-		m_bFinished = true;
+		MarkFinished();
 		return iErrCode;
 	}
 
@@ -1389,12 +1394,12 @@ namespace MCP
 	// ProcessCompleteRequest
 	bool ProcessCompleteRequest::IsFinished() const
 	{
-		return m_bFinished;
+		return IsFinishedFlag();
 	}
 
 	bool ProcessCompleteRequest::IsCancelled() const
 	{
-		return m_bCancelled;
+		return IsCancelledFlag();
 	}
 
 	std::shared_ptr<MCP::CompleteResult> ProcessCompleteRequest::BuildResult()
@@ -1420,6 +1425,12 @@ namespace MCP
 		if (!spRequest->progressToken.IsValid())
 			return ERRNO_OK;
 
+		if (!m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		if (IsStale())
+			return ERRNO_OK;
+
 		auto spProgressNotification = std::make_shared<ProgressNotification>(false);
 		if (!spProgressNotification)
 			return ERRNO_INTERNAL_ERROR;
@@ -1432,68 +1443,74 @@ namespace MCP
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strNotification);
+		return WriteToClient(strNotification);
 	}
 
 	int ProcessCompleteRequest::NotifyResult(std::shared_ptr<MCP::CompleteResult> spResult)
 	{
 		if (!spResult)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
-
-		m_bFinished = true;
+		}
 
 		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
 		if (!spRequest)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
 
 		spResult->requestId = spRequest->requestId;
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != SerializeResult(spResult, strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == SerializeResult(spResult, strResponse))
+			iErrCode = WriteToClient(strResponse);
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessCompleteRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
-		m_bFinished = true;
-
 		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
 		if (!spRequest)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
+
+		if (IsStale())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
+		{
+			MarkFinished();
 			return ERRNO_INTERNAL_ERROR;
+		}
 
 		spErrorResponse->requestId = spRequest->requestId;
 		spErrorResponse->iCode = iCode;
 		spErrorResponse->strMesage = strMessage;
 		spErrorResponse->jErrorData = jErrData;
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == spErrorResponse->Serialize(strResponse))
+			iErrCode = WriteToClient(strResponse);
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		MarkFinished();
+		return iErrCode;
 	}
 
 	int ProcessCompleteRequest::NotifyCancelled()
 	{
-		m_bCancelled = true;
+		MarkCancelledFlag();
 		return ERRNO_OK;
 	}
 
@@ -1523,11 +1540,7 @@ namespace MCP
 		if (ERRNO_OK != SerializeResult(spDiscoverResult, strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		return WriteToClient(strResponse);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -1557,10 +1570,6 @@ namespace MCP
 		if (ERRNO_OK != spEmptyResponse->Serialize(strResponse))
 			return ERRNO_INTERNAL_ERROR;
 
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-
-		return spTransport->Write(strResponse);
+		return WriteToClient(strResponse);
 	}
 }

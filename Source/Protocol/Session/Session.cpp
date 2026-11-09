@@ -203,7 +203,6 @@ namespace MCP
 	{
 		auto spTask = std::make_shared<TTask>(spRequest);
 		TaskServicesAccess::Set(*spTask, m_spTaskServices);
-		TaskServicesAccess::SetSelf(*spTask, spTask);
 
 		return spTask;
 	}
@@ -214,7 +213,6 @@ namespace MCP
 		if (spProcessTask)
 		{
 			TaskServicesAccess::Set(*spProcessTask, m_spTaskServices);
-			TaskServicesAccess::SetSelf(*spProcessTask, spTask);
 		}
 	}
 
@@ -295,20 +293,22 @@ namespace MCP
 
 	int CMCPSession::ResetForNewClient()
 	{
-		// Stop and join the async task thread that was spawned for the previous client's
-		// `notifications/initialized`. AsyncThreadProc's exit path already cancels every
-		// task still sitting in m_vecAsyncTasksCache (see the `!m_bRunAsyncTask` branch),
-		// so we do NOT re-cancel them here to avoid double-emitting cancellation side
-		// effects from user-supplied tool implementations.
-		ResetAsyncTaskThread();
+		// Bounded: a client can disconnect while a tool is still running, and the
+		// reader thread must not block forever on it.
+		bool bAbandoned = false;
+		ResetAsyncTaskThread(true, &bAbandoned);
 
 		// After join(), the async thread no longer touches any of the members below.
-		// The async-thread-private containers are cleared under m_mtxAsyncThread
-		// purely for contract cleanliness -- there is no live contender at this point.
+		// When the worker had to be abandoned it still owns the task cache, so only
+		// the queued work is dropped there and the cache is left untouched.
 		{
 			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
 			m_deqAsyncTasks.clear();
 			m_vecCancelledTaskIds.clear();
+
+			// Bump the generation before retiring anything so a task that is still
+			// running drops its late result instead of writing it to the next client.
+			++m_nClientGeneration;
 
 			// A finished task is safe to destroy. Unfinished tasks may still be
 			// referenced by worker threads or IPC callbacks through a raw pointer, so
@@ -320,15 +320,18 @@ namespace MCP
 					spProcessTask->MarkStale();
 			}
 
-			m_vecRetiredTasks.erase(
-				std::remove_if(m_vecRetiredTasks.begin(), m_vecRetiredTasks.end(), [](const auto& spTask)
-					{
-						return !spTask || spTask->IsFinished() || spTask->IsCancelled();
-					}),
-				m_vecRetiredTasks.end());
+			if (!bAbandoned)
+			{
+				m_vecRetiredTasks.erase(
+					std::remove_if(m_vecRetiredTasks.begin(), m_vecRetiredTasks.end(), [](const auto& spTask)
+						{
+							return !spTask || spTask->IsFinished() || spTask->IsCancelled();
+						}),
+					m_vecRetiredTasks.end());
 
-			m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end());
-			m_vecAsyncTasksCache.clear();
+				m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end());
+				m_vecAsyncTasksCache.clear();
+			}
 		}
 
 		// Roll back the MCP protocol state machine to the pre-handshake state so the next
@@ -2352,20 +2355,25 @@ namespace MCP
 		if (m_upTaskThread && m_upTaskThread->joinable())
 			return ERRNO_OK;
 
-		{
-			std::lock_guard<std::mutex> _exitLock(m_mtxAsyncExit);
-			m_bAsyncThreadExited = false;
-		}
+		// Every incarnation gets its own epoch, so a thread that a timed out reset
+		// had to abandon can never act as the current worker any more.
+		const uint64_t nEpoch = ++m_nAsyncThreadEpoch;
 
-		m_upTaskThread.reset(new std::thread(&CMCPSession::AsyncThreadProc, this));
+		m_upTaskThread.reset(new std::thread(&CMCPSession::AsyncThreadProc, this, nEpoch));
 		if (!m_upTaskThread)
 			return ERRNO_INTERNAL_ERROR;
+
+		// Wake an abandoned worker so it observes the new epoch and stops consuming.
+		m_cvAsyncThread.notify_all();
 
 		return ERRNO_OK;
 	}
 
-	int CMCPSession::ResetAsyncTaskThread(bool bBoundedWait)
+	int CMCPSession::ResetAsyncTaskThread(bool bBoundedWait, bool* pbAbandoned)
 	{
+		if (pbAbandoned)
+			*pbAbandoned = false;
+
 		// Serialize with StartAsyncTaskThread so shutdown cannot join a thread
 		// another thread is about to create, or create one that is never joined.
 		std::lock_guard<std::mutex> _lock(m_mtxTaskThread);
@@ -2386,13 +2394,17 @@ namespace MCP
 			{
 				// A tool that blocks inside Execute() must not hang process exit.
 				// Give it a grace period, then detach and let process teardown reap it.
+				const uint64_t nEpoch = m_nAsyncThreadEpoch.load();
 				std::unique_lock<std::mutex> _exitLock(m_mtxAsyncExit);
 				if (!m_cvAsyncExit.wait_for(_exitLock, std::chrono::seconds(5),
-					[this]() { return m_bAsyncThreadExited; }))
+					[this, nEpoch]() { return m_nAsyncThreadExitedEpoch.load() >= nEpoch; }))
 				{
 					_exitLock.unlock();
 					m_upTaskThread->detach();
 					m_upTaskThread.reset();
+					if (pbAbandoned)
+						*pbAbandoned = true;
+
 					return ERRNO_OK;
 				}
 
@@ -2420,34 +2432,45 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
-	int CMCPSession::AsyncThreadProc()
+	int CMCPSession::AsyncThreadProc(uint64_t nEpoch)
 	{
-		while (m_bRunAsyncTask) 
+		while (m_bRunAsyncTask.load() && m_nAsyncThreadEpoch.load() == nEpoch)
 		{
 			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
 
 			// Wait for tasks
 			m_cvAsyncThread.wait(
 				_lock, 
-				[this]() {
-				return !m_deqAsyncTasks.empty() || !m_vecCancelledTaskIds.empty() || !m_bRunAsyncTask;
+				[this, nEpoch]() {
+				return !m_deqAsyncTasks.empty() || !m_vecCancelledTaskIds.empty()
+					|| !m_bRunAsyncTask.load() || m_nAsyncThreadEpoch.load() != nEpoch;
 				});
 
-			// Break the loop and clean up tasks
-			if (!m_bRunAsyncTask)
+			// Break the loop and clean up tasks. A newer worker incarnation took over
+			// after a reset, so this one must not cancel or consume anything any more.
+			if (!m_bRunAsyncTask.load() || m_nAsyncThreadEpoch.load() != nEpoch)
 			{
+				const bool bOwnsTasks = (m_nAsyncThreadEpoch.load() == nEpoch);
 				_lock.unlock();
 
-				std::for_each(m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end(), [this](auto& spTask)
-					{
-						if (spTask)
+				if (bOwnsTasks)
+				{
+					std::lock_guard<std::mutex> _cacheLock(m_mtxAsyncThread);
+					std::for_each(m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end(), [this](auto& spTask)
 						{
-							spTask->Cancel();
-						}
-					});
+							if (spTask)
+							{
+								spTask->Cancel();
+							}
+						});
+				}
 
 				break;
 			}
+
+			// Snapshot the client generation: a task that outlives a reset belongs to
+			// the previous client and must be retired instead of cached.
+			const uint64_t nClientGeneration = m_nClientGeneration;
 
 			// Process new pending tasks
 			std::vector<std::shared_ptr<MCP::CMCPTask>> vecTasks;
@@ -2511,9 +2534,9 @@ namespace MCP
 				vecTasks.end());
 
 			m_vecCancelledTaskIds.clear();
-			_lock.unlock();
 
-			// Clean up completed tasks
+			// Clean up completed tasks while the cache lock is still held, so a
+			// concurrent reset always sees a consistent cache.
 			m_vecAsyncTasksCache.erase(
 				std::remove_if(m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end(), [](auto spTask) 
 					{
@@ -2525,40 +2548,54 @@ namespace MCP
 					}),
 				m_vecAsyncTasksCache.end());
 
+			_lock.unlock();
+
 			// Cache new tasks
 			for (auto& spTask : vecTasks)
 			{
-				if (spTask)
-				{
-					int iExecuteErrCode = spTask->Execute();
-					if (ERRNO_OK == iExecuteErrCode)
-					{
-						m_vecAsyncTasksCache.push_back(spTask);
-						continue;
-					}
+				if (!spTask)
+					continue;
 
-					// A stateless task that rejected its input without emitting a
-					// result must still answer, otherwise the client would wait
-					// forever on a request that can never complete.
-					auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
-					if (spProcessTask && !spTask->IsFinished())
+				int iExecuteErrCode = spTask->Execute();
+
+				auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
+				bool bRetired = false;
+				if (spProcessTask)
+				{
+					// Compare the client generation under the cache lock: a task that
+					// outlived a reset belongs to the previous client and must never be
+					// cached for the next one.
+					std::lock_guard<std::mutex> _cacheLock(m_mtxAsyncThread);
+					if (m_nClientGeneration != nClientGeneration)
+						spProcessTask->MarkStale();
+
+					bRetired = spProcessTask->IsStale();
+					if (ERRNO_OK == iExecuteErrCode && !bRetired)
+						m_vecAsyncTasksCache.push_back(spTask);
+				}
+
+				if (ERRNO_OK == iExecuteErrCode || bRetired)
+					continue;
+
+				// A stateless task that rejected its input without emitting a
+				// result must still answer, otherwise the client would wait
+				// forever on a request that can never complete.
+				if (spProcessTask && !spTask->IsFinished())
+				{
+					auto spRequest = spProcessTask->GetRequest();
+					if (spRequest && MessageContextAccess::Get(*spRequest).IsStateless())
 					{
-						auto spRequest = spProcessTask->GetRequest();
-						if (spRequest && MessageContextAccess::Get(*spRequest).IsStateless())
-						{
-							int iCode = (ERRNO_INVALID_PARAMS == iExecuteErrCode) ? ERRNO_INVALID_PARAMS : ERRNO_INTERNAL_ERROR;
-							std::string strMessage = (ERRNO_INVALID_PARAMS == iCode) ? ERROR_MESSAGE_INVALID_PARAMS : ERROR_MESSAGE_INTERNAL_ERROR;
-							SendErrorResponse(spRequest, iCode, strMessage);
-						}
+						int iCode = (ERRNO_INVALID_PARAMS == iExecuteErrCode) ? ERRNO_INVALID_PARAMS : ERRNO_INTERNAL_ERROR;
+						std::string strMessage = (ERRNO_INVALID_PARAMS == iCode) ? ERROR_MESSAGE_INVALID_PARAMS : ERROR_MESSAGE_INTERNAL_ERROR;
+						SendErrorResponse(spRequest, iCode, strMessage);
 					}
 				}
 			}
 		}
 
-		{
-			std::lock_guard<std::mutex> _exitLock(m_mtxAsyncExit);
-			m_bAsyncThreadExited = true;
-		}
+		// Publish this incarnation's exit so a bounded reset waits for the right
+		// worker instead of a stale signal from a previous one.
+		m_nAsyncThreadExitedEpoch.store(nEpoch);
 		m_cvAsyncExit.notify_all();
 
 		return ERRNO_OK;

@@ -5,6 +5,7 @@
 #include "Task.h"
 #include "../Message/Request.h"
 #include "../Message/Response.h"
+#include <atomic>
 #include <memory>
 #include <cstdint>
 
@@ -23,6 +24,12 @@ namespace MCP
 			: m_spRequest(spRequest)
 		{
 		}
+
+		// Task prototypes are cloned per dispatch, so the copy has to carry the
+		// request and the (atomic) state flags. The copy starts from an idle
+		// prototype, so no in-flight state is ever duplicated.
+		ProcessRequest(const ProcessRequest& other);
+		ProcessRequest& operator=(const ProcessRequest& other);
 
 		bool IsValid() const override;
 		bool IsFinished() const override;
@@ -50,9 +57,18 @@ namespace MCP
 		// session created; IsValid() reports false otherwise.
 		const std::shared_ptr<MCP::TaskServices>& GetTaskServices() const;
 
-		// A shared_ptr that keeps this task alive while background work or an IPC
-		// callback still refers to it. Empty when the task was not session bound.
-		std::shared_ptr<CMCPTask> GetSelfKeepAlive() const;
+		// The single write path for task output. Every response, error and
+		// notification goes through it so the stale and missing-service guards are
+		// applied uniformly instead of per call site.
+		int WriteToClient(const std::string& strMessage);
+
+		// Result progress shared by every request kind. The flags are atomic
+		// because the worker thread sets them while the session thread inspects
+		// retired tasks during a reset.
+		void MarkFinished();
+		bool IsFinishedFlag() const;
+		void MarkCancelledFlag();
+		bool IsCancelledFlag() const;
 
 		// Copies the request era onto the result and applies server defaults
 		// before the result is serialized.
@@ -71,14 +87,19 @@ namespace MCP
 
 		// Available to derived request kinds that build notifications themselves.
 		std::shared_ptr<MCP::TaskServices> m_spServices;
-		bool m_bStale{ false };
 
 	private:
 		friend struct TaskServicesAccess;
 		void SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices);
-		void SetSelfKeepAlive(const std::shared_ptr<MCP::CMCPTask>& spSelf);
 
-		std::weak_ptr<MCP::CMCPTask> m_wpSelf;
+		enum StateFlag : unsigned int
+		{
+			StateFlag_Finished = 1u << 0,
+			StateFlag_Cancelled = 1u << 1,
+			StateFlag_Stale = 1u << 2
+		};
+
+		std::atomic<unsigned int> m_nStateFlags{ 0 };
 		uint64_t m_nAsyncSequence{ 0 };
 	};
 
@@ -160,10 +181,6 @@ namespace MCP
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
-
-	private:
-		bool m_bFinished{ false };
-		bool m_bCancelled{ false };
 	};
 
 	class ProcessListResourcesRequest : public ProcessRequest
@@ -197,10 +214,6 @@ namespace MCP
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
-
-	private:
-		bool m_bFinished{ false };
-		bool m_bCancelled{ false };
 	};
 
 	class ProcessSubscribeResourceRequest : public ProcessRequest
@@ -218,10 +231,6 @@ namespace MCP
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyUpdated();
 		int NotifyCancelled();
-
-	protected:
-		bool m_bFinished{ false };
-		bool m_bCancelled{ false };
 	};
 
 	class ProcessUnsubscribeResourceRequest : public ProcessRequest
@@ -288,10 +297,6 @@ namespace MCP
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
-
-	protected:
-		bool m_bFinished{ false };
-		bool m_bCancelled{ false };
 	};
 
 	class ProcessCompleteRequest : public ProcessRequest
@@ -310,10 +315,6 @@ namespace MCP
 		int NotifyResult(std::shared_ptr<MCP::CompleteResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
-
-	protected:
-		bool m_bFinished{ false };
-		bool m_bCancelled{ false };
 	};
 
 	class ProcessDiscoverRequest : public ProcessRequest

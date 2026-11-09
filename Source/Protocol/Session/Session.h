@@ -184,8 +184,11 @@ namespace MCP
 		int CancelAsyncTask(const MCP::RequestId& requestId);
 		int StartAsyncTaskThread();
 		int StopAsyncTaskThread();
-		int ResetAsyncTaskThread(bool bBoundedWait = false);
-		int AsyncThreadProc();
+		// bBoundedWait caps the join at a few seconds so a blocking tool cannot hang
+		// shutdown. pbAbandoned reports that the worker is still running and therefore
+		// still owns the task cache; callers must not touch it in that case.
+		int ResetAsyncTaskThread(bool bBoundedWait = false, bool* pbAbandoned = nullptr);
+		int AsyncThreadProc(uint64_t nEpoch);
 
 		// Tasks never reach back to the session singleton. The session binds the
 		// services they need when it creates or clones them for dispatch.
@@ -251,14 +254,23 @@ namespace MCP
 
 		std::vector<std::shared_ptr<MCP::CMCPTask>> m_vecAsyncTasksCache;
 
+		// Client generation. Bumped by ResetForNewClient; a task that finishes after
+		// the bump is retired instead of writing into the next client's transport.
+		uint64_t m_nClientGeneration{ 0 };
+
 		// Tasks from a previous client are parked here so background threads and
 		// IPC registrations holding a raw pointer can finish safely.
 		std::vector<std::shared_ptr<MCP::CMCPTask>> m_vecRetiredTasks;
 
-		// Reset/terminate waits for the worker to observe m_bRunAsyncTask, with an
-		// upper bound on process shutdown so a blocking tool cannot hang exit.
+		// Worker generations. The epoch is bumped whenever a new worker starts and
+		// the exiting worker publishes its own epoch, so a wait can never observe a
+		// stale "already exited" signal from a previous incarnation.
+		std::atomic<uint64_t> m_nAsyncThreadEpoch{ 0 };
+		std::atomic<uint64_t> m_nAsyncThreadExitedEpoch{ 0 };
+
+		// Reset/terminate waits for the current worker generation to finish, with an
+		// upper bound on shutdown so a blocking tool cannot hang exit.
 		std::mutex m_mtxAsyncExit;
 		std::condition_variable m_cvAsyncExit;
-		bool m_bAsyncThreadExited{ true };
 	};
 }

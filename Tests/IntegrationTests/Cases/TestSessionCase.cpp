@@ -180,3 +180,57 @@ TEST_CASE("unit.session")
 		sessionDriver.Stop();
 	}
 }
+
+// A cancellation only applies to requests that were already queued when it was
+// issued, so a client may safely reuse the same jsonrpc id for a fresh request.
+TEST_CASE("unit.async_cancel")
+{
+	// Start from a pristine client state so the scenario is order independent.
+	CMCPSession::GetInstance().ResetForNewClient();
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	// Legacy handshake, then occupy the worker with a slow tool call.
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(100, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"slow\",\"action\":\"slow\"}}")));
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(101, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"first\"}}")));
+	CHECK_EQ(ERRNO_OK, driver.Send(
+		"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":101}}"));
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(101, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"second\"}}")));
+
+	// Exactly one reply for id 101: the cancelled request is dropped while the
+	// request queued after the cancellation is served.
+	CHECK(driver.WaitForOutputCount(3, WAIT_TIMEOUT_MS));
+
+	int iReplies = 0;
+	std::string strText;
+	for (size_t i = 1; i < driver.GetOutputCount(); ++i)
+	{
+		Json::Value jOutput;
+		if (!ParseJson(driver.GetOutput(i), jOutput))
+			continue;
+		if (!jOutput.isMember(MSG_KEY_ID) || 101 != jOutput[MSG_KEY_ID].asInt())
+			continue;
+
+		++iReplies;
+		if (jOutput[MSG_KEY_RESULT].isMember(MSG_KEY_CONTENT))
+			strText = jOutput[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString();
+	}
+
+	CHECK_EQ(1, iReplies);
+	CHECK_EQ(std::string("second"), strText);
+
+	driver.Stop();
+}

@@ -618,8 +618,7 @@ namespace MCP
 
 				int Cancel() override
 				{
-					m_bCancelled = true;
-					return MCP::ERRNO_OK;
+					return NotifyCancelled();
 				}
 			};
 
