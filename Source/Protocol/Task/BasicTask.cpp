@@ -80,6 +80,36 @@ namespace MCP
 		return m_spServices;
 	}
 
+	void ProcessRequest::SetSelfKeepAlive(const std::shared_ptr<MCP::CMCPTask>& spSelf)
+	{
+		m_wpSelf = spSelf;
+	}
+
+	std::shared_ptr<CMCPTask> ProcessRequest::GetSelfKeepAlive() const
+	{
+		return m_wpSelf.lock();
+	}
+
+	uint64_t ProcessRequest::GetAsyncSequence() const
+	{
+		return m_nAsyncSequence;
+	}
+
+	void ProcessRequest::SetAsyncSequence(uint64_t nSequence)
+	{
+		m_nAsyncSequence = nSequence;
+	}
+
+	bool ProcessRequest::IsStale() const
+	{
+		return m_bStale;
+	}
+
+	void ProcessRequest::MarkStale()
+	{
+		m_bStale = true;
+	}
+
 	int ProcessRequest::NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData)
 	{
 		if (!m_spServices)
@@ -112,7 +142,7 @@ namespace MCP
 
 	int ProcessRequest::SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse)
 	{
-		if (!spResult || !m_spServices)
+		if (!spResult || !m_spServices || m_bStale)
 			return ERRNO_INTERNAL_ERROR;
 
 		GetTaskServices()->PrepareResult(m_spRequest, spResult);
@@ -175,8 +205,12 @@ namespace MCP
 	int ProcessRequest::SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
 		const Json::Value& jInputRequests, const std::string& strRequestState)
 	{
-		if (!spResult)
+		if (!spResult || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+			return ERRNO_OK;
 
 		spResult->strResultType = RESULT_TYPE_INPUT_REQUIRED;
 		spResult->jInputRequests = jInputRequests;
@@ -495,6 +529,13 @@ namespace MCP
 
 		if (m_spRequest->progressToken.IsValid())
 		{
+			if (!m_spServices)
+				return ERRNO_INTERNAL_ERROR;
+
+			auto spSelf = GetSelfKeepAlive();
+			if (m_bStale)
+				return ERRNO_OK;
+
 			MCP::ProgressNotification progressNotification(false);
 			progressNotification.strMethod = METHOD_NOTIFICATION_PROGRESS;
 			progressNotification.progressToken = m_spRequest->progressToken;
@@ -516,21 +557,28 @@ namespace MCP
 
 	int ProcessCallToolRequest::NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult)
 	{
-		m_bFinished = true;
+		// Keep the task alive until the response is fully written: the async
+		// worker may reap a finished task as soon as m_bFinished flips.
+		auto spSelf = GetSelfKeepAlive();
 
 		if (!spResult)
+		{
+			m_bFinished = true;
 			return ERRNO_INTERNAL_ERROR;
+		}
 
+		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
-		if (ERRNO_OK != SerializeResult(spResult, strResponse))
-			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == SerializeResult(spResult, strResponse))
+		{
+			auto spTransport = GetTaskServices()->GetTransport();
+			iErrCode = spTransport ? spTransport->Write(strResponse) : ERRNO_INTERNAL_ERROR;
+		}
 
-		return ERRNO_OK;
+		// Finish only after the write attempt so a background callback cannot be
+		// destroyed halfway through NotifyResult.
+		m_bFinished = true;
+		return iErrCode;
 	}
 
 	int ProcessCallToolRequest::NotifyCancelled()
@@ -549,14 +597,16 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
+		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
 		m_bFinished = true;
-		return SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		return iSendErrCode;
 	}
 
 	int ProcessCallToolRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
+		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
 		m_bFinished = true;
-		return SendMissingClientCapability(jRequiredCapabilities);
+		return iErrCode;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -778,8 +828,9 @@ namespace MCP
 
 	int ProcessReadResourceRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
+		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
 		m_bFinished = true;
-		return SendMissingClientCapability(jRequiredCapabilities);
+		return iErrCode;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -796,6 +847,13 @@ namespace MCP
 
 	int ProcessSubscribeResourceRequest::NotifyResult()
 	{
+		if (!m_spRequest || !m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+			return ERRNO_OK;
+
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
 		if (!spEmptyResponse)
 			return ERRNO_INTERNAL_ERROR;
@@ -815,30 +873,51 @@ namespace MCP
 
 	int ProcessSubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
-		m_bFinished = true;
+		if (!m_spRequest || !m_spServices)
+		{
+			m_bFinished = true;
+			return ERRNO_INTERNAL_ERROR;
+		}
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+		{
+			m_bFinished = true;
+			return ERRNO_OK;
+		}
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
+		{
+			m_bFinished = true;
 			return ERRNO_INTERNAL_ERROR;
+		}
 		spErrorResponse->requestId = m_spRequest->requestId;
 		spErrorResponse->iCode = iCode;
 		spErrorResponse->strMesage = strMessage;
 		spErrorResponse->jErrorData = jErrData;
 
 		std::string strResponse;
-		if (ERRNO_OK != spErrorResponse->Serialize(strResponse))
-			return ERRNO_INTERNAL_ERROR;
-		auto spTransport = GetTaskServices()->GetTransport();
-		if (!spTransport)
-			return ERRNO_INTERNAL_ERROR;
-		if (ERRNO_OK != spTransport->Write(strResponse))
-			return ERRNO_INTERNAL_ERROR;
+		int iErrCode = ERRNO_INTERNAL_ERROR;
+		if (ERRNO_OK == spErrorResponse->Serialize(strResponse))
+		{
+			auto spTransport = GetTaskServices()->GetTransport();
+			iErrCode = spTransport ? spTransport->Write(strResponse) : ERRNO_INTERNAL_ERROR;
+		}
 
-		return ERRNO_OK;
+		m_bFinished = true;
+		return iErrCode;
 	}
 
 	int ProcessSubscribeResourceRequest::NotifyUpdated()
 	{
+		if (!m_spRequest || !m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+			return ERRNO_OK;
+
 		auto spResourceUpdatedNotification = std::make_shared<ResourceUpdatedNotification>(false);
 		if (!spResourceUpdatedNotification)
 			return ERRNO_INTERNAL_ERROR;
@@ -875,6 +954,13 @@ namespace MCP
 
 	int ProcessUnsubscribeResourceRequest::NotifyResult()
 	{
+		if (!m_spRequest || !m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+			return ERRNO_OK;
+
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
 		if (!spEmptyResponse)
 			return ERRNO_INTERNAL_ERROR;
@@ -894,6 +980,13 @@ namespace MCP
 
 	int ProcessUnsubscribeResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
+		if (!m_spRequest || !m_spServices)
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spSelf = GetSelfKeepAlive();
+		if (m_bStale)
+			return ERRNO_OK;
+
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
 		if (!spErrorResponse)
 			return ERRNO_INTERNAL_ERROR;
@@ -1287,8 +1380,9 @@ namespace MCP
 
 	int ProcessGetPromptRequest::NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities)
 	{
+		int iErrCode = SendMissingClientCapability(jRequiredCapabilities);
 		m_bFinished = true;
-		return SendMissingClientCapability(jRequiredCapabilities);
+		return iErrCode;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

@@ -13,5 +13,10 @@ namespace MCP
 		{
 			task.SetTaskServices(spServices);
 		}
+
+		static void SetSelf(MCP::ProcessRequest& task, const std::shared_ptr<MCP::CMCPTask>& spSelf)
+		{
+			task.SetSelfKeepAlive(spSelf);
+		}
 	};
 }

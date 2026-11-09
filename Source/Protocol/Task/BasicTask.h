@@ -6,6 +6,7 @@
 #include "../Message/Request.h"
 #include "../Message/Response.h"
 #include <memory>
+#include <cstdint>
 
 namespace MCP
 {
@@ -33,10 +34,25 @@ namespace MCP
 		std::shared_ptr<MCP::Request> GetRequest() const;
 		int NotifyLogMessage(LoggingLevelValue eLevel, const std::string& strLogger, const Json::Value& jData);
 
+		// Async ordering token assigned by the session. A cancellation only applies
+		// to tasks enqueued at or before the cancellation, so a client that reuses a
+		// request id after cancelling cannot lose the new request.
+		uint64_t GetAsyncSequence() const;
+		void SetAsyncSequence(uint64_t nSequence);
+
+		// Set when the session is reset for a new client. A stale task must not
+		// write its result into the new client's transport.
+		bool IsStale() const;
+		void MarkStale();
+
 	protected:
 		// Session-side services for this dispatch. Never null for a task the
 		// session created; IsValid() reports false otherwise.
 		const std::shared_ptr<MCP::TaskServices>& GetTaskServices() const;
+
+		// A shared_ptr that keeps this task alive while background work or an IPC
+		// callback still refers to it. Empty when the task was not session bound.
+		std::shared_ptr<CMCPTask> GetSelfKeepAlive() const;
 
 		// Copies the request era onto the result and applies server defaults
 		// before the result is serialized.
@@ -53,11 +69,17 @@ namespace MCP
 
 		std::shared_ptr<MCP::Request> m_spRequest;
 
+		// Available to derived request kinds that build notifications themselves.
+		std::shared_ptr<MCP::TaskServices> m_spServices;
+		bool m_bStale{ false };
+
 	private:
 		friend struct TaskServicesAccess;
 		void SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices);
+		void SetSelfKeepAlive(const std::shared_ptr<MCP::CMCPTask>& spSelf);
 
-		std::shared_ptr<MCP::TaskServices> m_spServices;
+		std::weak_ptr<MCP::CMCPTask> m_wpSelf;
+		uint64_t m_nAsyncSequence{ 0 };
 	};
 
 	class ProcessPingRequest : public ProcessRequest
