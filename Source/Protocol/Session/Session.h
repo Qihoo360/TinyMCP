@@ -11,6 +11,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <cstdint>
+#include <utility>
 #include "../Public/PublicDef.h"
 #include "../Message/Request.h"
 #include "../Message/Response.h"
@@ -182,7 +184,7 @@ namespace MCP
 		int CancelAsyncTask(const MCP::RequestId& requestId);
 		int StartAsyncTaskThread();
 		int StopAsyncTaskThread();
-		int ResetAsyncTaskThread();
+		int ResetAsyncTaskThread(bool bBoundedWait = false);
 		int AsyncThreadProc();
 
 		// Tasks never reach back to the session singleton. The session binds the
@@ -241,7 +243,22 @@ namespace MCP
 		std::mutex m_mtxAsyncThread;
 		std::condition_variable m_cvAsyncThread;
 		std::deque<std::shared_ptr<MCP::CMCPTask>> m_deqAsyncTasks;
-		std::vector<MCP::RequestId> m_vecCancelledTaskIds;
+
+		// Cancellations only apply to tasks enqueued at or before the cancellation,
+		// so reusing a request id after cancelling cannot drop the new request.
+		std::vector<std::pair<MCP::RequestId, uint64_t>> m_vecCancelledTaskIds;
+		uint64_t m_nAsyncTaskSequence{ 0 };
+
 		std::vector<std::shared_ptr<MCP::CMCPTask>> m_vecAsyncTasksCache;
+
+		// Tasks from a previous client are parked here so background threads and
+		// IPC registrations holding a raw pointer can finish safely.
+		std::vector<std::shared_ptr<MCP::CMCPTask>> m_vecRetiredTasks;
+
+		// Reset/terminate waits for the worker to observe m_bRunAsyncTask, with an
+		// upper bound on process shutdown so a blocking tool cannot hang exit.
+		std::mutex m_mtxAsyncExit;
+		std::condition_variable m_cvAsyncExit;
+		bool m_bAsyncThreadExited{ true };
 	};
 }

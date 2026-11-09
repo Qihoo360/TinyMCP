@@ -15,6 +15,8 @@
 
 #include <memory>
 #include <algorithm>
+#include <chrono>
+#include <utility>
 #include <json/json.h>
 
 namespace MCP
@@ -201,6 +203,7 @@ namespace MCP
 	{
 		auto spTask = std::make_shared<TTask>(spRequest);
 		TaskServicesAccess::Set(*spTask, m_spTaskServices);
+		TaskServicesAccess::SetSelf(*spTask, spTask);
 
 		return spTask;
 	}
@@ -209,7 +212,10 @@ namespace MCP
 	{
 		auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
 		if (spProcessTask)
+		{
 			TaskServicesAccess::Set(*spProcessTask, m_spTaskServices);
+			TaskServicesAccess::SetSelf(*spProcessTask, spTask);
+		}
 	}
 
 	CMCPSession::~CMCPSession() = default;
@@ -264,7 +270,8 @@ namespace MCP
 
 	int CMCPSession::Terminate()
 	{
-		ResetAsyncTaskThread();
+		// Bounded: a tool that blocks inside Execute() must not hang process exit.
+		ResetAsyncTaskThread(true);
 
 		// Close every live subscription before the transport goes away so the
 		// client still observes a complete result for its listen request.
@@ -302,6 +309,25 @@ namespace MCP
 			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
 			m_deqAsyncTasks.clear();
 			m_vecCancelledTaskIds.clear();
+
+			// A finished task is safe to destroy. Unfinished tasks may still be
+			// referenced by worker threads or IPC callbacks through a raw pointer, so
+			// park them instead of destroying them here. They are marked stale first
+			// so a late result cannot be written into the new client's transport.
+			for (auto& spTask : m_vecAsyncTasksCache)
+			{
+				if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
+					spProcessTask->MarkStale();
+			}
+
+			m_vecRetiredTasks.erase(
+				std::remove_if(m_vecRetiredTasks.begin(), m_vecRetiredTasks.end(), [](const auto& spTask)
+					{
+						return !spTask || spTask->IsFinished() || spTask->IsCancelled();
+					}),
+				m_vecRetiredTasks.end());
+
+			m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end());
 			m_vecAsyncTasksCache.clear();
 		}
 
@@ -2278,6 +2304,9 @@ namespace MCP
 				return ERRNO_OK;
 			}
 
+			if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
+				spProcessTask->SetAsyncSequence(++m_nAsyncTaskSequence);
+
 			m_deqAsyncTasks.push_back(spTask);
 
 			_lock.unlock();
@@ -2302,7 +2331,9 @@ namespace MCP
 				return ERRNO_OK;
 			}
 
-			m_vecCancelledTaskIds.push_back(requestId);
+			// Remember the enqueue high-water mark: this cancellation only applies to
+			// tasks committed up to this point.
+			m_vecCancelledTaskIds.push_back(std::make_pair(requestId, m_nAsyncTaskSequence));
 
 			_lock.unlock();
 			m_cvAsyncThread.notify_one();
@@ -2321,6 +2352,11 @@ namespace MCP
 		if (m_upTaskThread && m_upTaskThread->joinable())
 			return ERRNO_OK;
 
+		{
+			std::lock_guard<std::mutex> _exitLock(m_mtxAsyncExit);
+			m_bAsyncThreadExited = false;
+		}
+
 		m_upTaskThread.reset(new std::thread(&CMCPSession::AsyncThreadProc, this));
 		if (!m_upTaskThread)
 			return ERRNO_INTERNAL_ERROR;
@@ -2328,7 +2364,7 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
-	int CMCPSession::ResetAsyncTaskThread()
+	int CMCPSession::ResetAsyncTaskThread(bool bBoundedWait)
 	{
 		// Serialize with StartAsyncTaskThread so shutdown cannot join a thread
 		// another thread is about to create, or create one that is never joined.
@@ -2343,9 +2379,30 @@ namespace MCP
 		{
 			// A task running inside the worker must not join its own thread.
 			if (m_upTaskThread->get_id() == std::this_thread::get_id())
+			{
 				m_upTaskThread->detach();
-			else
+			}
+			else if (bBoundedWait)
+			{
+				// A tool that blocks inside Execute() must not hang process exit.
+				// Give it a grace period, then detach and let process teardown reap it.
+				std::unique_lock<std::mutex> _exitLock(m_mtxAsyncExit);
+				if (!m_cvAsyncExit.wait_for(_exitLock, std::chrono::seconds(5),
+					[this]() { return m_bAsyncThreadExited; }))
+				{
+					_exitLock.unlock();
+					m_upTaskThread->detach();
+					m_upTaskThread.reset();
+					return ERRNO_OK;
+				}
+
+				_exitLock.unlock();
 				m_upTaskThread->join();
+			}
+			else
+			{
+				m_upTaskThread->join();
+			}
 		}
 
 		m_upTaskThread.reset();
@@ -2412,11 +2469,13 @@ namespace MCP
 							auto spRequest = spProcessRequestTask->GetRequest();
 							if (spRequest)
 							{
-								auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest](auto& requestId)
+								const uint64_t nTaskSequence = spProcessRequestTask->GetAsyncSequence();
+								auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest, nTaskSequence](auto& cancellation)
 									{
-										if (requestId.IsEqual(spRequest->requestId))
-											return true;
-										return false;
+										// Only cancellations issued after this task was
+										// enqueued may cancel it.
+										return cancellation.first.IsEqual(spRequest->requestId)
+											&& cancellation.second >= nTaskSequence;
 									}
 								);
 								if (itrFound != m_vecCancelledTaskIds.end())
@@ -2440,9 +2499,11 @@ namespace MCP
 						if (!spRequest)
 							return false;
 
-						auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest](auto& requestId)
+						const uint64_t nTaskSequence = spProcessRequestTask->GetAsyncSequence();
+						auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest, nTaskSequence](auto& cancellation)
 							{
-								return requestId.IsEqual(spRequest->requestId);
+								return cancellation.first.IsEqual(spRequest->requestId)
+									&& cancellation.second >= nTaskSequence;
 							});
 
 						return itrFound != m_vecCancelledTaskIds.end();
@@ -2493,6 +2554,12 @@ namespace MCP
 				}
 			}
 		}
+
+		{
+			std::lock_guard<std::mutex> _exitLock(m_mtxAsyncExit);
+			m_bAsyncThreadExited = true;
+		}
+		m_cvAsyncExit.notify_all();
 
 		return ERRNO_OK;
 	}
