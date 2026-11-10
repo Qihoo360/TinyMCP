@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -377,6 +378,14 @@ namespace MCP
 
 						return NotifyResult(spMrtrResult);
 					}
+
+					// Failure probes: the task gives up without emitting a result, or
+					// throws out of Execute(). The worker must answer with an error and
+					// keep serving later requests.
+					if ("fail" == strAction)
+						return MCP::ERRNO_INTERNAL_ERROR;
+					if ("throw" == strAction)
+						throw std::runtime_error("echo task failure probe");
 
 					// Gives the E2E client a window to queue a second request and
 					// cancel it before the async worker reaches it.

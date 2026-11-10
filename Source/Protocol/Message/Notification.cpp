@@ -28,7 +28,7 @@ namespace MCP
 		if (strRPCVer.compare(JSON_RPC_VER) != 0)
 			return ERRNO_INVALID_NOTIFICATION;
 
-		if (!jMsg.isMember(MSG_KEY_METHOD))
+		if (!jMsg.isMember(MSG_KEY_METHOD) || !jMsg[MSG_KEY_METHOD].isString())
 			return ERRNO_INVALID_NOTIFICATION;
 		strMethod = jMsg[MSG_KEY_METHOD].asString();
 		if (strMethod.empty())

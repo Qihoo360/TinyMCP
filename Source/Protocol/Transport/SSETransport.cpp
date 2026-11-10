@@ -1,5 +1,6 @@
 ﻿#include "SSETransport.h"
 #include "../Public/PublicDef.h"
+#include "../Internal/OriginPolicy.h"
 
 // cpp-httplib is a header-only HTTP library shipped inside the repository at
 // Source/External/cpp-httplib/httplib.h. It is intentionally included only inside
@@ -54,17 +55,7 @@ namespace MCP
 
 	bool CSSETransport::IsOriginAllowed(const std::string& strOrigin) const
 	{
-		if (strOrigin.empty())
-			return true;
-
-		for (const auto& strAllowed : m_vecAllowedOrigins)
-		{
-			if (strAllowed.empty())
-				continue;
-			if (strOrigin.compare(0, strAllowed.size(), strAllowed) == 0)
-				return true;
-		}
-		return false;
+		return IsOriginAllowedBy(m_vecAllowedOrigins, strOrigin);
 	}
 
 	std::string CSSETransport::GenerateSessionId()

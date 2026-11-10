@@ -4,6 +4,7 @@
 
 #include <Message/Request.h>
 #include <Public/PublicDef.h>
+#include <Internal/OriginPolicy.h>
 #include <Internal/Protocol.h>
 #include <Internal/SessionAccess.h>
 #include <Session/Session.h>
@@ -74,6 +75,29 @@ namespace
 		CHECK_EQ(iErrorCode, jResponse[MSG_KEY_ERROR][MSG_KEY_CODE].asInt());
 
 		return iErrorCode == jResponse[MSG_KEY_ERROR][MSG_KEY_CODE].asInt();
+	}
+
+	// Sends a line that must not be answered, then a ping. The first output
+	// after the line must be the ping reply, proving the reader survived and
+	// produced nothing for the rejected line.
+	bool ExpectSilentThenPing(CDriver& driver, const std::string& strLine, int iPingId)
+	{
+		size_t nBefore = driver.GetOutputCount();
+		if (ERRNO_OK != driver.Send(strLine))
+			return false;
+		if (ERRNO_OK != driver.Send(MakeRequest(iPingId, METHOD_PING, "")))
+			return false;
+		if (!driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS))
+			return false;
+
+		Json::Value jReply;
+		if (!ParseJson(driver.GetOutput(nBefore), jReply))
+			return false;
+
+		CHECK_EQ(iPingId, jReply[MSG_KEY_ID].asInt());
+		CHECK(jReply.isMember(MSG_KEY_RESULT));
+
+		return iPingId == jReply[MSG_KEY_ID].asInt() && jReply.isMember(MSG_KEY_RESULT);
 	}
 }
 
@@ -233,4 +257,112 @@ TEST_CASE("unit.async_cancel")
 	CHECK_EQ(std::string("second"), strText);
 
 	driver.Stop();
+}
+
+// Malformed or hostile input must never take the server down, and every request
+// whose id can be recovered must be answered instead of left pending.
+TEST_CASE("unit.robustness")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	// Integers beyond the int range used to throw out of asInt() and terminate
+	// the process. Such an id cannot be echoed, so the request is dropped.
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":4294967296,\"method\":\"ping\"}", 2));
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":1e10,\"method\":\"ping\"}", 3));
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":-9223372036854775808,\"method\":\"ping\"}", 4));
+
+	// A mistyped method has no usable envelope and is dropped without crashing.
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":123}", 6));
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"method\":{\"x\":1}}", 7));
+
+	// Out-of-range progressToken / size and a non-object _meta are tolerated.
+	CHECK(ExpectResponse(driver, MakeRequest(8, METHOD_TOOLS_LIST,
+		"{\"_meta\":{\"progressToken\":99999999999}}"), jResponse));
+	CHECK_EQ(8, jResponse[MSG_KEY_ID].asInt());
+	CHECK(jResponse.isMember(MSG_KEY_RESULT));
+	CHECK(ExpectResponse(driver, MakeRequest(9, METHOD_TOOLS_LIST, "{\"_meta\":\"not-an-object\"}"), jResponse));
+	CHECK_EQ(9, jResponse[MSG_KEY_ID].asInt());
+	CHECK(jResponse.isMember(MSG_KEY_RESULT));
+
+	// Known methods with invalid params are answered with -32602 and the id.
+	CHECK(ExpectError(driver, MakeRequest(10, METHOD_TOOLS_CALL, "{\"arguments\":{}}"),
+		10, ERRNO_INVALID_PARAMS, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(11, METHOD_TOOLS_CALL, "{\"name\":42}"),
+		11, ERRNO_INVALID_PARAMS, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(12, METHOD_RESOURCES_READ, "{\"uri\":{\"nested\":true}}"),
+		12, ERRNO_INVALID_PARAMS, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(13, METHOD_INITIALIZE, "{\"protocolVersion\":2024}"),
+		13, ERRNO_INVALID_PARAMS, jResponse));
+
+	// Methods outside the legacy surface are answered with -32601.
+	CHECK(ExpectError(driver, MakeRequest(14, "acme/unknown", ""), 14, ERRNO_METHOD_NOT_FOUND, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(15, METHOD_SUBSCRIPTIONS_LISTEN, "{}"),
+		15, ERRNO_METHOD_NOT_FOUND, jResponse));
+
+	// A legacy tool that fails without a result, or throws, still gets an
+	// answer, and the async worker keeps serving afterwards.
+	CHECK(ExpectError(driver, MakeRequest(16, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"fail\"}}"),
+		16, ERRNO_INTERNAL_ERROR, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(17, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"throw\"}}"),
+		17, ERRNO_INTERNAL_ERROR, jResponse));
+	CHECK(ExpectResponse(driver, MakeRequest(18, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"alive\"}}"), jResponse));
+	CHECK_EQ(18, jResponse[MSG_KEY_ID].asInt());
+	CHECK_EQ(std::string("alive"), jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENT][0][MSG_KEY_TEXT].asString());
+
+	// The stateless era answers invalid params and task failures the same way.
+	// The default registry is legacy-only, so enable both eras first.
+	ProtocolRegistryAccess::Set(CMCPSession::GetInstance(), CProtocolRegistry::GetGlobalRegistry());
+	CHECK(ExpectError(driver, MakeRequest(19, METHOD_TOOLS_CALL, MakeModernParams("{\"arguments\":{}}")),
+		19, ERRNO_INVALID_PARAMS, jResponse));
+	CHECK(ExpectError(driver, MakeRequest(20, METHOD_TOOLS_CALL,
+		MakeModernParams("{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"throw\"}}")),
+		20, ERRNO_INTERNAL_ERROR, jResponse));
+
+	driver.Stop();
+}
+
+TEST_CASE("unit.origin_policy")
+{
+	const std::vector<std::string> vecDefaults = { "http://localhost", "http://127.0.0.1" };
+
+	// Empty Origin is same-origin tooling.
+	CHECK(IsOriginAllowedBy(vecDefaults, ""));
+
+	// Exact entries and any port on them are allowed.
+	CHECK(IsOriginAllowedBy(vecDefaults, "http://localhost"));
+	CHECK(IsOriginAllowedBy(vecDefaults, "http://localhost:5173"));
+	CHECK(IsOriginAllowedBy(vecDefaults, "http://127.0.0.1:8080"));
+
+	// A prefix match on the host must not pass (DNS-rebinding bypass).
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://localhost.evil.com"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://127.0.0.1.attacker.net"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://localhost:5173.evil.com"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://localhost@evil.com"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://localhost:"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "https://localhost"));
+	CHECK(!IsOriginAllowedBy(vecDefaults, "http://evil.com"));
+
+	// An entry pinned to a port only admits that port.
+	const std::vector<std::string> vecPinned = { "http://localhost:3000" };
+	CHECK(IsOriginAllowedBy(vecPinned, "http://localhost:3000"));
+	CHECK(!IsOriginAllowedBy(vecPinned, "http://localhost:30001"));
+	CHECK(!IsOriginAllowedBy(vecPinned, "http://localhost:3000:1"));
+
+	// An empty whitelist only admits the empty Origin.
+	CHECK(!IsOriginAllowedBy(std::vector<std::string>(), "http://localhost"));
 }

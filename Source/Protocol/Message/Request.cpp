@@ -77,7 +77,7 @@ namespace MCP
 		if (strRPCVer.compare(JSON_RPC_VER) != 0)
 			return ERRNO_INVALID_REQUEST;
 
-		if (!jMsg.isMember(MSG_KEY_METHOD))
+		if (!jMsg.isMember(MSG_KEY_METHOD) || !jMsg[MSG_KEY_METHOD].isString())
 			return ERRNO_INVALID_REQUEST;
 		strMethod = jMsg[MSG_KEY_METHOD].asString();
 		if (strMethod.empty())
@@ -162,7 +162,7 @@ namespace MCP
 			return ERRNO_INVALID_REQUEST;
 		auto& jParams = jMsg[MSG_KEY_PARAMS];
 
-		if (!jParams.isMember(MSG_KEY_PROTOCOL_VERSION))
+		if (!jParams.isMember(MSG_KEY_PROTOCOL_VERSION) || !jParams[MSG_KEY_PROTOCOL_VERSION].isString())
 			return ERRNO_INVALID_REQUEST;
 		strProtocolVer = jParams[MSG_KEY_PROTOCOL_VERSION].asString();
 
@@ -760,10 +760,13 @@ namespace MCP
 		bHasNotifications = true;
 		auto& jNotifications = jParams[MSG_KEY_NOTIFICATIONS];
 		bToolsListChanged = jNotifications.isMember(MSG_KEY_TOOLS_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_TOOLS_LIST_CHANGED].isBool()
 			&& jNotifications[MSG_KEY_TOOLS_LIST_CHANGED].asBool();
 		bPromptsListChanged = jNotifications.isMember(MSG_KEY_PROMPTS_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_PROMPTS_LIST_CHANGED].isBool()
 			&& jNotifications[MSG_KEY_PROMPTS_LIST_CHANGED].asBool();
 		bResourcesListChanged = jNotifications.isMember(MSG_KEY_RESOURCES_LIST_CHANGED)
+			&& jNotifications[MSG_KEY_RESOURCES_LIST_CHANGED].isBool()
 			&& jNotifications[MSG_KEY_RESOURCES_LIST_CHANGED].asBool();
 
 		if (jNotifications.isMember(MSG_KEY_RESOURCE_SUBSCRIPTIONS)

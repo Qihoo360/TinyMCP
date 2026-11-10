@@ -4,6 +4,7 @@
 
 #include "../Public/PublicDef.h"
 #include <atomic>
+#include <exception>
 #include <memory>
 
 namespace MCP
@@ -65,11 +66,17 @@ namespace MCP
 			if (!reader.parse(str, jMsg) || !jMsg.isObject())
 				return ERRNO_PARSE_ERROR;
 
-			int iErrCode = DoDeserialize(jMsg);
-			if (ERRNO_OK != iErrCode)
-				return iErrCode;
-
-			return ERRNO_OK;
+			// Peer input is untrusted: a jsoncpp conversion on a mistyped field
+			// throws, and that must surface as a parse failure instead of
+			// unwinding through the message loop.
+			try
+			{
+				return DoDeserialize(jMsg);
+			}
+			catch (const std::exception&)
+			{
+				return ERRNO_PARSE_ERROR;
+			}
 		}
 
 		virtual bool IsValid() const = 0;

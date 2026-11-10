@@ -252,9 +252,17 @@ namespace MCP
 				auto vecStrObj = StringHelper::split_json_objects_string(strIncomingMsg);
 				for (auto& strObj : vecStrObj)
 				{
-					std::shared_ptr<MCP::Message> spMsg;
-					iErrCode = ParseMessage(strObj, spMsg);
-					iErrCode = ProcessMessage(iErrCode, spMsg);
+					// One malformed message must never take down the reader loop.
+					try
+					{
+						std::shared_ptr<MCP::Message> spMsg;
+						iErrCode = ParseMessage(strObj, spMsg);
+						iErrCode = ProcessMessage(iErrCode, spMsg);
+					}
+					catch (const std::exception&)
+					{
+						iErrCode = ERRNO_INTERNAL_ERROR;
+					}
 				}
 			}
 			else
@@ -418,6 +426,9 @@ namespace MCP
 		std::shared_ptr<MCP::Request> spRequest{ nullptr };
 		std::string strMessage;
 
+		// Resolve the request first: a parse failure that still carries a valid
+		// envelope (e.g. invalid params) is answered with the request's id.
+		spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
 		if (ERRNO_OK != iErrCode)
 		{
 			goto PROC_END;
@@ -947,7 +958,8 @@ namespace MCP
 
 		Json::Value jMeta(Json::objectValue);
 		if (jVal.isMember(MSG_KEY_PARAMS) && jVal[MSG_KEY_PARAMS].isObject()
-			&& jVal[MSG_KEY_PARAMS].isMember(MSG_KEY_META))
+			&& jVal[MSG_KEY_PARAMS].isMember(MSG_KEY_META)
+			&& jVal[MSG_KEY_PARAMS][MSG_KEY_META].isObject())
 		{
 			jMeta = jVal[MSG_KEY_PARAMS][MSG_KEY_META];
 		}
@@ -1001,6 +1013,15 @@ namespace MCP
 		if (!spRequest->IsValid())
 			return ERRNO_INVALID_REQUEST;
 
+		// The envelope carries a usable id from here on. A known method whose
+		// params fail the typed parse hands the generic request back, so the
+		// dispatcher can answer -32602 instead of leaving the client waiting.
+		auto InvalidParams = [&spMsg, &spRequest]() -> int
+		{
+			spMsg = spRequest;
+			return ERRNO_INVALID_PARAMS;
+		};
+
 		if (spRequest->strMethod.compare(METHOD_INITIALIZE) == 0)
 		{
 			auto spInitializeRequest = std::make_shared<MCP::InitializeRequest>(true);
@@ -1010,7 +1031,7 @@ namespace MCP
 			MessageContextAccess::Set(*spInitializeRequest, spProtocolContext);
 			iErrCode = spInitializeRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spInitializeRequest;
 
@@ -1025,7 +1046,7 @@ namespace MCP
 			MessageContextAccess::Set(*spListToolsRequest, spProtocolContext);
 			iErrCode = spListToolsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spListToolsRequest;
 
@@ -1040,7 +1061,7 @@ namespace MCP
 			MessageContextAccess::Set(*spCallToolRequest, spProtocolContext);
 			iErrCode = spCallToolRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spCallToolRequest;
 
@@ -1055,7 +1076,7 @@ namespace MCP
 			MessageContextAccess::Set(*spPingRequest, spProtocolContext);
 			iErrCode = spPingRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spPingRequest;
 
@@ -1070,7 +1091,7 @@ namespace MCP
 			MessageContextAccess::Set(*spListResourcesRequest, spProtocolContext);
 			iErrCode = spListResourcesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spListResourcesRequest;
 
@@ -1085,7 +1106,7 @@ namespace MCP
 			MessageContextAccess::Set(*spReadResourceRequest, spProtocolContext);
 			iErrCode = spReadResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spReadResourceRequest;
 
@@ -1100,7 +1121,7 @@ namespace MCP
 			MessageContextAccess::Set(*spSubscribeResourceRequest, spProtocolContext);
 			iErrCode = spSubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spSubscribeResourceRequest;
 			return ERRNO_OK;
@@ -1114,7 +1135,7 @@ namespace MCP
 			MessageContextAccess::Set(*spUnsubscribeResourceRequest, spProtocolContext);
 			iErrCode = spUnsubscribeResourceRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spUnsubscribeResourceRequest;
 			return ERRNO_OK;
@@ -1128,7 +1149,7 @@ namespace MCP
 			MessageContextAccess::Set(*spListResourceTemplatesRequest, spProtocolContext);
 			iErrCode = spListResourceTemplatesRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spListResourceTemplatesRequest;
 
@@ -1143,7 +1164,7 @@ namespace MCP
 			MessageContextAccess::Set(*spListPromptsRequest, spProtocolContext);
 			iErrCode = spListPromptsRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spListPromptsRequest;
 
@@ -1158,7 +1179,7 @@ namespace MCP
 			MessageContextAccess::Set(*spGetPromptRequest, spProtocolContext);
 			iErrCode = spGetPromptRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spGetPromptRequest;
 
@@ -1173,7 +1194,7 @@ namespace MCP
 			MessageContextAccess::Set(*spCompleteRequest, spProtocolContext);
 			iErrCode = spCompleteRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spCompleteRequest;
 
@@ -1188,7 +1209,7 @@ namespace MCP
 			MessageContextAccess::Set(*spSetLevelRequest, spProtocolContext);
 			iErrCode = spSetLevelRequest->Deserialize(strMsg);
 			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				return InvalidParams();
 
 			spMsg = spSetLevelRequest;
 
@@ -1207,7 +1228,7 @@ namespace MCP
 				MessageContextAccess::Set(*spDiscoverRequest, spProtocolContext);
 				iErrCode = spDiscoverRequest->Deserialize(strMsg);
 				if (ERRNO_OK != iErrCode)
-					return ERRNO_INVALID_REQUEST;
+					return InvalidParams();
 
 				spMsg = spDiscoverRequest;
 
@@ -1216,35 +1237,31 @@ namespace MCP
 		}
 		else if (spRequest->strMethod.compare(METHOD_SUBSCRIPTIONS_LISTEN) == 0)
 		{
-			if (!ctxProtocol.Supports(Feature_ListenSubscriptions))
-				return ERRNO_INTERNAL_ERROR;
+			// A revision without listen subscriptions falls through to the
+			// generic hand-back below and receives -32601.
+			if (ctxProtocol.Supports(Feature_ListenSubscriptions))
+			{
+				auto spListenRequest = std::make_shared<MCP::SubscriptionsListenRequest>(true);
+				if (!spListenRequest)
+					return ERRNO_PARSE_ERROR;
 
-			auto spListenRequest = std::make_shared<MCP::SubscriptionsListenRequest>(true);
-			if (!spListenRequest)
-				return ERRNO_PARSE_ERROR;
+				MessageContextAccess::Set(*spListenRequest, spProtocolContext);
+				iErrCode = spListenRequest->Deserialize(strMsg);
+				if (ERRNO_OK != iErrCode)
+					return InvalidParams();
 
-			MessageContextAccess::Set(*spListenRequest, spProtocolContext);
-			iErrCode = spListenRequest->Deserialize(strMsg);
-			if (ERRNO_OK != iErrCode)
-				return ERRNO_INVALID_REQUEST;
+				spMsg = spListenRequest;
 
-			spMsg = spListenRequest;
-
-			return ERRNO_OK;
+				return ERRNO_OK;
+			}
 		}
 
-		// An unresolved or stateless request with an unknown method must still
-		// produce a JSON-RPC error, so the generic request is handed back. The
-		// handshake discover probe follows the same path to receive -32601.
-		if (ctxProtocol.IsStateless() || !ctxProtocol.IsValid()
-			|| METHOD_SERVER_DISCOVER == spRequest->strMethod)
-		{
-			spMsg = spRequest;
+		// A method without a typed parse above must still produce a JSON-RPC
+		// error in every era, so the generic request is handed back and the
+		// dispatcher's SupportsMethod gate answers -32601.
+		spMsg = spRequest;
 
-			return ERRNO_OK;
-		}
-
-		return ERRNO_INTERNAL_ERROR;
+		return ERRNO_OK;
 	}
 
 	int CMCPSession::ParseResponse(const std::string& strMsg, std::shared_ptr<MCP::Message>& spMsg)
@@ -1844,7 +1861,7 @@ namespace MCP
 		}
 
 		if (ERRNO_OK != iErrCode)
-			return iErrCode;
+			return SendErrorResponse(spRequest, iErrCode, std::string());
 
 		return ProcessModernRequest(MessageContextAccess::GetShared(*spRequest), spRequest);
 	}
@@ -2556,7 +2573,17 @@ namespace MCP
 				if (!spTask)
 					continue;
 
-				int iExecuteErrCode = spTask->Execute();
+				int iExecuteErrCode = ERRNO_INTERNAL_ERROR;
+				try
+				{
+					iExecuteErrCode = spTask->Execute();
+				}
+				catch (const std::exception&)
+				{
+					// An exception escaping the worker thread would terminate the
+					// process; treat it as a failed execution instead.
+					iExecuteErrCode = ERRNO_INTERNAL_ERROR;
+				}
 
 				auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
 				bool bRetired = false;
@@ -2577,13 +2604,13 @@ namespace MCP
 				if (ERRNO_OK == iExecuteErrCode || bRetired)
 					continue;
 
-				// A stateless task that rejected its input without emitting a
-				// result must still answer, otherwise the client would wait
-				// forever on a request that can never complete.
-				if (spProcessTask && !spTask->IsFinished())
+				// A task that rejected its input without emitting a result must
+				// still answer, otherwise the client would wait forever on a
+				// request that can never complete. A cancelled task stays silent.
+				if (spProcessTask && !spTask->IsFinished() && !spTask->IsCancelled())
 				{
 					auto spRequest = spProcessTask->GetRequest();
-					if (spRequest && MessageContextAccess::Get(*spRequest).IsStateless())
+					if (spRequest)
 					{
 						int iCode = (ERRNO_INVALID_PARAMS == iExecuteErrCode) ? ERRNO_INVALID_PARAMS : ERRNO_INTERNAL_ERROR;
 						std::string strMessage = (ERRNO_INVALID_PARAMS == iCode) ? ERROR_MESSAGE_INVALID_PARAMS : ERROR_MESSAGE_INTERNAL_ERROR;

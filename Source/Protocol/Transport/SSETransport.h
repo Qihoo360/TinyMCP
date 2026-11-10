@@ -26,7 +26,8 @@ namespace MCP
 
 		// Configure origin whitelist for DNS-rebinding protection.
 		// An empty Origin header is treated as allowed (e.g. same-origin curl / MCP Inspector).
-		// Otherwise the request's Origin must start with one of the configured prefixes.
+		// Otherwise the request's Origin must equal a configured entry, optionally
+		// followed by ":<port>" (so "http://localhost" admits any local port).
 		// Defaults: "http://localhost", "http://127.0.0.1".
 		void SetAllowedOrigins(const std::vector<std::string>& vecOrigins);
 
@@ -45,7 +46,7 @@ namespace MCP
 		CSSETransport(const CSSETransport&) = delete;
 		CSSETransport& operator=(const CSSETransport&) = delete;
 
-		// Origin whitelist check. Returns true if strOrigin is empty or prefix-matches any allowed origin.
+		// Origin whitelist check, see Internal/OriginPolicy.h for the matching rule.
 		bool IsOriginAllowed(const std::string& strOrigin) const;
 
 		// Generate a random session id used for the /messages endpoint URI.

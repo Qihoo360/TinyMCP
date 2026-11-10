@@ -378,7 +378,8 @@ namespace MCP
 		if (!jMsg.isMember(strMsgKey))
 			return ERRNO_INVALID_REQUEST;
 		bool bStrId = jMsg[strMsgKey].isString();
-		bool bIntId = jMsg[strMsgKey].isIntegral();
+		// isIntegral() also accepts values beyond the int range, where asInt() throws.
+		bool bIntId = jMsg[strMsgKey].isInt();
 		if (!bStrId && !bIntId)
 			return ERRNO_INVALID_REQUEST;
 		if (bStrId)
@@ -942,7 +943,7 @@ namespace MCP
 			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
 		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
 			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
-		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isIntegral())
+		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isInt())
 			iSize = jMsg[MSG_KEY_SIZE].asInt();
 
 		ReadIconsIfPresent(jMsg, vecIcons);
@@ -1343,7 +1344,7 @@ namespace MCP
 			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
 		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
 			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
-		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isIntegral())
+		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isInt())
 			iSize = jMsg[MSG_KEY_SIZE].asInt();
 
 		return ERRNO_OK;
@@ -1458,7 +1459,7 @@ namespace MCP
 		if (!jMsg.isMember(MSG_KEY_PROGRESS_TOKEN))
 			return ERRNO_INVALID_REQUEST;
 		bool bStrId = jMsg[MSG_KEY_PROGRESS_TOKEN].isString();
-		bool bIntId = jMsg[MSG_KEY_PROGRESS_TOKEN].isIntegral();
+		bool bIntId = jMsg[MSG_KEY_PROGRESS_TOKEN].isInt();
 		if (!bStrId && !bIntId)
 			return ERRNO_INVALID_REQUEST;
 		if (bStrId)
