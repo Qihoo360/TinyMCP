@@ -516,10 +516,9 @@ namespace Implementation
 		auto spClone = std::make_shared<CEchoResourceSubscribeTask>(nullptr);
 		if (spClone)
 		{
-			spClone->m_bCancelled = m_bCancelled;
-			spClone->m_bFinished = m_bFinished;
-			spClone->m_bNeedCancel = m_bNeedCancel ? true : false;
-			spClone->m_spRequest = m_spRequest;
+			// The clone only carries the request; the session binds its services
+			// after cloning and a fresh task starts with idle state flags.
+			spClone->SetRequest(GetRequest());
 		}
 
 		return spClone;
