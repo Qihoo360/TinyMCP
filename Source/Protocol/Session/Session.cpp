@@ -203,6 +203,7 @@ namespace MCP
 	{
 		auto spTask = std::make_shared<TTask>(spRequest);
 		TaskServicesAccess::Set(*spTask, m_spTaskServices);
+		TaskServicesAccess::SetSelf(*spTask, spTask);
 
 		return spTask;
 	}
@@ -213,6 +214,7 @@ namespace MCP
 		if (spProcessTask)
 		{
 			TaskServicesAccess::Set(*spProcessTask, m_spTaskServices);
+			TaskServicesAccess::SetSelf(*spProcessTask, spTask);
 		}
 	}
 

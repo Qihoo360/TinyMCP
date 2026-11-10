@@ -5,10 +5,21 @@
 #include <Entity/Server.h>
 #include <Task/BasicTask.h>
 
+#include <atomic>
+
 namespace MCP
 {
 	namespace Test
 	{
+		// Observed by unit.keepalive: the echo tool's "keepalive" action replies
+		// from a background thread and keeps using the task afterwards.
+		struct KeepAliveProbe
+		{
+			static std::atomic<int> s_nDestroyed;
+			static std::atomic<bool> s_bRelease;
+			static std::atomic<bool> s_bTouchedAfterResult;
+		};
+
 		class CTestServer : public MCP::CMCPServer<CTestServer>
 		{
 		public:

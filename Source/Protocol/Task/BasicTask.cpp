@@ -70,6 +70,7 @@ namespace MCP
 		return m_spRequest;
 	}
 
+	// m_wpSelf is intentionally not copied: it belongs to the dispatched instance.
 	ProcessRequest::ProcessRequest(const ProcessRequest& other)
 		: CMCPTask(other)
 		, m_spRequest(other.m_spRequest)
@@ -95,6 +96,16 @@ namespace MCP
 	void ProcessRequest::SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices)
 	{
 		m_spServices = spServices;
+	}
+
+	void ProcessRequest::SetSelf(const std::shared_ptr<MCP::CMCPTask>& spSelf)
+	{
+		m_wpSelf = spSelf;
+	}
+
+	std::shared_ptr<CMCPTask> ProcessRequest::SharedFromThis() const
+	{
+		return m_wpSelf.lock();
 	}
 
 	const std::shared_ptr<MCP::TaskServices>& ProcessRequest::GetTaskServices() const

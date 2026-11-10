@@ -52,6 +52,20 @@ namespace MCP
 		bool IsStale() const;
 		void MarkStale();
 
+		// A strong reference to this task for background threads and IPC callbacks
+		// that may run after the task reported its result. The session drops its
+		// own reference once the task is finished, so any work that can still touch
+		// the task afterwards must hold this instead of a raw `this`.
+		// Empty when the task was not dispatched by the session (e.g. a prototype
+		// or a Clone() that has not been dispatched yet).
+		std::shared_ptr<CMCPTask> SharedFromThis() const;
+
+		template <typename TTask>
+		std::shared_ptr<TTask> SharedFromThis() const
+		{
+			return std::dynamic_pointer_cast<TTask>(SharedFromThis());
+		}
+
 	protected:
 		// Session-side services for this dispatch. Never null for a task the
 		// session created; IsValid() reports false otherwise.
@@ -91,6 +105,7 @@ namespace MCP
 	private:
 		friend struct TaskServicesAccess;
 		void SetTaskServices(const std::shared_ptr<MCP::TaskServices>& spServices);
+		void SetSelf(const std::shared_ptr<MCP::CMCPTask>& spSelf);
 
 		enum StateFlag : unsigned int
 		{
@@ -101,6 +116,11 @@ namespace MCP
 
 		std::atomic<unsigned int> m_nStateFlags{ 0 };
 		uint64_t m_nAsyncSequence{ 0 };
+
+		// Bound by the session to the shared_ptr it dispatches. Weak so the task
+		// does not keep itself alive, and never copied so a clone cannot hand out
+		// its prototype.
+		std::weak_ptr<MCP::CMCPTask> m_wpSelf;
 	};
 
 	class ProcessPingRequest : public ProcessRequest

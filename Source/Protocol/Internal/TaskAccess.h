@@ -13,5 +13,11 @@ namespace MCP
 		{
 			task.SetTaskServices(spServices);
 		}
+
+		// Binds the dispatched shared_ptr so the task can hand out SharedFromThis().
+		static void SetSelf(MCP::ProcessRequest& task, const std::shared_ptr<MCP::CMCPTask>& spSelf)
+		{
+			task.SetSelf(spSelf);
+		}
 	};
 }

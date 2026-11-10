@@ -12,6 +12,10 @@ namespace MCP
 {
 	namespace Test
 	{
+		std::atomic<int> KeepAliveProbe::s_nDestroyed{ 0 };
+		std::atomic<bool> KeepAliveProbe::s_bRelease{ false };
+		std::atomic<bool> KeepAliveProbe::s_bTouchedAfterResult{ false };
+
 		namespace
 		{
 			bool s_bRegisterModernFixtures = false;
@@ -51,6 +55,12 @@ namespace MCP
 				CTestEchoTask(const std::shared_ptr<MCP::Request>& spRequest)
 					: ProcessCallToolRequest(spRequest)
 				{
+				}
+
+				~CTestEchoTask() override
+				{
+					if (m_bKeepAliveProbe)
+						++KeepAliveProbe::s_nDestroyed;
 				}
 
 				std::shared_ptr<MCP::CMCPTask> Clone() const override
@@ -387,6 +397,45 @@ namespace MCP
 					if ("throw" == strAction)
 						throw std::runtime_error("echo task failure probe");
 
+					// Keep-alive probe: reply from a background thread that keeps
+					// using the task after the result, as IPC-driven tools do.
+					if ("keepalive" == strAction)
+					{
+						// A clone that has not been dispatched must not hand out a
+						// reference, otherwise it would keep its prototype alive.
+						auto spCopy = std::dynamic_pointer_cast<MCP::ProcessRequest>(Clone());
+						const bool bCloneUnbound = spCopy && !spCopy->SharedFromThis();
+
+						auto spSelf = SharedFromThis<CTestEchoTask>();
+						if (!spSelf || spSelf.get() != this)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						m_bKeepAliveProbe = true;
+						const std::string strText = bCloneUnbound ? "keepalive:unbound" : "keepalive:bound";
+						std::thread([spSelf, strText]()
+							{
+								auto spKeepResult = spSelf->BuildResult();
+								if (spKeepResult)
+								{
+									MCP::TextContent keepContent;
+									keepContent.strType = MCP::CONST_TEXT;
+									keepContent.strText = strText;
+									spKeepResult->vecTextContent.push_back(keepContent);
+									spSelf->NotifyResult(spKeepResult);
+								}
+
+								auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+								while (!KeepAliveProbe::s_bRelease.load() && std::chrono::steady_clock::now() < tpDeadline)
+									std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+								// Valid only because spSelf still owns the task.
+								KeepAliveProbe::s_bTouchedAfterResult.store(
+									spSelf->GetRequest() != nullptr && 0 == KeepAliveProbe::s_nDestroyed.load());
+							}).detach();
+
+						return MCP::ERRNO_OK;
+					}
+
 					// Gives the E2E client a window to queue a second request and
 					// cancel it before the async worker reaches it.
 					if ("slow" == strAction)
@@ -415,6 +464,9 @@ namespace MCP
 				{
 					return MCP::ERRNO_OK;
 				}
+
+			private:
+				bool m_bKeepAliveProbe{ false };
 			};
 
 			class CTestReadResourceTask : public MCP::ProcessReadResourceRequest
