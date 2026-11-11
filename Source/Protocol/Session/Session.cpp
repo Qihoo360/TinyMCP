@@ -228,11 +228,12 @@ namespace MCP
 
 	int CMCPSession::Ready()
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		int iErrCode = ERRNO_OK;
-		iErrCode = m_spTransport->Connect();
+		iErrCode = spTransport->Connect();
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
@@ -241,7 +242,8 @@ namespace MCP
 
 	int CMCPSession::Run()
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		int iErrCode = ERRNO_OK;
@@ -249,7 +251,7 @@ namespace MCP
 		while (true)
 		{
 			std::string strIncomingMsg;
-			iErrCode = m_spTransport->Read(strIncomingMsg);
+			iErrCode = spTransport->Read(strIncomingMsg);
 			if (ERRNO_OK == iErrCode)
 			{
 				auto vecStrObj = StringHelper::split_json_objects_string(strIncomingMsg);
@@ -279,6 +281,7 @@ namespace MCP
 
 	int CMCPSession::Terminate()
 	{
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
 		// Bounded: a tool that blocks inside Execute() must not hang process exit.
 		bool bAbandoned = false;
 		ResetAsyncTaskThread(true, &bAbandoned);
@@ -297,11 +300,11 @@ namespace MCP
 		// client still observes a complete result for its listen request.
 		CloseSubscriptions();
 
-		if (!m_spTransport)
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		int iErrCode = ERRNO_OK;
-		iErrCode = m_spTransport->Disconnect();
+		iErrCode = spTransport->Disconnect();
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
@@ -340,7 +343,6 @@ namespace MCP
 			std::lock_guard<std::mutex> _lock(m_mtxMessages);
 			m_hashMessage.clear();
 		}
-		m_hashUri2SubscribeResourceTaskId.clear();
 
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
@@ -350,6 +352,7 @@ namespace MCP
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
 			m_hashSubscriptions.clear();
+			m_hashUri2SubscribeResourceTaskId.clear();
 		}
 
 		// Re-arm the async task flag LAST so that CommitAsyncTask/CancelAsyncTask can
@@ -641,6 +644,7 @@ namespace MCP
 			iErrCode = CommitAsyncTask(spNewProcessSubscribeResourceRequest);
 			if (MCP::ERRNO_OK == iErrCode)
 			{
+				std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
 				m_hashUri2SubscribeResourceTaskId[spSubscribeRequest->strUri] = spSubscribeRequest->requestId;
 			}
 
@@ -665,15 +669,20 @@ namespace MCP
 				iErrCode = ERRNO_INTERNAL_ERROR;
 				goto PROC_END;
 			}
-			if (m_hashUri2SubscribeResourceTaskId.find(spUnsubscribeRequest->strUri) == m_hashUri2SubscribeResourceTaskId.end())
 			{
-				iErrCode = ERRNO_INVALID_PARAMS;
-				goto PROC_END;
+				std::unique_lock<std::mutex> _lock(m_mtxSubscriptions);
+				auto itrSubscribed = m_hashUri2SubscribeResourceTaskId.find(spUnsubscribeRequest->strUri);
+				if (itrSubscribed == m_hashUri2SubscribeResourceTaskId.end())
+				{
+					iErrCode = ERRNO_INVALID_PARAMS;
+					goto PROC_END;
+				}
+				spTask->SetRequestIdToUnsubscribe(itrSubscribed->second);
 			}
-			spTask->SetRequestIdToUnsubscribe(m_hashUri2SubscribeResourceTaskId[spUnsubscribeRequest->strUri]);
 			iErrCode = spTask->Execute();
 			if (MCP::ERRNO_OK == iErrCode)
 			{
+				std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
 				m_hashUri2SubscribeResourceTaskId.erase(spUnsubscribeRequest->strUri);
 			}
 
@@ -1318,151 +1327,188 @@ namespace MCP
 
 	void CMCPSession::SetServerInfo(const MCP::Implementation& impl)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_serverInfo = impl;
 	}
 
 	void CMCPSession::SetServerCapabilities(const MCP::ServerCapabilities& capabilities)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_capabilities = capabilities;
 	}
 
 	void CMCPSession::SetServerToolsPagination(bool bPagination)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_bToolsPagination = bPagination;
 	}
 
 	void CMCPSession::SetServerTools(const std::vector<MCP::Tool>& tools)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_tools = tools;
 	}
 
 	void CMCPSession::SetServerResourcesPagination(bool bPagination)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_bResourcesPagination = bPagination;
 	}
 
 	void CMCPSession::SetServerResources(const std::vector<MCP::Resource>& resources)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_resources = resources;
 	}
 
 	void CMCPSession::SetServerResourceTemplatesPagination(bool bPagination)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_bResourceTemplatesPagination = bPagination;
 	}
 
 	void CMCPSession::SetServerResourceTemplates(const std::vector<MCP::ResourceTemplate>& resourceTemplates)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_resourceTemplates = resourceTemplates;
 	}
 
 	void CMCPSession::SetServerPromptsPagination(bool bPagination)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_bPromptsPagination = bPagination;
 	}
 
 	void CMCPSession::SetServerPrompts(const std::vector<MCP::Prompt>& prompts)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_prompts = prompts;
 	}
 
 	void CMCPSession::SetServerCallToolsTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>>& hashCallToolsTasks)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashCallToolsTasks = hashCallToolsTasks;
 	}
 
 	void CMCPSession::SetServerReadResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>>& hashReadResourceTasks)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashReadResourceTasks = hashReadResourceTasks;
 	}
 
 	void CMCPSession::SetServerSubscribeResourceTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>>& hashSubscribeResourceTasks)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashSubscribeResourceTasks = hashSubscribeResourceTasks;
 	}
 
 	void CMCPSession::SetServerGetPromptTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessGetPromptRequest>>& hashGetPromptTasks)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashGetPromptTasks = hashGetPromptTasks;
 	}
 
 	void CMCPSession::SetServerCompleteTasks(const std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCompleteRequest>>& hashCompleteTasks)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashCompleteTasks = hashCompleteTasks;
 	}
 
 	void CMCPSession::SetServerCallToolsTask(const std::string& strToolName, const std::shared_ptr<MCP::ProcessCallToolRequest>& spTask)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashCallToolsTasks[strToolName] = spTask;
 	}
 
 	void CMCPSession::SetServerReadResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessReadResourceRequest>& spTask)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashReadResourceTasks[strResourceUri] = spTask;
 	}
 
 	void CMCPSession::SetServerSubscribeResourceTask(const std::string& strResourceUri, const std::shared_ptr<MCP::ProcessSubscribeResourceRequest>& spTask)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashSubscribeResourceTasks[strResourceUri] = spTask;
 	}
 
 	void CMCPSession::SetServerGetPromptTask(const std::string& strPromptName, const std::shared_ptr<MCP::ProcessGetPromptRequest>& spTask)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashGetPromptTasks[strPromptName] = spTask;
 	}
 
 	void CMCPSession::SetServerCompleteTask(const std::string& strTaskKey, const std::shared_ptr<MCP::ProcessCompleteRequest>& spTask)
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		m_hashCompleteTasks[strTaskKey] = spTask;
 	}
 
 	MCP::Implementation CMCPSession::GetServerInfo() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_serverInfo;
 	}
 
 	MCP::ServerCapabilities CMCPSession::GetServerCapabilities() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_capabilities;
+	}
+
+	void CMCPSession::UpdateServerCapabilities(const std::function<void(MCP::ServerCapabilities&)>& fnUpdate)
+	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		if (fnUpdate)
+			fnUpdate(m_capabilities);
 	}
 
 	bool CMCPSession::GetServerToolsPagination() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_bToolsPagination;
 	}
 
 	std::vector<MCP::Tool> CMCPSession::GetServerTools() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_tools;
 	}
 
 	bool CMCPSession::GetServerResourcesPagination() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_bResourcesPagination;
 	}
 
 	std::vector<MCP::Resource> CMCPSession::GetServerResources() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_resources;
 	}
 
 	bool CMCPSession::GetServerResourceTemplatesPagination() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_bResourceTemplatesPagination;
 	}
 
 	std::vector<MCP::ResourceTemplate> CMCPSession::GetServerResourceTemplates() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_resourceTemplates;
 	}
 
 	bool CMCPSession::GetServerPromptsPagination() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_bPromptsPagination;
 	}
 
 	std::vector<MCP::Prompt> CMCPSession::GetServerPrompts() const
 	{
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
 		return m_prompts;
 	}
 
@@ -1508,42 +1554,37 @@ namespace MCP
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerCallToolsTask(const std::string& strToolName)
 	{
-		if (m_hashCallToolsTasks.count(strToolName) > 0)
-			return m_hashCallToolsTasks[strToolName];
-
-		return nullptr;
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		auto itr = m_hashCallToolsTasks.find(strToolName);
+		return itr != m_hashCallToolsTasks.end() ? itr->second : nullptr;
 	}
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerReadResourceTask(const std::string& strResourceUri)
 	{
-		if (m_hashReadResourceTasks.count(strResourceUri) > 0)
-			return m_hashReadResourceTasks[strResourceUri];
-
-		return nullptr;
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		auto itr = m_hashReadResourceTasks.find(strResourceUri);
+		return itr != m_hashReadResourceTasks.end() ? itr->second : nullptr;
 	}
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerSubscribeResourceTask(const std::string& strResourceUri)
 	{
-		if (m_hashSubscribeResourceTasks.count(strResourceUri) > 0)
-			return m_hashSubscribeResourceTasks[strResourceUri];
-
-		return nullptr;
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		auto itr = m_hashSubscribeResourceTasks.find(strResourceUri);
+		return itr != m_hashSubscribeResourceTasks.end() ? itr->second : nullptr;
 	}
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerGetPromptTask(const std::string& strPromptName)
 	{
-		if (m_hashGetPromptTasks.count(strPromptName) > 0)
-			return m_hashGetPromptTasks[strPromptName];
-
-		return nullptr;
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		auto itr = m_hashGetPromptTasks.find(strPromptName);
+		return itr != m_hashGetPromptTasks.end() ? itr->second : nullptr;
 	}
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerCompleteTask(const std::string& strTaskKey)
 	{
-		if (m_hashCompleteTasks.count(strTaskKey) > 0)
-			return m_hashCompleteTasks[strTaskKey];
-
-		return nullptr;
+		std::lock_guard<std::mutex> _lock(m_mtxRegistrations);
+		auto itr = m_hashCompleteTasks.find(strTaskKey);
+		return itr != m_hashCompleteTasks.end() ? itr->second : nullptr;
 	}
 
 	void CMCPSession::SetLoggingLevel(const MCP::LoggingLevel& level)
@@ -1571,7 +1612,8 @@ namespace MCP
 
 	int CMCPSession::WriteLogNotification(const MCP::LoggingLevel& level, const std::string& strLogger, const Json::Value& jData)
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		MCP::LoggingMessageNotification notification(false);
@@ -1584,16 +1626,17 @@ namespace MCP
 		if (ERRNO_OK != notification.Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		return m_spTransport->Write(strNotification);
+		return spTransport->Write(strNotification);
 	}
 
 	int CMCPSession::SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		const CProtocolRegistry& registry = CProtocolRegistry::GetGlobalRegistry();
-		const bool bStatelessSupported = m_spTransport->SupportsStatelessProtocol();
+		const bool bStatelessSupported = spTransport->SupportsStatelessProtocol();
 		const bool bExplicit = !vecVersions.empty();
 
 		// The declaration is a set: callers may repeat a version, but it must only
@@ -1793,9 +1836,10 @@ namespace MCP
 				spResponse->strCacheScope = strDefaultCacheScope;
 		}
 
+		const MCP::Implementation serverInfo = GetServerInfo();
 		Json::Value jServerInfo(Json::objectValue);
-		m_serverInfo.DoSerialize(jServerInfo);
-		VersionExtrasAccess::Serialize(m_serverInfo, jServerInfo, MessageContextAccess::Get(*spResponse));
+		serverInfo.DoSerialize(jServerInfo);
+		VersionExtrasAccess::Serialize(serverInfo, jServerInfo, MessageContextAccess::Get(*spResponse));
 		spResponse->jServerInfo = jServerInfo;
 	}
 
@@ -1817,6 +1861,7 @@ namespace MCP
 
 	int CMCPSession::ProcessModernMessage(int iErrCode, const std::shared_ptr<MCP::Message>& spMsg)
 	{
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
 		auto spRequest = std::dynamic_pointer_cast<MCP::Request>(spMsg);
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
@@ -1824,7 +1869,7 @@ namespace MCP
 		// A transport that carries MCP inside a session-based channel cannot host
 		// stateless revisions at all, so a modern request is an invalid request
 		// rather than an unsupported version.
-		if (m_spTransport && !m_spTransport->SupportsStatelessProtocol())
+		if (spTransport && !spTransport->SupportsStatelessProtocol())
 			return SendErrorResponse(spRequest, ERRNO_INVALID_REQUEST, ERROR_MESSAGE_INVALID_REQUEST);
 
 		int iValidate = ValidateProtocolContext(MessageContextAccess::GetShared(*spRequest), spRequest);
@@ -2037,7 +2082,8 @@ namespace MCP
 
 	int CMCPSession::SendListChangedNotification(MessageType eMessageType, const std::string& strMethod)
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		bool bHasSubscriptions = false;
@@ -2073,12 +2119,13 @@ namespace MCP
 		if (ERRNO_OK != spNotification->Serialize(strNotification))
 			return ERRNO_INTERNAL_ERROR;
 
-		return m_spTransport->Write(strNotification);
+		return spTransport->Write(strNotification);
 	}
 
 	int CMCPSession::SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri)
 	{
-		if (!m_spTransport)
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
+		if (!spTransport)
 			return ERRNO_INTERNAL_ERROR;
 
 		std::vector<SubscriptionState> vecTargets;
@@ -2140,7 +2187,7 @@ namespace MCP
 				continue;
 			}
 
-			if (ERRNO_OK != m_spTransport->Write(strNotification))
+			if (ERRNO_OK != spTransport->Write(strNotification))
 				iErrCode = ERRNO_INTERNAL_ERROR;
 		}
 
@@ -2164,6 +2211,7 @@ namespace MCP
 
 	int CMCPSession::CloseSubscriptions()
 	{
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
 		std::vector<SubscriptionState> vecStates;
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxSubscriptions);
@@ -2173,7 +2221,7 @@ namespace MCP
 			m_hashSubscriptions.clear();
 		}
 
-		if (!m_spTransport)
+		if (!spTransport)
 			return ERRNO_OK;
 
 		int iErrCode = ERRNO_OK;
@@ -2200,7 +2248,7 @@ namespace MCP
 				continue;
 			}
 
-			if (ERRNO_OK != m_spTransport->Write(strResult))
+			if (ERRNO_OK != spTransport->Write(strResult))
 				iErrCode = ERRNO_INTERNAL_ERROR;
 		}
 
@@ -2209,6 +2257,7 @@ namespace MCP
 
 	int CMCPSession::ProcessSubscriptionsListenRequest(const std::shared_ptr<const ProtocolContext>& spProtocolContext, const std::shared_ptr<MCP::Request>& spRequest)
 	{
+		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
 		if (!spRequest)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -2280,7 +2329,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
-		if (!m_spTransport || ERRNO_OK != m_spTransport->Write(strAcknowledged))
+		if (!spTransport || ERRNO_OK != spTransport->Write(strAcknowledged))
 		{
 			RemoveSubscription(spListenRequest->requestId);
 			return ERRNO_INTERNAL_ERROR;

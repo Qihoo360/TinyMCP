@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <cstdint>
 #include <utility>
@@ -94,6 +95,9 @@ namespace MCP
 		void SetServerCompleteTask(const std::string& strTaskKey, const std::shared_ptr<MCP::ProcessCompleteRequest>& spTask);
 		MCP::Implementation GetServerInfo() const;
 		MCP::ServerCapabilities GetServerCapabilities() const;
+		// Applies fnUpdate to the capabilities under the registration lock, so
+		// concurrent Register*Capabilities calls cannot lose each other's change.
+		void UpdateServerCapabilities(const std::function<void(MCP::ServerCapabilities&)>& fnUpdate);
 		bool GetServerToolsPagination() const;
 		std::vector<MCP::Tool> GetServerTools() const;
 		bool GetServerResourcesPagination() const;
@@ -227,6 +231,11 @@ namespace MCP
 		std::string m_strServerInstructions;
 		std::unordered_map<std::string, SubscriptionState> m_hashSubscriptions;
 		std::mutex m_mtxSubscriptions;
+
+		// Registrations: server info, capabilities, the advertised lists and the
+		// task prototypes. They may be registered after Start(), so every reader
+		// and writer takes this lock.
+		mutable std::mutex m_mtxRegistrations;
 
 		MCP::Implementation m_serverInfo;
 		MCP::ServerCapabilities m_capabilities;

@@ -61,62 +61,70 @@ namespace MCP
 
 	void CMCPServerBase::RegisterServerToolsCapabilities(const MCP::Tools& tools)
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.tools = tools;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.tools = tools;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerResourcesCapabilities(const MCP::Resources& resources)
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.resources = resources;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.resources = resources;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerPromptsCapabilities(const MCP::Prompts& prompts)
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.prompts = prompts;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.prompts = prompts;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerExperimentalCapabilities(const MCP::Experimental& experimental)
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.experimental = experimental;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.experimental = experimental;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerLoggingCapabilities()
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.logging.bExist = true;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.logging.bExist = true;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerCompletionsCapability()
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.bCompletions = true;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.bCompletions = true;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>& mapExtensions)
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		for (const auto& pair : mapExtensions)
-			capabilities.mapExtensions[pair.first] = pair.second;
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				for (const auto& pair : mapExtensions)
+					capabilities.mapExtensions[pair.first] = pair.second;
 
-		capabilities.bExtensionPassthrough = !capabilities.mapExtensions.empty();
-		Session().SetServerCapabilities(capabilities);
+				capabilities.bExtensionPassthrough = !capabilities.mapExtensions.empty();
+			});
 	}
 
 	void CMCPServerBase::RegisterServerAppsCapabilities()
 	{
-		MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
-		capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
-		capabilities.bExtensionPassthrough = true;
-		Session().SetServerCapabilities(capabilities);
+		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
+			{
+				capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+				capabilities.bExtensionPassthrough = true;
+			});
 	}
 
 	void CMCPServerBase::RegisterServerInstructions(const std::string& strInstructions)
