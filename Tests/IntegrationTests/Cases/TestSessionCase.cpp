@@ -415,6 +415,39 @@ TEST_CASE("unit.stop_releases_tasks")
 	CHECK_EQ(1, KeepAliveProbe::s_nDestroyed.load());
 }
 
+// A task still running in background work at Stop() is cancelled, and Stop()
+// waits for that work to let go so the task is destroyed before it returns.
+TEST_CASE("unit.stop_drains_running_tasks")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+	KeepAliveProbe::s_nDestroyed.store(0);
+	KeepAliveProbe::s_bHangStarted.store(false);
+	KeepAliveProbe::s_bCancelRequested.store(false);
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(2, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"hang\"}}")));
+	auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WAIT_TIMEOUT_MS);
+	while (!KeepAliveProbe::s_bHangStarted.load() && std::chrono::steady_clock::now() < tpDeadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	CHECK(KeepAliveProbe::s_bHangStarted.load());
+
+	driver.Stop();
+	CHECK(KeepAliveProbe::s_bCancelRequested.load());
+	CHECK_EQ(1, KeepAliveProbe::s_nDestroyed.load());
+}
+
 TEST_CASE("unit.origin_policy")
 {
 	const std::vector<std::string> vecDefaults = { "http://localhost", "http://127.0.0.1" };

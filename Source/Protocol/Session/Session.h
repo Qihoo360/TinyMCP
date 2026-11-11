@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <thread>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <cstdint>
@@ -193,6 +194,11 @@ namespace MCP
 		// stay parked because background work may still reference them. Does
 		// nothing to the cache when bAbandoned, since the worker still owns it.
 		void ReleaseFinishedTasks(bool bAbandoned);
+		// Shutdown only: cancels every parked task that is still running, waits up
+		// to tmTimeout for it to finish and for its background work to drop the
+		// task, then destroys it here instead of during static teardown. Tasks
+		// that do not settle in time stay parked.
+		void DrainUnfinishedTasks(std::chrono::milliseconds tmTimeout);
 		int AsyncThreadProc(uint64_t nEpoch);
 
 		// Tasks never reach back to the session singleton. The session binds the

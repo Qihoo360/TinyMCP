@@ -15,6 +15,8 @@ namespace MCP
 		std::atomic<int> KeepAliveProbe::s_nDestroyed{ 0 };
 		std::atomic<bool> KeepAliveProbe::s_bRelease{ false };
 		std::atomic<bool> KeepAliveProbe::s_bTouchedAfterResult{ false };
+		std::atomic<bool> KeepAliveProbe::s_bHangStarted{ false };
+		std::atomic<bool> KeepAliveProbe::s_bCancelRequested{ false };
 
 		namespace
 		{
@@ -441,6 +443,31 @@ namespace MCP
 					if ("track" == strAction)
 						m_bKeepAliveProbe = true;
 
+					// Shutdown probe: never replies on its own. The background thread
+					// holds the task until Cancel() arrives, then reports cancellation
+					// after a short cleanup, like a tool driving an external process.
+					if ("hang" == strAction)
+					{
+						auto spSelf = SharedFromThis<CTestEchoTask>();
+						if (!spSelf)
+							return MCP::ERRNO_INTERNAL_ERROR;
+
+						m_bKeepAliveProbe = true;
+						m_bHangProbe = true;
+						std::thread([spSelf]()
+							{
+								KeepAliveProbe::s_bHangStarted.store(true);
+								auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+								while (!KeepAliveProbe::s_bCancelRequested.load() && std::chrono::steady_clock::now() < tpDeadline)
+									std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+								std::this_thread::sleep_for(std::chrono::milliseconds(50));
+								spSelf->NotifyCancelled();
+							}).detach();
+
+						return MCP::ERRNO_OK;
+					}
+
 					// Gives the E2E client a window to queue a second request and
 					// cancel it before the async worker reaches it.
 					if ("slow" == strAction)
@@ -467,11 +494,14 @@ namespace MCP
 
 				int Cancel() override
 				{
+					if (m_bHangProbe)
+						KeepAliveProbe::s_bCancelRequested.store(true);
 					return MCP::ERRNO_OK;
 				}
 
 			private:
 				bool m_bKeepAliveProbe{ false };
+				bool m_bHangProbe{ false };
 			};
 
 			class CTestReadResourceTask : public MCP::ProcessReadResourceRequest

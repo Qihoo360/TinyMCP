@@ -288,6 +288,11 @@ namespace MCP
 		// static teardown, after business singletons their destructors still use.
 		ReleaseFinishedTasks(bAbandoned);
 
+		// Tasks still running in background work would otherwise outlive Stop()
+		// as well, so ask them to stop and destroy them here while they can.
+		if (!bAbandoned)
+			DrainUnfinishedTasks(std::chrono::seconds(5));
+
 		// Close every live subscription before the transport goes away so the
 		// client still observes a complete result for its listen request.
 		CloseSubscriptions();
@@ -2456,6 +2461,46 @@ namespace MCP
 		// Destroyed outside the lock: a task destructor may block on its own
 		// background work or take business-side locks.
 		vecFinished.clear();
+	}
+
+	void CMCPSession::DrainUnfinishedTasks(std::chrono::milliseconds tmTimeout)
+	{
+		std::vector<std::shared_ptr<MCP::CMCPTask>> vecPending;
+		{
+			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
+			vecPending.swap(m_vecRetiredTasks);
+		}
+
+		// Cancel outside the lock: a task's Cancel() may block on business code.
+		for (auto& spTask : vecPending)
+		{
+			if (spTask && !spTask->IsFinished() && !spTask->IsCancelled())
+				spTask->Cancel();
+		}
+
+		// A task is settled once it reported and nothing but this list still
+		// references it, i.e. its background thread has let go as well.
+		auto fnSettled = [](const std::shared_ptr<MCP::CMCPTask>& spTask)
+			{
+				return !spTask || ((spTask->IsFinished() || spTask->IsCancelled()) && 1 == spTask.use_count());
+			};
+
+		const auto tpDeadline = std::chrono::steady_clock::now() + tmTimeout;
+		while (true)
+		{
+			// Settled tasks are destroyed right away, on this thread.
+			vecPending.erase(std::remove_if(vecPending.begin(), vecPending.end(), fnSettled), vecPending.end());
+			if (vecPending.empty() || std::chrono::steady_clock::now() >= tpDeadline)
+				break;
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+
+		if (vecPending.empty())
+			return;
+
+		std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
+		m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), vecPending.begin(), vecPending.end());
 	}
 
 	int CMCPSession::StopAsyncTaskThread()

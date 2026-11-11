@@ -13,12 +13,15 @@ namespace MCP
 	{
 		// Observed by unit.keepalive: the echo tool's "keepalive" action replies
 		// from a background thread and keeps using the task afterwards. The
-		// "track" action only counts destruction (unit.stop_releases_tasks).
+		// "track" action only counts destruction (unit.stop_releases_tasks), and
+		// "hang" keeps running in a background thread until it is cancelled.
 		struct KeepAliveProbe
 		{
 			static std::atomic<int> s_nDestroyed;
 			static std::atomic<bool> s_bRelease;
 			static std::atomic<bool> s_bTouchedAfterResult;
+			static std::atomic<bool> s_bHangStarted;
+			static std::atomic<bool> s_bCancelRequested;
 		};
 
 		class CTestServer : public MCP::CMCPServer<CTestServer>
