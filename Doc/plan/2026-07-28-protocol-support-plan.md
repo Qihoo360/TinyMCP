@@ -6,7 +6,7 @@
 
 - 同一进程、同一套 SDK 同时支持 2024-11-05 与 2026-07-28。
 - 按 2026-07-28 规范实现核心能力：无会话请求、`server/discover`、`_meta`、`resultType`、MRTR、`subscriptions/listen`、缓存字段、错误码、工具/资源/提示词新字段。
-- 按 2026-07-28 核心规范及 MCP Apps 扩展实现 MCP Apps 的**服务端能力**。
+- 按 2026-07-28 核心规范及 MCP Apps 扩展实现 MCP Apps 的**服务端能力**（仅限 2026-07-28；2024-11-05 明确不支持 MCP Apps）。
 - 严格按 `Doc/modelcontextprotocol/specification/2026-07-28` 与 `Doc/modelcontextprotocol/schema/2026-07-28` 实施。
 - 不引入任何外部依赖，继续使用 jsoncpp、cpp-httplib 与现有基础设施。
 - 建立零依赖的自动化测试体系（单元测试 + 集成测试），并按“每完成一个单元/一个特性”强制门禁执行。
@@ -319,13 +319,11 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 严格按已入库的 `extensions/overview.md`、`extensions/apps/overview.md`、`extensions/apps/build.md` 实施，不引入本地文档没有的字段：
 
+- 版本边界：MCP Apps 仅随 2026-07-28 提供；2024-11-05 明确不支持 MCP Apps，既不声明该扩展，也不输出任何 UI 元数据（`Tool._meta.ui`、`Resource._meta.ui`、`text/html;profile=mcp-app` 内容）。
 - 扩展标识：`io.modelcontextprotocol/ui`；MIME：`text/html;profile=mcp-app`；URI 方案：`ui://`。
-- 默认关闭：只有调用 `RegisterServerAppsCapabilities()` 后才声明扩展；未注册时 discover/initialize 均不出现该扩展。
-- 服务端能力声明：
-  - 现代：`server/discover` 的 `capabilities.extensions["io.modelcontextprotocol/ui"] = {}`。
-  - Legacy：`initialize` 结果的 `capabilities.extensions["io.modelcontextprotocol/ui"] = {}`（按 `overview.md` 的跨版本透传建议）。
-  - 设置对象为空 `{}`；`mimeTypes` 是客户端声明，不放在服务端设置里。
-- 客户端能力识别：从现代 `_meta["io.modelcontextprotocol/clientCapabilities"].extensions["io.modelcontextprotocol/ui"].mimeTypes` 或 legacy `initialize.params.capabilities.extensions` 读取，供应用判断宿主是否支持 UI。
+- 默认关闭：只有调用 `RegisterServerAppsCapabilities()` 后才声明扩展；未注册时 `server/discover` 不出现该扩展。
+- 服务端能力声明：`server/discover` 的 `capabilities.extensions["io.modelcontextprotocol/ui"] = {}`；设置对象为空 `{}`，`mimeTypes` 是客户端声明，不放在服务端设置里。
+- 客户端能力识别：从现代 `_meta["io.modelcontextprotocol/clientCapabilities"].extensions["io.modelcontextprotocol/ui"].mimeTypes` 读取，供应用判断宿主是否支持 UI。
 - 工具关联：`Tool._meta.ui.resourceUri` 指向 `ui://...` 资源；提供 `SetUiResourceUri()` 辅助方法；`_meta` 其余内容保持通用 JSON 透传，不为 `_meta.ui` 建强类型。
 - 资源元数据：`Resource._meta.ui` 只透传本地文档出现的 `csp` 与 `permissions`，两者均为 `Json::Value` 原样序列化，SDK 不解释、不校验、不拆子域；**不实现**本地文档未出现的 `domain`、`prefersBorder`，也不把 CSP 子域建成强类型字段。
 - `resources/read` 返回 `mimeType = text/html;profile=mcp-app` 的文本内容，并带 `_meta.ui`。
@@ -680,7 +678,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 - `RegisterServerCompletionsCapability()`：现代 `completions`（legacy 仍用 `RegisterServerExperimentalCapabilities`）。现代 discover 只输出 `completions`、不输出 `experimental`；legacy `initialize` 输出保持原样，新 API 不改变老代码的 legacy 能力声明。该能力字段由 `Feature_CompletionsCapability` 门控。
 - `RegisterServerExtensionsCapabilities(const std::map<std::string, Json::Value>&)`：通用扩展注册；现代 discover 与 legacy initialize 共用。注册非空扩展时置 `ServerCapabilities::bExtensionPassthrough = true`，供 legacy `initialize` 透传；注册 API 本身不写 `_meta`。
-- `RegisterServerAppsCapabilities()`：显式启用 MCP Apps；向 `capabilities.extensions` 写入 `"io.modelcontextprotocol/ui": {}`（现代 discover 与 legacy initialize 都输出），并置 `bExtensionPassthrough = true`。默认不启用。
+- `RegisterServerAppsCapabilities()`：显式启用 MCP Apps；向 `capabilities.extensions` 写入 `"io.modelcontextprotocol/ui": {}`，**仅在 2026-07-28 的 `server/discover` 中输出**；legacy `initialize` 不得输出（2024-11-05 不支持 MCP Apps）。需与 `RegisterServerExtensionsCapabilities()` 的通用透传区分：Apps 属于仅现代扩展，legacy 序列化时必须过滤。默认不启用。
 - `RegisterServerInstructions(const std::string&)`：`server/discover` 的 `instructions`。
 - `SetServerCacheOptions(int ttlMs, const std::string& cacheScope)`：仅影响 4.6 的 6 类可缓存结果。
 - `RegisterServerUiResources(...)`：可选的便捷方法，内部复用 `RegisterServerResources`；不新造注册体系。UI 资源的 `_meta.ui` 以 `Json::Value` 原样传入。
@@ -724,6 +722,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
   - 可缓存结果清单（6 类）与“MRTR 重试结果不缓存”。
   - 必填 `_meta` 缺失返回 `-32602`、不补默认值；`-32001` 与 `-32020` 的区别。
   - 列出 SDK 支持的扩展（当前仅 MCP Apps），说明默认关闭、显式启用与优雅降级行为。
+  - 明确 MCP Apps 仅随 2026-07-28 提供；2024-11-05 不支持 MCP Apps，不声明扩展、不输出 UI 元数据。
   - 明确 MCP Apps 为服务端能力子集，不含 View↔Host `postMessage` 协议。
   - 说明 `logging`、`roots`、`sampling` 在 2026-07-28 已 deprecated：本期仍按规范支持（logging 请求级 `logLevel`、roots/sampling 走 MRTR），但建议新实现使用 stderr/OpenTelemetry、工具参数/资源 URI、直接调用 LLM API；SSE 连接不支持现代请求。
 - 不修改已入库的规范/schema 原文。
@@ -743,7 +742,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 | D9 | 继续用 numeric cursor | 现有实现可用且 cursor 对客户端不透明；不改分页协议 |
 | D10 | 现代不支持 `ping`/`logging/setLevel`/`resources/subscribe` | changelog 明确移除/取代 |
 | D11 | 扩展默认关闭，必须显式 `RegisterServerAppsCapabilities()` | 遵循 `extensions/overview.md` 的 opt-in 规则 |
-| D12 | legacy `initialize` 透传 `capabilities.extensions` | 旧版 schema 无该字段，但扩展规范鼓励透传；不影响 2024-11-05 兼容 |
+| D12 | legacy `initialize` 透传 `capabilities.extensions` | 旧版 schema 无该字段，但扩展规范鼓励透传；MCP Apps 例外，按 D29 处理 |
 | D13 | 测试框架使用仓库内单头文件实现 + CTest | 满足“零外部依赖”，与现有轻量定位一致 |
 | D14 | 集成测试使用内存传输，一进程一场景 | 规避 `CMCPSession` 单例状态串扰；真实 stdio 用冒烟脚本补充 |
 | D15 | 单元/集成门禁为强制，失败即停 | 保证每个单元与特性在进入下一步前可验证 |
@@ -760,6 +759,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 | D26 | 版本差异全部收敛到 `CProtocolRegistry` 的 profile 数据（时代、feature 位、方法集、错误码映射） | 新增更老/更新版本只加 profile，不新增版本专用 `if`；`supportedVersions`/`-32022.data.supported` 均由注册表生成 |
 | D27 | 禁止在分发、序列化、任务代码中出现版本号字符串比较或“新/旧”布尔开关 | 版本号比较会把每个新版本变成主干改动；用 `Supports()` 与 profile 数据表达差异，保证演进可扩展 |
 | D28 | 新增协议版本的固定操作：加 profile → 按需加 feature 枚举值 → 补 `unit.version_registry` 与 `integration.version_extensibility` | 把“如何扩展”固化为可执行清单，避免后续实施者另起炉灶 |
+| D29 | MCP Apps 仅随 2026-07-28 提供，2024-11-05 明确不支持 | 统一口径：legacy 不声明 Apps 扩展、不输出 `_meta.ui` 与 mcp-app 内容，避免“声明了却交付不了”的误导；Apps 视为仅现代扩展，legacy 序列化时过滤 |
 
 ## 7. 验证计划
 
@@ -880,12 +880,12 @@ ctest --test-dir build-tests --output-on-failure
 ### 7.6 MCP Apps（`integration.apps`）
 
 1. `server/discover` → `capabilities.extensions["io.modelcontextprotocol/ui"] == {}`。
-2. legacy `initialize` → `result.capabilities.extensions["io.modelcontextprotocol/ui"] == {}`（启用 Apps 时）。
+2. legacy `initialize` → `result.capabilities.extensions` 不包含 `io.modelcontextprotocol/ui`（即使启用了 Apps）；legacy `tools/list`/`resources/read` 不出现任何 UI 元数据。
 3. `tools/list` → `echo_app` 的 `_meta.ui.resourceUri == "ui://echo/app.html"`。
-4. `resources/read ui://echo/app.html` → `mimeType == "text/html;profile=mcp-app"`，`_meta.ui.csp`/`_meta.ui.permissions` 原样透传；不得出现 `domain`、`prefersBorder` 等本地文档未定义字段。
+4. `resources/read ui://echo/app.html` → `mimeType == "text/html;profile=mcp-app"`，`_meta.ui.csp`/`_meta.ui.permissions` 原样透传；当前只透传这两个子域，不输出 SDK 未建模的字段。
 5. `echo_app` 仍返回文本 `content`（优雅降级）。
 6. 客户端 `_meta.clientCapabilities.extensions["io.modelcontextprotocol/ui"].mimeTypes` 可被读取，且不影响服务端返回 UI 资源。
-7. 未调用 `RegisterServerAppsCapabilities()` 时，discover 与 initialize 均不包含该扩展。
+7. 未调用 `RegisterServerAppsCapabilities()` 时，`server/discover` 不包含该扩展；未启用时任何版本都不输出 UI 元数据。
 8. 应用自定义的非保留 `_meta` 键在结果中保留；协议保留键（`serverInfo`、`subscriptionId`）由 SDK 写入，应用同名值不覆盖。
 
 ### 7.7 双版本共存（`integration.dual_era`）
@@ -964,6 +964,7 @@ ctest --test-dir build-tests --output-on-failure
 - 复用约束已落实：未新增平行传输/会话/任务/序列化/注册体系，未引入第三方库；新类型均继承现有 `Request`/`Response`/`Notification`。
 - 版本演进可扩展：`supportedVersions`、`-32022.data.supported`、`initialize` 回退版本全部来自 `CProtocolRegistry`，代码中无硬编码版本列表；`unit.version_registry` 与 `integration.version_extensibility` 通过，证明新增假版本只需增加 profile、无需改动检测/分发/序列化主干；分发与序列化代码中不存在版本号字符串比较或“新/旧”布尔开关。
 - 2026-07-28 在 stdio 上完成 discover、双版本协商/回退、核心请求、MRTR、订阅、缓存、错误码、Apps 元数据。
+- MCP Apps 仅在 2026-07-28 生效；2024-11-05 不声明该扩展、不输出任何 UI 元数据。
 - README 明确写出：2026-07-28 仅提供 stdio binding，不是完整 transport 覆盖；Streamable HTTP 未实现。
 - 必填 `_meta` 缺失时返回 `-32602` 且不补默认值；`-32021` 带 `data.requiredCapabilities`。
 - 缓存字段只出现在 6 类可缓存 `complete` 结果上；`tools/call`、`prompts/get`、MRTR 结果不带。
