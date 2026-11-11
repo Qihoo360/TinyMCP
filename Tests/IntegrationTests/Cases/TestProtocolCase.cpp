@@ -169,6 +169,31 @@ namespace
 
 		return false;
 	}
+
+	// Minimal tool task for the one-stop registration scenario; the tools/call
+	// payload itself is covered by the other Apps cases.
+	class COnestopToolTask : public MCP::ProcessCallToolRequest
+	{
+	public:
+		COnestopToolTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessCallToolRequest(spRequest)
+		{
+		}
+
+		std::shared_ptr<MCP::CMCPTask> Clone() const override
+		{
+			auto spClone = std::make_shared<COnestopToolTask>(nullptr);
+			if (spClone)
+				*spClone = *this;
+
+			return spClone;
+		}
+
+		int Execute() override
+		{
+			return MCP::ERRNO_OK;
+		}
+	};
 }
 
 TEST_CASE("integration.discover")
@@ -1077,6 +1102,81 @@ TEST_CASE("integration.apps")
 		CHECK(!jLegacyTools[i].isMember(MSG_KEY_META));
 
 	driver.Stop();
+
+	// Phase 3: one-stop registration declares, registers and serves the App.
+	{
+		CDriver appDriver;
+		CMCPSession::GetInstance().ResetForNewClient();
+		CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.SetSupportedProtocolVersions(
+			{ PROTOCOL_VER_2024_11_05, PROTOCOL_VER_2026_07_28 }));
+		CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.Initialize());
+
+		const std::string strOneStopUri = "ui://echo/onestop.html";
+		const std::string strOneStopHtml = u8"<!DOCTYPE html><p>一站式 App</p>";
+
+		MCP::AppDefinition app;
+		app.tool.strName = "onestop_app";
+		app.tool.strDescription = "One-stop MCP App.";
+		app.tool.jInputSchema = Json::Value(Json::objectValue);
+		app.resource.strName = "One-stop App";
+		app.resource.strUri = strOneStopUri;
+		app.resource.strDescription = "UI registered by RegisterServerApp";
+		app.uiResourceMeta.bPrefersBorder = true;
+		app.uiResourceMeta.bHasPrefersBorder = true;
+		app.strHtml = strOneStopHtml;
+		app.spToolTask = std::make_shared<COnestopToolTask>(nullptr);
+		CHECK_EQ(ERRNO_OK, CTestServer::s_Instance.RegisterServerApp(app));
+		CHECK_EQ(ERRNO_OK, appDriver.Start(WAIT_TIMEOUT_MS));
+
+		Json::Value jAppResponse;
+		CHECK(ExpectResponse(appDriver, MakeRequest(20, METHOD_SERVER_DISCOVER,
+			MakeModernParams("2026-07-28", "{}")), jAppResponse));
+		CHECK(jAppResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+
+		// The tool keeps the previously registered entries and gets the default
+		// visibility injected.
+		CHECK(ExpectResponse(appDriver, MakeRequest(21, METHOD_TOOLS_LIST,
+			MakeModernParams("2026-07-28", "{}")), jAppResponse));
+		Json::Value jOneStopTool;
+		CHECK(FindTool(jAppResponse[MSG_KEY_RESULT], "onestop_app", jOneStopTool));
+		// The previously registered tools are still served.
+		Json::Value jPreviousTool;
+		CHECK(FindTool(jAppResponse[MSG_KEY_RESULT], CTestServer::APP_TOOL_NAME, jPreviousTool));
+		CHECK(FindTool(jAppResponse[MSG_KEY_RESULT], CTestServer::TOOL_NAME, jPreviousTool));
+		CHECK_EQ(strOneStopUri,
+			jOneStopTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+		CHECK_EQ(static_cast<Json::ArrayIndex>(2),
+			jOneStopTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_VISIBILITY].size());
+		CHECK_EQ(std::string(UI_VISIBILITY_MODEL),
+			jOneStopTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_VISIBILITY][0].asString());
+
+		// The ui:// resource is registered with the default MIME type and the UI
+		// metadata from AppDefinition.
+		CHECK(ExpectResponse(appDriver, MakeRequest(22, METHOD_RESOURCES_LIST,
+			MakeModernParams("2026-07-28", "{}")), jAppResponse));
+		Json::Value jOneStopResource;
+		CHECK(FindResource(jAppResponse[MSG_KEY_RESULT], strOneStopUri, jOneStopResource));
+		CHECK_EQ(std::string(MIME_TYPE_MCP_APP), jOneStopResource[MSG_KEY_MIMETYPE].asString());
+		CHECK(jOneStopResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PREFERS_BORDER].asBool());
+
+		// The built-in read task serves the HTML captured at registration time.
+		CHECK(ExpectResponse(appDriver, MakeRequest(23, METHOD_RESOURCES_READ,
+			MakeModernParams("2026-07-28", "{}", std::string(),
+				"\"uri\":\"" + strOneStopUri + "\"")), jAppResponse));
+		const Json::Value& jOneStopContents = jAppResponse[MSG_KEY_RESULT][MSG_KEY_CONTENTS][0];
+		CHECK_EQ(std::string(MIME_TYPE_MCP_APP), jOneStopContents[MSG_KEY_MIMETYPE].asString());
+		CHECK_EQ(strOneStopHtml, jOneStopContents[MSG_KEY_TEXT].asString());
+		CHECK(jOneStopContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PREFERS_BORDER].asBool());
+
+		// Legacy clients see none of the Apps surface.
+		CompleteLegacyHandshake(appDriver, 24);
+		CHECK(ExpectResponse(appDriver, MakeRequest(25, METHOD_TOOLS_LIST, std::string()), jAppResponse));
+		const Json::Value& jLegacyOneStopTools = jAppResponse[MSG_KEY_RESULT][MSG_KEY_TOOLS];
+		for (Json::ArrayIndex i = 0; i < jLegacyOneStopTools.size(); ++i)
+			CHECK(!jLegacyOneStopTools[i].isMember(MSG_KEY_META));
+
+		appDriver.Stop();
+	}
 }
 
 TEST_CASE("integration.dual_era")

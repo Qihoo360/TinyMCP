@@ -935,6 +935,36 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// ProcessStaticUiResourceReadTask
+	std::shared_ptr<CMCPTask> ProcessStaticUiResourceReadTask::Clone() const
+	{
+		auto spClone = std::make_shared<ProcessStaticUiResourceReadTask>(nullptr, m_resource, m_strHtml);
+		if (spClone)
+			*spClone = *this;
+
+		return spClone;
+	}
+
+	int ProcessStaticUiResourceReadTask::Execute()
+	{
+		if (!IsValid())
+			return ERRNO_INTERNAL_ERROR;
+
+		auto spResult = BuildResult();
+		if (!spResult)
+			return ERRNO_INTERNAL_ERROR;
+
+		MCP::TextResourceContents contents;
+		int iErrCode = BuildUiResourceContents(m_resource, m_strHtml, contents);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		spResult->vecTextResourceContents.push_back(contents);
+
+		return NotifyResult(spResult);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// ProcessSubscribeResourceRequest
 	bool ProcessSubscribeResourceRequest::IsFinished() const
 	{

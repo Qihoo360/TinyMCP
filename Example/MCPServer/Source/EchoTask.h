@@ -64,8 +64,10 @@ namespace Implementation
 		static constexpr const char* TOOL_OUTPUT_SCHEMA = u8R"({"type":"object","properties":{"echo":{"type":"string","description":"the echoed input"},"length":{"type":"integer","description":"character count of the echoed input"}},"required":["echo","length"]})";
 		static constexpr const char* TOOL_ARGUMENT_INPUT = "input";
 
-		CEchoAppTask(const std::shared_ptr<MCP::Request>& spRequest)
+		CEchoAppTask(const std::shared_ptr<MCP::Request>& spRequest,
+			const std::string& strToolName = TOOL_NAME)
 			: ProcessCallToolRequest(spRequest)
+			, m_strToolName(strToolName)
 		{
 
 		}
@@ -74,24 +76,21 @@ namespace Implementation
 
 		int Execute() override;
 		int Cancel() override;
+
+	private:
+		std::string m_strToolName;
 	};
 
-	class CEchoAppResourceReadTask : public MCP::ProcessReadResourceRequest
-	{
-	public:
-		static constexpr const char* RESOURCE_URI = "ui://echo/app.html";
+	// MCP Apps constants shared by the server registration and the subscription
+	// demo.
+	constexpr const char* ECHO_APP_RESOURCE_URI = "ui://echo/app.html";
+	constexpr const char* ECHO_FILE_APP_TOOL_NAME = "echo_file_app";
+	constexpr const char* ECHO_FILE_APP_TOOL_DESCRIPTION = u8"Same as echo_app, but its HTML is loaded from a local file at registration time.";
+	constexpr const char* ECHO_FILE_APP_RESOURCE_URI = "ui://echo/file-app.html";
 
-		CEchoAppResourceReadTask(const std::shared_ptr<MCP::Request>& spRequest)
-			: ProcessReadResourceRequest(spRequest)
-		{
-
-		}
-
-		std::shared_ptr<CMCPTask> Clone() const override;
-
-		int Execute() override;
-		int Cancel() override;
-	};
+	// The MCP Apps view served by the built-in resources/read task. It speaks the
+	// View<->Host bridge, which belongs to the host, not to the SDK.
+	const char* GetEchoAppHtml();
 
 	class CEchoResourceReadTask : public MCP::ProcessReadResourceRequest
 	{

@@ -247,7 +247,7 @@ namespace Implementation
 			return MCP::ERRNO_INTERNAL_ERROR;
 
 		auto spCallToolRequest = std::dynamic_pointer_cast<MCP::CallToolRequest>(m_spRequest);
-		if (!spCallToolRequest || spCallToolRequest->strName != TOOL_NAME)
+		if (!spCallToolRequest || spCallToolRequest->strName != m_strToolName)
 			return MCP::ERRNO_INTERNAL_ERROR;
 
 		std::string strInput;
@@ -278,43 +278,10 @@ namespace Implementation
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
-	// CEchoAppResourceReadTask
-	std::shared_ptr<MCP::CMCPTask> CEchoAppResourceReadTask::Clone() const
+	// GetEchoAppHtml
+	const char* GetEchoAppHtml()
 	{
-		auto spClone = std::make_shared<CEchoAppResourceReadTask>(nullptr);
-		if (spClone)
-		{
-			*spClone = *this;
-		}
-
-		return spClone;
-	}
-
-	int CEchoAppResourceReadTask::Cancel()
-	{
-		return MCP::ERRNO_OK;
-	}
-
-	int CEchoAppResourceReadTask::Execute()
-	{
-		if (!IsValid())
-			return MCP::ERRNO_INTERNAL_ERROR;
-
-		auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
-		if (!spReadResourceRequest)
-			return MCP::ERRNO_INTERNAL_ERROR;
-
-		auto spResult = BuildResult();
-		if (!spResult)
-			return MCP::ERRNO_INTERNAL_ERROR;
-
-		MCP::TextResourceContents textContent;
-		textContent.strUri = spReadResourceRequest->strUri;
-		textContent.strMimeType = MCP::MIME_TYPE_MCP_APP;
-		// The HTML below speaks the MCP Apps View<->Host bridge. It is demo glue,
-		// not SDK code: the host owns window.parent and answers ui/initialize,
-		// tools/call and the tool-input/tool-result notifications.
-		textContent.strText =
+		return
 			u8R"(<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -453,13 +420,6 @@ namespace Implementation
 </body>
 </html>
 )";
-		// Keep resources/read metadata identical to the registered ui:// resource.
-		MCP::UiResourceMeta uiMeta;
-		uiMeta.bClipboardWrite = true;
-		textContent.SetUiMeta(uiMeta);
-		spResult->vecTextResourceContents.push_back(textContent);
-
-		return NotifyResult(spResult);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

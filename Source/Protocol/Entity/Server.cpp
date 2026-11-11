@@ -3,7 +3,9 @@
 #include "../Public/StringHelper.h"
 #include "../Session/Session.h"
 
+#include <fstream>
 #include <set>
+#include <sstream>
 
 namespace MCP
 {
@@ -69,6 +71,51 @@ namespace MCP
 			}
 
 			return ERRNO_OK;
+		}
+
+		// A one-stop App is only accepted when every part needed at serve time is
+		// present. Nothing is registered until this passes, so a rejected call
+		// leaves the server exactly as it was.
+		int ValidateAppDefinition(const MCP::AppDefinition& app)
+		{
+			if (app.tool.strName.empty() || !app.tool.IsValid())
+				return ERRNO_INVALID_PARAMS;
+
+			if (!IsUiResourceUri(app.resource.strUri))
+				return ERRNO_INVALID_PARAMS;
+
+			if (app.resource.strName.empty())
+				return ERRNO_INVALID_PARAMS;
+
+			if (!app.resource.strMimeType.empty() && !IsMcpAppMimeType(app.resource.strMimeType))
+				return ERRNO_INVALID_PARAMS;
+
+			if (app.strHtml.empty())
+				return ERRNO_INVALID_PARAMS;
+
+			if (!app.spToolTask)
+				return ERRNO_INVALID_PARAMS;
+
+			const Json::Value& jMeta = app.tool.jMeta;
+			if (jMeta.isObject()
+				&& jMeta.isMember(MSG_KEY_UI)
+				&& jMeta[MSG_KEY_UI].isObject()
+				&& jMeta[MSG_KEY_UI].isMember(MSG_KEY_RESOURCE_URI))
+			{
+				const Json::Value& jResourceUri = jMeta[MSG_KEY_UI][MSG_KEY_RESOURCE_URI];
+				if (!jResourceUri.isString() || jResourceUri.asString() != app.resource.strUri)
+					return ERRNO_INVALID_PARAMS;
+			}
+
+			return ERRNO_OK;
+		}
+
+		bool HasUiVisibility(const Json::Value& jMeta)
+		{
+			return jMeta.isObject()
+				&& jMeta.isMember(MSG_KEY_UI)
+				&& jMeta[MSG_KEY_UI].isObject()
+				&& jMeta[MSG_KEY_UI].isMember(MSG_KEY_VISIBILITY);
 		}
 	}
 
@@ -216,6 +263,73 @@ namespace MCP
 		}
 
 		RegisterServerResources(vecUiResources, bPagination);
+	}
+
+	int CMCPServerBase::RegisterServerApp(const MCP::AppDefinition& app)
+	{
+		int iErrCode = ValidateAppDefinition(app);
+		if (ERRNO_OK != iErrCode)
+			return iErrCode;
+
+		// The App definition is the declaration, so the extension is advertised here
+		// instead of asking the application to announce it a second time.
+		RegisterServerAppsCapabilities();
+
+		MCP::Tool tool = app.tool;
+		tool.SetUiResourceUri(app.resource.strUri);
+		if (!HasUiVisibility(tool.jMeta))
+			tool.SetUiVisibility({ UI_VISIBILITY_MODEL, UI_VISIBILITY_APP });
+
+		MCP::Resource resource = app.resource;
+		resource.SetUiMeta(app.uiResourceMeta);
+
+		// The bulk registration APIs replace the whole list, so the existing
+		// declarations are carried over; a one-stop App adds to the server instead
+		// of replacing what was registered before it.
+		const bool bToolsPagination = Session().GetServerToolsPagination();
+		std::vector<MCP::Tool> vecTools = Session().GetServerTools();
+		vecTools.push_back(tool);
+		RegisterServerTools(vecTools, bToolsPagination);
+
+		const bool bResourcesPagination = Session().GetServerResourcesPagination();
+		std::vector<MCP::Resource> vecResources = Session().GetServerResources();
+		vecResources.push_back(resource);
+		RegisterServerUiResources(vecResources, bResourcesPagination);
+
+		RegisterToolsTasks(tool.strName, app.spToolTask);
+
+		auto spReadTask = std::make_shared<MCP::ProcessStaticUiResourceReadTask>(nullptr, resource, app.strHtml);
+		if (!spReadTask)
+			return ERRNO_INTERNAL_ERROR;
+		RegisterReadResourceTasks(resource.strUri, spReadTask);
+
+		return ERRNO_OK;
+	}
+
+	int CMCPServerBase::RegisterServerAppFromFile(const MCP::AppDefinition& app, const std::string& strHtmlFilePath)
+	{
+		if (strHtmlFilePath.empty())
+			return ERRNO_INVALID_PARAMS;
+
+		std::ifstream ifs(strHtmlFilePath.c_str(), std::ios::in | std::ios::binary);
+		if (!ifs.is_open())
+			return ERRNO_INVALID_PARAMS;
+
+		// Binary mode keeps the file byte-for-byte, so line endings and a UTF-8 BOM
+		// survive unchanged.
+		std::ostringstream oss;
+		oss << ifs.rdbuf();
+		if (ifs.bad())
+			return ERRNO_INVALID_PARAMS;
+
+		std::string strHtml = oss.str();
+		if (strHtml.empty())
+			return ERRNO_INVALID_PARAMS;
+
+		MCP::AppDefinition fileApp = app;
+		fileApp.strHtml = strHtml;
+
+		return RegisterServerApp(fileApp);
 	}
 
 	void CMCPServerBase::RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)

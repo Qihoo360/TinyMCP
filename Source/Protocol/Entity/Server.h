@@ -13,6 +13,19 @@
 
 namespace MCP
 {
+	// One-stop MCP Apps declaration. The tool names the entry point, the resource
+	// carries the view and the task answers tools/call. Fill it in and hand it to
+	// CMCPServerBase::RegisterServerApp instead of calling the step-by-step
+	// registration APIs one by one.
+	struct AppDefinition
+	{
+		MCP::Tool tool;
+		MCP::Resource resource;
+		MCP::UiResourceMeta uiResourceMeta;
+		std::string strHtml;
+		std::shared_ptr<MCP::ProcessCallToolRequest> spToolTask;
+	};
+
 	// Shared behaviour of every CMCPServer<T>. Keeping it outside the template
 	// lets the wiring live in Server.cpp: the header only describes what an
 	// application may call, and the session singleton stays hidden in the .cpp.
@@ -63,6 +76,18 @@ namespace MCP
 		// Convenience wrapper for UI resources; the UI metadata travels in
 		// Resource::jMeta unchanged.
 		void RegisterServerUiResources(const std::vector<MCP::Resource>& resources, bool bPagination);
+
+		// One-stop MCP Apps registration: advertises the extension, registers the
+		// tool and the ui:// resource, binds the tool task and a built-in
+		// resources/read task that serves strHtml. Invalid input is rejected with
+		// ERRNO_INVALID_PARAMS before anything is registered.
+		int RegisterServerApp(const MCP::AppDefinition& app);
+
+		// Same as RegisterServerApp, but reads strHtml from a local file in binary
+		// mode. A missing, unreadable or empty file is rejected with
+		// ERRNO_INVALID_PARAMS. Remote URLs, templates and hot reload are not
+		// supported.
+		int RegisterServerAppFromFile(const MCP::AppDefinition& app, const std::string& strHtmlFilePath);
 
 		void RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination);
 		void RegisterServerResources(const std::vector<MCP::Resource>& resources, bool bPagination);

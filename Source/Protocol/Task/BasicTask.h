@@ -252,6 +252,28 @@ namespace MCP
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 	};
 
+	// Built-in resources/read task for a MCP Apps view. It serves the HTML captured
+	// at registration time, so an application using RegisterServerApp does not
+	// have to implement this task itself.
+	class ProcessStaticUiResourceReadTask : public ProcessReadResourceRequest
+	{
+	public:
+		ProcessStaticUiResourceReadTask(const std::shared_ptr<MCP::Request>& spRequest,
+			const MCP::Resource& resource, const std::string& strHtml)
+			: ProcessReadResourceRequest(spRequest)
+			, m_resource(resource)
+			, m_strHtml(strHtml)
+		{
+		}
+
+		std::shared_ptr<CMCPTask> Clone() const override;
+		int Execute() override;
+
+	private:
+		MCP::Resource m_resource;
+		std::string m_strHtml;
+	};
+
 	class ProcessSubscribeResourceRequest : public ProcessRequest
 	{
 	public:

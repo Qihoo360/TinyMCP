@@ -1,6 +1,8 @@
 ﻿#include "EchoServer.h"
 #include "EchoTask.h"
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 
 namespace Implementation
 {
@@ -30,8 +32,8 @@ namespace Implementation
 		// 2026-07-28 capabilities. The legacy experimental flag above stays
 		// untouched so that 2024-11-05 clients receive the same payload as before.
 		RegisterServerCompletionsCapability();
-		// MCP Apps is opt-in; this call advertises io.modelcontextprotocol/ui.
-		RegisterServerAppsCapabilities();
+		// MCP Apps is declared by RegisterServerApp below, which also registers the
+		// app tool and its UI resource.
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
 		auto ParseInputSchema = [](const char* pszSchema, Json::Value& jSchemaValue) -> bool
@@ -62,18 +64,6 @@ namespace Implementation
 			return MCP::ERRNO_PARSE_ERROR;
 		vecTools.push_back(confirmTool);
 
-		// MCP Apps example: the tool points at the UI resource and still returns text.
-		MCP::Tool appTool;
-		appTool.strName = Implementation::CEchoAppTask::TOOL_NAME;
-		appTool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.jInputSchema))
-			return MCP::ERRNO_PARSE_ERROR;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.jOutputSchema))
-			return MCP::ERRNO_PARSE_ERROR;
-		appTool.SetUiResourceUri(Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
-		appTool.SetUiVisibility({ MCP::UI_VISIBILITY_MODEL, MCP::UI_VISIBILITY_APP });
-		vecTools.push_back(appTool);
-
         RegisterServerTools(vecTools, false);
 
 		MCP::Resource resource;
@@ -82,19 +72,7 @@ namespace Implementation
 		resource.strDescription = "Primary application entry point";
 		resource.strMimeType = "text/x-rust";
 
-		// MCP Apps UI resource. The permissions/csp block is minimal on purpose;
-		// hosts enforce the declared policy before rendering the HTML.
-		MCP::Resource appResource;
-		appResource.strName = "echo app";
-		appResource.strUri = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
-		appResource.strDescription = "MCP Apps UI for the echo server";
-		appResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
-
-		MCP::UiResourceMeta appUiMeta;
-		appUiMeta.bClipboardWrite = true;
-		appResource.SetUiMeta(appUiMeta);
-
-        RegisterServerResources({ resource, appResource }, false);
+        RegisterServerResources({ resource }, false);
 
 		MCP::ResourceTemplate resourceTemplate;
 		resourceTemplate.strName = "Project Files";
@@ -121,7 +99,57 @@ namespace Implementation
         explainCodePrompt.vecArguments.push_back(explainCodeArg);
         RegisterServerPrompts({ codeReviewPrompt, explainCodePrompt }, false);
 
-        // 4. Register the tasks for implementing the actual capabilities.
+        // 4. MCP Apps: one call advertises the extension, registers the tool and the
+        // UI resource, binds the tool task and a built-in resources/read task that
+        // serves the HTML below. Visibility defaults to {model, app}.
+        MCP::AppDefinition appDef;
+        appDef.tool.strName = Implementation::CEchoAppTask::TOOL_NAME;
+        appDef.tool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
+        if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appDef.tool.jInputSchema))
+            return MCP::ERRNO_PARSE_ERROR;
+        if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appDef.tool.jOutputSchema))
+            return MCP::ERRNO_PARSE_ERROR;
+        appDef.resource.strName = "echo app";
+        appDef.resource.strUri = Implementation::ECHO_APP_RESOURCE_URI;
+        appDef.resource.strDescription = "MCP Apps UI for the echo server";
+        appDef.resource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+        appDef.uiResourceMeta.bClipboardWrite = true;
+        appDef.strHtml = Implementation::GetEchoAppHtml();
+        appDef.spToolTask = std::make_shared<Implementation::CEchoAppTask>(nullptr);
+        if (!appDef.spToolTask)
+            return MCP::ERRNO_INTERNAL_ERROR;
+
+        int iErrCode = RegisterServerApp(appDef);
+        if (MCP::ERRNO_OK != iErrCode)
+            return iErrCode;
+
+        // The same view is also served through RegisterServerAppFromFile. The HTML
+        // is written to a local file for the registration and removed right after,
+        // so the sample does not depend on the working directory.
+        MCP::AppDefinition fileAppDef = appDef;
+        fileAppDef.tool.strName = Implementation::ECHO_FILE_APP_TOOL_NAME;
+        fileAppDef.tool.strDescription = Implementation::ECHO_FILE_APP_TOOL_DESCRIPTION;
+        fileAppDef.resource.strName = "echo file app";
+        fileAppDef.resource.strUri = Implementation::ECHO_FILE_APP_RESOURCE_URI;
+        fileAppDef.resource.strDescription = "MCP Apps UI loaded from a local HTML file";
+        fileAppDef.spToolTask = std::make_shared<Implementation::CEchoAppTask>(
+            nullptr, Implementation::ECHO_FILE_APP_TOOL_NAME);
+        if (!fileAppDef.spToolTask)
+            return MCP::ERRNO_INTERNAL_ERROR;
+
+        const std::string strHtmlPath = "echo_file_app.html";
+        {
+            std::ofstream htmlFile(strHtmlPath.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+            if (!htmlFile.is_open())
+                return MCP::ERRNO_INTERNAL_ERROR;
+            htmlFile << Implementation::GetEchoAppHtml();
+        }
+        iErrCode = RegisterServerAppFromFile(fileAppDef, strHtmlPath);
+        std::remove(strHtmlPath.c_str());
+        if (MCP::ERRNO_OK != iErrCode)
+            return iErrCode;
+
+        // 5. Register the tasks for implementing the actual capabilities.
         auto spCallToolsTask = std::make_shared<Implementation::CEchoTask>(nullptr);
         if (!spCallToolsTask)
             return MCP::ERRNO_INTERNAL_ERROR;
@@ -131,21 +159,11 @@ namespace Implementation
 		if (!spConfirmToolTask)
 			return MCP::ERRNO_INTERNAL_ERROR;
 		RegisterToolsTasks(Implementation::CEchoConfirmTask::TOOL_NAME, spConfirmToolTask);
-
-		auto spAppToolTask = std::make_shared<Implementation::CEchoAppTask>(nullptr);
-		if (!spAppToolTask)
-			return MCP::ERRNO_INTERNAL_ERROR;
-		RegisterToolsTasks(Implementation::CEchoAppTask::TOOL_NAME, spAppToolTask);
         
 		auto spReadResourceTask = std::make_shared<Implementation::CEchoResourceReadTask>(nullptr);
 		if (!spReadResourceTask)
             return MCP::ERRNO_INTERNAL_ERROR;
 		RegisterReadResourceTasks(resource.strUri, spReadResourceTask);
-
-		auto spReadAppResourceTask = std::make_shared<Implementation::CEchoAppResourceReadTask>(nullptr);
-		if (!spReadAppResourceTask)
-			return MCP::ERRNO_INTERNAL_ERROR;
-		RegisterReadResourceTasks(appResource.strUri, spReadAppResourceTask);
 
 		auto spSubscribeResourceTask = std::make_shared<Implementation::CEchoResourceSubscribeTask>(nullptr);
         if (!spSubscribeResourceTask)
@@ -165,7 +183,7 @@ namespace Implementation
         RegisterCompleteTasks(std::string(MCP::CONST_REF_PROMPT) + ":" + Implementation::CEchoGetPromptTask::PROMPT_EXPLAIN_CODE, spCompleteTask);
         RegisterCompleteTasks(std::string(MCP::CONST_REF_RESOURCE) + ":" + resource.strUri, spCompleteTask);
 
-        // 5. Start the subscriptions/listen demo.
+        // 6. Start the subscriptions/listen demo.
         StartSubscriptionDemo();
 
         return MCP::ERRNO_OK;
@@ -198,12 +216,12 @@ namespace Implementation
                     continue;
 
                 MCP::ResourceUpdatedNotification updated(false);
-                updated.strUri = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
+                updated.strUri = Implementation::ECHO_APP_RESOURCE_URI;
 
                 // Only active subscriptions/listen registrations receive this
                 // notification; a server without listeners sends nothing.
                 CEchoServer::GetInstance().SendSubscriptionNotification(
-                    updated, Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
+                    updated, Implementation::ECHO_APP_RESOURCE_URI);
             }
         });
     }

@@ -8,11 +8,76 @@
 #include <Internal/VersionExtras.h>
 #include <Session/Session.h>
 
+#include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
 using namespace MCP;
 using namespace MCP::Test;
+
+namespace
+{
+	class CAppToolTask : public MCP::ProcessCallToolRequest
+	{
+	public:
+		CAppToolTask(const std::shared_ptr<MCP::Request>& spRequest)
+			: ProcessCallToolRequest(spRequest)
+		{
+		}
+
+		std::shared_ptr<MCP::CMCPTask> Clone() const override
+		{
+			auto spClone = std::make_shared<CAppToolTask>(nullptr);
+			if (spClone)
+				*spClone = *this;
+
+			return spClone;
+		}
+
+		int Execute() override
+		{
+			return MCP::ERRNO_OK;
+		}
+	};
+
+	MCP::AppDefinition MakeValidApp(const std::string& strToolName, const std::string& strResourceUri,
+		const std::string& strHtml)
+	{
+		MCP::AppDefinition app;
+		app.tool.strName = strToolName;
+		app.tool.jInputSchema = Json::Value(Json::objectValue);
+		app.resource.strName = "One-stop App";
+		app.resource.strUri = strResourceUri;
+		app.spToolTask = std::make_shared<CAppToolTask>(nullptr);
+		app.strHtml = strHtml;
+
+		return app;
+	}
+
+	const MCP::Tool* FindRegisteredTool(const std::vector<MCP::Tool>& vecTools, const std::string& strName)
+	{
+		for (const auto& tool : vecTools)
+		{
+			if (tool.strName == strName)
+				return &tool;
+		}
+
+		return nullptr;
+	}
+
+	const MCP::Resource* FindRegisteredResource(const std::vector<MCP::Resource>& vecResources, const std::string& strUri)
+	{
+		for (const auto& resource : vecResources)
+		{
+			if (resource.strUri == strUri)
+				return &resource;
+		}
+
+		return nullptr;
+	}
+}
+
 
 TEST_CASE("unit.apps")
 {
@@ -130,4 +195,164 @@ TEST_CASE("unit.apps")
 	session.SetServerTools(vecSavedTools);
 	session.SetServerResources(vecSavedResources);
 	session.SetTransport(spSavedTransport);
+}
+
+TEST_CASE("unit.apps")
+{
+	CTestServer& server = CTestServer::s_Instance;
+	CMCPSession& session = CMCPSession::GetInstance();
+	const MCP::ServerCapabilities savedCapabilities = session.GetServerCapabilities();
+	const std::vector<MCP::Tool> savedTools = session.GetServerTools();
+	const std::vector<MCP::Resource> savedResources = session.GetServerResources();
+	const std::shared_ptr<MCP::CMCPTransport> savedTransport = session.GetTransport();
+
+	session.SetServerCapabilities(MCP::ServerCapabilities());
+	session.SetServerResources({});
+
+	// A previously registered tool must survive the one-stop registration.
+	MCP::Tool existingTool;
+	existingTool.strName = "existing";
+	existingTool.jInputSchema = Json::Value(Json::objectValue);
+	server.RegisterServerTools({ existingTool }, false);
+
+	const std::string strUri = "ui://echo/onestop.html";
+	const std::string strHtml = u8"<!DOCTYPE html><p>你好 App</p>";
+
+	// Every invalid definition is rejected before anything is registered.
+	{
+		MCP::AppDefinition emptyName = MakeValidApp(std::string(), strUri, strHtml);
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(emptyName));
+
+		MCP::AppDefinition nonUi = MakeValidApp("onestop_app", "https://example.com/app.html", strHtml);
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(nonUi));
+
+		MCP::AppDefinition wrongMime = MakeValidApp("onestop_app", strUri, strHtml);
+		wrongMime.resource.strMimeType = "text/html";
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(wrongMime));
+
+		MCP::AppDefinition emptyHtml = MakeValidApp("onestop_app", strUri, std::string());
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(emptyHtml));
+
+		MCP::AppDefinition noTask = MakeValidApp("onestop_app", strUri, strHtml);
+		noTask.spToolTask.reset();
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(noTask));
+
+		MCP::AppDefinition mismatch = MakeValidApp("onestop_app", strUri, strHtml);
+		mismatch.tool.SetUiResourceUri("ui://echo/other.html");
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerApp(mismatch));
+
+		CHECK_EQ(static_cast<size_t>(1), session.GetServerTools().size());
+		CHECK(session.GetServerResources().empty());
+		const MCP::ServerCapabilities unchanged = session.GetServerCapabilities();
+		CHECK(unchanged.mapExtensions.find(EXTENSION_UI) == unchanged.mapExtensions.end());
+	}
+
+	// A valid definition declares the extension and registers every part.
+	{
+		MCP::AppDefinition app = MakeValidApp("onestop_app", strUri, strHtml);
+		app.uiResourceMeta.bPrefersBorder = true;
+		app.uiResourceMeta.bHasPrefersBorder = true;
+		app.tool.SetUiVisibility({ UI_VISIBILITY_APP });
+		CHECK_EQ(ERRNO_OK, server.RegisterServerApp(app));
+
+		const MCP::ServerCapabilities capabilities = session.GetServerCapabilities();
+		CHECK(capabilities.mapExtensions.find(EXTENSION_UI) != capabilities.mapExtensions.end());
+		CHECK(capabilities.setModernOnlyExtensions.find(EXTENSION_UI) != capabilities.setModernOnlyExtensions.end());
+
+		const std::vector<MCP::Tool> tools = session.GetServerTools();
+		CHECK_EQ(static_cast<size_t>(2), tools.size());
+		CHECK(FindRegisteredTool(tools, "existing") != nullptr);
+
+		const MCP::Tool* pAppTool = FindRegisteredTool(tools, "onestop_app");
+		CHECK(pAppTool != nullptr);
+		if (pAppTool)
+		{
+			CHECK_EQ(strUri, pAppTool->jMeta[MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+			// An explicit visibility is preserved instead of being overwritten.
+			CHECK_EQ(static_cast<Json::ArrayIndex>(1), pAppTool->jMeta[MSG_KEY_UI][MSG_KEY_VISIBILITY].size());
+			CHECK_EQ(std::string(UI_VISIBILITY_APP),
+				pAppTool->jMeta[MSG_KEY_UI][MSG_KEY_VISIBILITY][0].asString());
+		}
+
+		const std::vector<MCP::Resource> resources = session.GetServerResources();
+		CHECK_EQ(static_cast<size_t>(1), resources.size());
+		const MCP::Resource* pResource = FindRegisteredResource(resources, strUri);
+		CHECK(pResource != nullptr);
+		if (pResource)
+		{
+			CHECK_EQ(std::string(MIME_TYPE_MCP_APP), pResource->strMimeType);
+			CHECK(pResource->jMeta[MSG_KEY_UI][MSG_KEY_PREFERS_BORDER].asBool());
+		}
+	}
+
+	// Visibility defaults to {model, app} when the tool does not declare one.
+	{
+		MCP::AppDefinition app = MakeValidApp("onestop_default_visibility", "ui://echo/onestop2.html", strHtml);
+		CHECK_EQ(ERRNO_OK, server.RegisterServerApp(app));
+
+		const std::vector<MCP::Tool> tools = session.GetServerTools();
+		const MCP::Tool* pTool = FindRegisteredTool(tools, "onestop_default_visibility");
+		CHECK(pTool != nullptr);
+		if (pTool)
+		{
+			const Json::Value& jVisibility = pTool->jMeta[MSG_KEY_UI][MSG_KEY_VISIBILITY];
+			CHECK_EQ(static_cast<Json::ArrayIndex>(2), jVisibility.size());
+			CHECK_EQ(std::string(UI_VISIBILITY_MODEL), jVisibility[0].asString());
+			CHECK_EQ(std::string(UI_VISIBILITY_APP), jVisibility[1].asString());
+		}
+	}
+
+	// RegisterServerAppFromFile reads the HTML in binary mode.
+	{
+		const std::string strPath = "unit_apps_view.html";
+		{
+			std::ofstream file(strPath.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+			file << strHtml;
+		}
+
+		MCP::AppDefinition fileApp = MakeValidApp("onestop_file_app", "ui://echo/file.html", std::string());
+		CHECK_EQ(ERRNO_OK, server.RegisterServerAppFromFile(fileApp, strPath));
+		std::remove(strPath.c_str());
+
+		const std::vector<MCP::Tool> tools = session.GetServerTools();
+		CHECK(FindRegisteredTool(tools, "onestop_file_app") != nullptr);
+		const std::vector<MCP::Resource> resources = session.GetServerResources();
+		CHECK(FindRegisteredResource(resources, "ui://echo/file.html") != nullptr);
+
+		// A missing file is rejected.
+		MCP::AppDefinition missingApp = MakeValidApp("onestop_missing", "ui://echo/missing.html", std::string());
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerAppFromFile(missingApp, "unit_apps_missing.html"));
+
+		// An empty file is rejected as well.
+		const std::string strEmptyPath = "unit_apps_empty.html";
+		{
+			std::ofstream file(strEmptyPath.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+		}
+		MCP::AppDefinition emptyApp = MakeValidApp("onestop_empty", "ui://echo/empty.html", std::string());
+		CHECK_EQ(ERRNO_INVALID_PARAMS, server.RegisterServerAppFromFile(emptyApp, strEmptyPath));
+		std::remove(strEmptyPath.c_str());
+
+		const std::vector<MCP::Tool> afterFailures = session.GetServerTools();
+		CHECK(FindRegisteredTool(afterFailures, "onestop_missing") == nullptr);
+		CHECK(FindRegisteredTool(afterFailures, "onestop_empty") == nullptr);
+	}
+
+	// The built-in read task is cloned per dispatch like every other prototype.
+	{
+		MCP::Resource uiResource;
+		uiResource.strName = "One-stop App";
+		uiResource.strUri = strUri;
+
+		MCP::ProcessStaticUiResourceReadTask prototype(nullptr, uiResource, strHtml);
+		std::shared_ptr<MCP::CMCPTask> spClone = prototype.Clone();
+		CHECK(spClone != nullptr);
+		CHECK(spClone.get() != &prototype);
+		CHECK(std::dynamic_pointer_cast<MCP::ProcessStaticUiResourceReadTask>(spClone) != nullptr);
+		CHECK_EQ(ERRNO_OK, spClone->Cancel());
+	}
+
+	session.SetServerCapabilities(savedCapabilities);
+	session.SetServerTools(savedTools);
+	session.SetServerResources(savedResources);
+	session.SetTransport(savedTransport);
 }
