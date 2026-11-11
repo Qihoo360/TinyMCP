@@ -210,5 +210,24 @@ TEST_CASE("unit.request")
 	CallToolRequest parsedRetry(false);
 	MessageContextAccess::Set(parsedRetry, ctxModern);
 	CHECK_EQ(ERRNO_OK, parsedRetry.DoDeserialize(jRetry));
-	CHECK_EQ(77, parsedRetry.toolCallId.iId);
+	CHECK_EQ(77.0, parsedRetry.toolCallId.iId);
+
+	// JSON-RPC ids are string or number; fractional values are preserved and an
+	// integral number keeps the legacy integer spelling.
+	Json::Value jFractionalId(Json::objectValue);
+	jFractionalId[MSG_KEY_ID] = 1.5;
+	RequestId fractionalId;
+	CHECK_EQ(ERRNO_OK, fractionalId.DoDeserialize(jFractionalId));
+	CHECK_EQ(DataType_Integer, fractionalId.eIdDataType);
+	Json::Value jFractionalIdOut(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, fractionalId.DoSerialize(jFractionalIdOut));
+	CHECK_EQ(1.5, jFractionalIdOut[MSG_KEY_ID].asDouble());
+
+	Json::Value jIntegralId(Json::objectValue);
+	jIntegralId[MSG_KEY_ID] = 2.0;
+	RequestId integralId;
+	CHECK_EQ(ERRNO_OK, integralId.DoDeserialize(jIntegralId));
+	Json::Value jIntegralIdOut(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, integralId.DoSerialize(jIntegralIdOut));
+	CHECK(jIntegralIdOut[MSG_KEY_ID].isInt());
 }

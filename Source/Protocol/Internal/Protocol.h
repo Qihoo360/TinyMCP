@@ -6,6 +6,7 @@
 #include "../Public/PublicDef.h"
 
 #include <bitset>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -13,6 +14,22 @@
 
 namespace MCP
 {
+	// Schema fields declared as JSON "number" are modelled as double, but an
+	// integral value must keep the legacy integer spelling in serialized output
+	// (jsoncpp writes 1.0 for a double otherwise).
+	inline Json::Value MakeJsonNumber(double dValue)
+	{
+		const double dMin = static_cast<double>(std::numeric_limits<Json::Int64>::min());
+		const double dMax = static_cast<double>(std::numeric_limits<Json::Int64>::max());
+		if (dValue >= dMin && dValue <= dMax
+			&& dValue == static_cast<double>(static_cast<Json::Int64>(dValue)))
+		{
+			return Json::Value(static_cast<Json::Int64>(dValue));
+		}
+
+		return Json::Value(dValue);
+	}
+
 	// Interaction model of a protocol revision. This is the only architectural
 	// extension point: adding a version number must not add a new era.
 	enum ProtocolEra
@@ -41,8 +58,8 @@ namespace MCP
 		Feature_ContentAudio,
 		Feature_ContentResourceLink,
 		Feature_ContentToolUse,
-		Feature_ContentAnnotations,
 		Feature_LogLevelInMeta,
+		Feature_AnnotationLastModified,
 		Feature_Count,
 	};
 

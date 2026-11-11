@@ -58,7 +58,7 @@ namespace MCP
 		// Internal to the SDK. CMCPServer builds the registry from the versions
 		// the application declares, so callers never construct profiles.
 		int SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions);
-		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
+		void SetServerCacheOptions(double iTtlMs, const std::string& strCacheScope);
 		void SetServerInstructions(const std::string& strInstructions);
 		std::string GetServerInstructions() const;
 
@@ -134,7 +134,7 @@ namespace MCP
 		std::shared_ptr<MCP::ProcessRequest> GetServerGetPromptTask(const std::string& strPromptName);
 		std::shared_ptr<MCP::ProcessRequest> GetServerCompleteTask(const std::string& strTaskKey);
 
-		int GetServerCacheTtlMs() const;
+		double GetServerCacheTtlMs() const;
 		std::string GetServerCacheScope() const;
 
 		// Era resolution and result preparation shared by every task.
@@ -233,7 +233,7 @@ namespace MCP
 
 		std::unique_ptr<CProtocolRegistry> m_upRegistry;
 		std::shared_ptr<TaskServices> m_spTaskServices;
-		int m_iCacheTtlMs{ 0 };
+		double m_iCacheTtlMs{ 0 };
 		std::string m_strCacheScope{ CACHE_SCOPE_PRIVATE };
 		std::string m_strServerInstructions;
 		std::unordered_map<std::string, SubscriptionState> m_hashSubscriptions;

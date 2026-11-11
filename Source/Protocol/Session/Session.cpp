@@ -62,7 +62,7 @@ namespace MCP
 		std::string MakeRequestIdKey(const RequestId& requestId)
 		{
 			if (DataType_Integer == requestId.eIdDataType)
-				return std::string("i:") + std::to_string(requestId.iId);
+				return std::string("i:") + MakeJsonNumber(requestId.iId).asString();
 
 			if (DataType_String == requestId.eIdDataType)
 				return std::string("s:") + requestId.strId;
@@ -1690,14 +1690,15 @@ namespace MCP
 		return *m_upRegistry;
 	}
 
-	void CMCPSession::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
+	void CMCPSession::SetServerCacheOptions(double iTtlMs, const std::string& strCacheScope)
 	{
 		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		m_iCacheTtlMs = iTtlMs;
-		m_strCacheScope = strCacheScope.empty() ? CACHE_SCOPE_PRIVATE : strCacheScope;
+		m_strCacheScope = (strCacheScope == CACHE_SCOPE_PUBLIC)
+			? CACHE_SCOPE_PUBLIC : CACHE_SCOPE_PRIVATE;
 	}
 
-	int CMCPSession::GetServerCacheTtlMs() const
+	double CMCPSession::GetServerCacheTtlMs() const
 	{
 		std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
 		return m_iCacheTtlMs;
@@ -1811,16 +1812,16 @@ namespace MCP
 
 		if (spResponse->IsCacheableResult())
 		{
-			int iDefaultTtlMs = 0;
+			double dDefaultTtlMs = 0;
 			std::string strDefaultCacheScope;
 			{
 				std::lock_guard<std::mutex> _lock(m_mtxServerOptions);
-				iDefaultTtlMs = m_iCacheTtlMs;
+				dDefaultTtlMs = m_iCacheTtlMs;
 				strDefaultCacheScope = m_strCacheScope;
 			}
 
 			if (spResponse->iTtlMs < 0)
-				spResponse->iTtlMs = iDefaultTtlMs;
+				spResponse->iTtlMs = dDefaultTtlMs;
 
 			if (spResponse->strCacheScope.empty())
 				spResponse->strCacheScope = strDefaultCacheScope;

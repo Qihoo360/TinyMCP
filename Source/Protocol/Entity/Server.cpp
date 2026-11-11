@@ -199,7 +199,7 @@ namespace MCP
 		Session().SetServerInstructions(strInstructions);
 	}
 
-	void CMCPServerBase::SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope)
+	void CMCPServerBase::SetServerCacheOptions(double iTtlMs, const std::string& strCacheScope)
 	{
 		Session().SetServerCacheOptions(iTtlMs, strCacheScope);
 	}

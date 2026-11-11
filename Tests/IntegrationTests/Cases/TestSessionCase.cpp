@@ -441,10 +441,15 @@ TEST_CASE("unit.robustness")
 		jResponse));
 	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 
-	// Integers beyond the int range used to throw out of asInt() and terminate
-	// the process. Such an id cannot be echoed, so the request is dropped.
-	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":4294967296,\"method\":\"ping\"}", 2));
-	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":1e10,\"method\":\"ping\"}", 3));
+	// Numeric ids within the double safe range are echoed exactly, including
+	// values beyond the int range. Integers that cannot be represented exactly
+	// are dropped because the reply would no longer carry the original id.
+	CHECK(ExpectResponse(driver, "{\"jsonrpc\":\"2.0\",\"id\":4294967296,\"method\":\"ping\"}", jResponse));
+	CHECK_EQ(4294967296.0, jResponse[MSG_KEY_ID].asDouble());
+	CHECK(jResponse.isMember(MSG_KEY_RESULT));
+	CHECK(ExpectResponse(driver, "{\"jsonrpc\":\"2.0\",\"id\":1e10,\"method\":\"ping\"}", jResponse));
+	CHECK_EQ(10000000000.0, jResponse[MSG_KEY_ID].asDouble());
+	CHECK(jResponse.isMember(MSG_KEY_RESULT));
 	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"id\":-9223372036854775808,\"method\":\"ping\"}", 4));
 
 	// A mistyped method has no usable envelope and is dropped without crashing.

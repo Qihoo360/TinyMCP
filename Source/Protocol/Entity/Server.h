@@ -58,7 +58,7 @@ namespace MCP
 		void RegisterServerAppsCapabilities();
 
 		void RegisterServerInstructions(const std::string& strInstructions);
-		void SetServerCacheOptions(int iTtlMs, const std::string& strCacheScope);
+		void SetServerCacheOptions(double iTtlMs, const std::string& strCacheScope);
 
 		// Convenience wrapper for UI resources; the UI metadata travels in
 		// Resource::jMeta unchanged.

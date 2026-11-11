@@ -597,7 +597,7 @@ namespace MCP
 		return spCallToolResult;
 	}
 
-	int ProcessCallToolRequest::NotifyProgress(int iProgress, int iTotal)
+	int ProcessCallToolRequest::NotifyProgress(double dProgress, double dTotal)
 	{
 		if (!m_spRequest)
 			return ERRNO_INTERNAL_ERROR;
@@ -613,8 +613,8 @@ namespace MCP
 			MCP::ProgressNotification progressNotification(false);
 			progressNotification.strMethod = METHOD_NOTIFICATION_PROGRESS;
 			progressNotification.progressToken = m_spRequest->progressToken;
-			progressNotification.iProgress = iProgress;
-			progressNotification.iTotal = iTotal;
+			progressNotification.iProgress = dProgress;
+			progressNotification.iTotal = dTotal;
 
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
@@ -819,7 +819,7 @@ namespace MCP
 		return spReadResourceResult;
 	}
 
-	int ProcessReadResourceRequest::NotifyProgress(int iProgress, int iTotal)
+	int ProcessReadResourceRequest::NotifyProgress(double dProgress, double dTotal)
 	{
 		if (!m_spRequest)
 			return ERRNO_INTERNAL_ERROR;
@@ -835,8 +835,8 @@ namespace MCP
 			MCP::ProgressNotification progressNotification(false);
 			progressNotification.strMethod = METHOD_NOTIFICATION_PROGRESS;
 			progressNotification.progressToken = m_spRequest->progressToken;
-			progressNotification.iProgress = iProgress;
-			progressNotification.iTotal = iTotal;
+			progressNotification.iProgress = dProgress;
+			progressNotification.iTotal = dTotal;
 
 			std::string strNotification;
 			if (ERRNO_OK != progressNotification.Serialize(strNotification))
@@ -1345,7 +1345,7 @@ namespace MCP
 		return spResult;
 	}
 
-	int ProcessGetPromptRequest::NotifyProgress(int iProgress, int iTotal)
+	int ProcessGetPromptRequest::NotifyProgress(double dProgress, double dTotal)
 	{
 		auto spRequest = std::dynamic_pointer_cast<GetPromptRequest>(m_spRequest);
 		if (!spRequest)
@@ -1365,8 +1365,8 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		spProgressNotification->progressToken = spRequest->progressToken;
-		spProgressNotification->iProgress = iProgress;
-		spProgressNotification->iTotal = iTotal;
+		spProgressNotification->iProgress = dProgress;
+		spProgressNotification->iTotal = dTotal;
 
 		std::string strNotification;
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))
@@ -1507,7 +1507,7 @@ namespace MCP
 		return spResult;
 	}
 
-	int ProcessCompleteRequest::NotifyProgress(int iProgress, int iTotal)
+	int ProcessCompleteRequest::NotifyProgress(double dProgress, double dTotal)
 	{
 		auto spRequest = std::dynamic_pointer_cast<CompleteRequest>(m_spRequest);
 		if (!spRequest)
@@ -1527,8 +1527,8 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 
 		spProgressNotification->progressToken = spRequest->progressToken;
-		spProgressNotification->iProgress = iProgress;
-		spProgressNotification->iTotal = iTotal;
+		spProgressNotification->iProgress = dProgress;
+		spProgressNotification->iTotal = dTotal;
 
 		std::string strNotification;
 		if (ERRNO_OK != spProgressNotification->Serialize(strNotification))

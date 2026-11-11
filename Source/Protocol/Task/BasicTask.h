@@ -210,7 +210,7 @@ namespace MCP
 		bool IsFinished() const override;
 		bool IsCancelled() const override;
 		std::shared_ptr<MCP::CallToolResult> BuildResult();
-		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyProgress(double dProgress, double dTotal);
 		int NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult);
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
@@ -243,7 +243,7 @@ namespace MCP
 		bool IsFinished() const override;
 		bool IsCancelled() const override;
 		std::shared_ptr<MCP::ReadResourceResult> BuildResult();
-		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyProgress(double dProgress, double dTotal);
 		int NotifyResult(std::shared_ptr<MCP::ReadResourceResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
@@ -327,7 +327,7 @@ namespace MCP
 		bool IsFinished() const override;
 		bool IsCancelled() const override;
 		std::shared_ptr<MCP::GetPromptResult> BuildResult();
-		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyProgress(double dProgress, double dTotal);
 		int NotifyResult(std::shared_ptr<MCP::GetPromptResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
@@ -348,7 +348,7 @@ namespace MCP
 		bool IsFinished() const override;
 		bool IsCancelled() const override;
 		std::shared_ptr<MCP::CompleteResult> BuildResult();
-		int NotifyProgress(int iProgress, int iTotal);
+		int NotifyProgress(double dProgress, double dTotal);
 		int NotifyResult(std::shared_ptr<MCP::CompleteResult> spResult);
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();

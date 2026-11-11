@@ -66,14 +66,37 @@ namespace MCP
 			}
 		}
 
-		void WriteAnnotationsIfPresent(Json::Value& jObj, const Annotations& annotations)
+		void WriteAnnotationsIfPresent(Json::Value& jObj, const Annotations& annotations,
+			const ProtocolContext& ctxProtocol)
 		{
 			if (!annotations.HasValue())
 				return;
 
 			Json::Value jAnnotations(Json::objectValue);
-			if (ERRNO_OK == annotations.DoSerialize(jAnnotations))
-				jObj[MSG_KEY_ANNOTATIONS] = jAnnotations;
+			if (ERRNO_OK != annotations.DoSerialize(jAnnotations))
+				return;
+
+			// Annotations exist since 2024-11-05, but lastModified was introduced
+			// by 2026-07-28; the legacy shape only carries audience and priority.
+			if (!ctxProtocol.Supports(Feature_AnnotationLastModified))
+				jAnnotations.removeMember(MSG_KEY_LAST_MODIFIED);
+
+			if (jAnnotations.empty())
+				return;
+
+			jObj[MSG_KEY_ANNOTATIONS] = jAnnotations;
+		}
+
+		void ReadAnnotationsIfPresent(const Json::Value& jObj, Annotations& annotations,
+			const ProtocolContext& ctxProtocol)
+		{
+			if (!jObj.isMember(MSG_KEY_ANNOTATIONS) || !jObj[MSG_KEY_ANNOTATIONS].isObject())
+				return;
+
+			annotations.DoDeserialize(jObj[MSG_KEY_ANNOTATIONS]);
+
+			if (!ctxProtocol.Supports(Feature_AnnotationLastModified))
+				annotations.strLastModified.clear();
 		}
 
 		void WriteMetaIfPresent(Json::Value& jObj, const Json::Value& jMeta)
@@ -85,8 +108,7 @@ namespace MCP
 		// Shared gate order for entity level extras (title/icons/annotations/_meta).
 		void WriteEntityVersionExtras(Json::Value& jObj, const ProtocolContext& ctxProtocol,
 			const std::string& strTitle, const std::vector<Icon>& vecIcons,
-			const Json::Value& jMeta, const Annotations* pAnnotations,
-			ProtocolFeature eAnnotationFeature)
+			const Json::Value& jMeta, const Annotations* pAnnotations)
 		{
 			if (ctxProtocol.Supports(Feature_ToolTitle))
 			{
@@ -94,8 +116,8 @@ namespace MCP
 				WriteIconsIfNotEmpty(jObj, vecIcons);
 			}
 
-			if (nullptr != pAnnotations && ctxProtocol.Supports(eAnnotationFeature))
-				WriteAnnotationsIfPresent(jObj, *pAnnotations);
+			if (nullptr != pAnnotations)
+				WriteAnnotationsIfPresent(jObj, *pAnnotations, ctxProtocol);
 
 			if (ctxProtocol.Supports(Feature_EntityMeta))
 				WriteMetaIfPresent(jObj, jMeta);
@@ -103,8 +125,7 @@ namespace MCP
 
 		void ReadEntityVersionExtras(const Json::Value& jObj, const ProtocolContext& ctxProtocol,
 			std::string& strTitle, std::vector<Icon>& vecIcons,
-			Json::Value& jMeta, Annotations* pAnnotations,
-			ProtocolFeature eAnnotationFeature)
+			Json::Value& jMeta, Annotations* pAnnotations)
 		{
 			if (ctxProtocol.Supports(Feature_ToolTitle))
 			{
@@ -113,11 +134,8 @@ namespace MCP
 				ReadIconsIfPresent(jObj, vecIcons);
 			}
 
-			if (nullptr != pAnnotations && ctxProtocol.Supports(eAnnotationFeature))
-			{
-				if (jObj.isMember(MSG_KEY_ANNOTATIONS) && jObj[MSG_KEY_ANNOTATIONS].isObject())
-					pAnnotations->DoDeserialize(jObj[MSG_KEY_ANNOTATIONS]);
-			}
+			if (nullptr != pAnnotations)
+				ReadAnnotationsIfPresent(jObj, *pAnnotations, ctxProtocol);
 
 			if (ctxProtocol.Supports(Feature_EntityMeta))
 			{
@@ -129,8 +147,9 @@ namespace MCP
 		void WriteContentVersionExtras(Json::Value& jObj, const ProtocolContext& ctxProtocol,
 			const Json::Value& jMeta, const Annotations& annotations)
 		{
-			if (ctxProtocol.Supports(Feature_ContentAnnotations))
-				WriteAnnotationsIfPresent(jObj, annotations);
+			// Content annotations are part of every revision; only their
+			// lastModified sub field is modern.
+			WriteAnnotationsIfPresent(jObj, annotations, ctxProtocol);
 
 			if (ctxProtocol.Supports(Feature_EntityMeta))
 				WriteMetaIfPresent(jObj, jMeta);
@@ -139,11 +158,7 @@ namespace MCP
 		void ReadContentVersionExtras(const Json::Value& jObj, const ProtocolContext& ctxProtocol,
 			Json::Value& jMeta, Annotations& annotations)
 		{
-			if (ctxProtocol.Supports(Feature_ContentAnnotations)
-				&& jObj.isMember(MSG_KEY_ANNOTATIONS) && jObj[MSG_KEY_ANNOTATIONS].isObject())
-			{
-				annotations.DoDeserialize(jObj[MSG_KEY_ANNOTATIONS]);
-			}
+			ReadAnnotationsIfPresent(jObj, annotations, ctxProtocol);
 
 			if (ctxProtocol.Supports(Feature_EntityMeta)
 				&& jObj.isMember(MSG_KEY_META) && jObj[MSG_KEY_META].isObject())
@@ -170,7 +185,9 @@ namespace MCP
 			jMsg[MSG_KEY_SIZES] = jSizes;
 		}
 
-		WriteStringIfNotEmpty(jMsg, MSG_KEY_THEME, strTheme);
+		// theme is a closed enum: "light" | "dark".
+		if (strTheme == "light" || strTheme == "dark")
+			WriteStringIfNotEmpty(jMsg, MSG_KEY_THEME, strTheme);
 
 		return ERRNO_OK;
 	}
@@ -214,18 +231,21 @@ namespace MCP
 
 	int Annotations::DoSerialize(Json::Value& jMsg) const
 	{
-		if (!vecAudience.empty())
+		Json::Value jAudience(Json::arrayValue);
+		for (const auto& strAudience : vecAudience)
 		{
-			Json::Value jAudience(Json::arrayValue);
-			for (const auto& strAudience : vecAudience)
+			// audience is Role[]: only "user" and "assistant" are valid.
+			if (strAudience == CONST_USER || strAudience == CONST_ASSISTANT)
 				jAudience.append(strAudience);
-			jMsg[MSG_KEY_AUDIENCE] = jAudience;
 		}
+		if (!jAudience.empty())
+			jMsg[MSG_KEY_AUDIENCE] = jAudience;
 
 		if (bHasPriority)
 		{
-			Json::Value jPriority(dPriority);
-			jMsg[MSG_KEY_PRIORITY] = jPriority;
+			// priority is constrained to [0, 1] by the schema.
+			double dValue = dPriority < 0.0 ? 0.0 : (dPriority > 1.0 ? 1.0 : dPriority);
+			jMsg[MSG_KEY_PRIORITY] = MakeJsonNumber(dValue);
 		}
 
 		WriteStringIfNotEmpty(jMsg, MSG_KEY_LAST_MODIFIED, strLastModified);
@@ -244,7 +264,11 @@ namespace MCP
 			for (const auto& jAudience : jMsg[MSG_KEY_AUDIENCE])
 			{
 				if (jAudience.isString())
-					vecAudience.push_back(jAudience.asString());
+				{
+					const std::string strAudience = jAudience.asString();
+					if (strAudience == CONST_USER || strAudience == CONST_ASSISTANT)
+						vecAudience.push_back(strAudience);
+				}
 			}
 		}
 
@@ -252,6 +276,10 @@ namespace MCP
 		{
 			bHasPriority = true;
 			dPriority = jMsg[MSG_KEY_PRIORITY].asDouble();
+			if (dPriority < 0.0)
+				dPriority = 0.0;
+			else if (dPriority > 1.0)
+				dPriority = 1.0;
 		}
 
 		if (jMsg.isMember(MSG_KEY_LAST_MODIFIED) && jMsg[MSG_KEY_LAST_MODIFIED].isString())
@@ -370,7 +398,7 @@ namespace MCP
 		if (DataType_String == eIdDataType)
 			jValue = Json::Value(strId);
 		else if (DataType_Integer == eIdDataType)
-			jValue = Json::Value(iId);
+			jValue = MakeJsonNumber(iId);
 		else
 			jValue = Json::Value();
 
@@ -386,19 +414,25 @@ namespace MCP
 		if (!jMsg.isMember(strMsgKey))
 			return ERRNO_INVALID_REQUEST;
 		bool bStrId = jMsg[strMsgKey].isString();
-		// isIntegral() also accepts values beyond the int range, where asInt() throws.
-		bool bIntId = jMsg[strMsgKey].isInt();
-		if (!bStrId && !bIntId)
+		// JSON-RPC ids are string or number; isNumeric also accepts 1.0 and 1e3.
+		bool bNumId = jMsg[strMsgKey].isNumeric();
+		if (!bStrId && !bNumId)
 			return ERRNO_INVALID_REQUEST;
 		if (bStrId)
 		{
 			eIdDataType = DataType_String;
 			strId = jMsg[strMsgKey].asString();
 		}
-		if (bIntId)
+		if (bNumId)
 		{
+			const double dId = jMsg[strMsgKey].asDouble();
+			// A number beyond the double safe-integer range cannot be echoed
+			// exactly, so it is rejected instead of being silently rounded.
+			if (dId > 9007199254740992.0 || dId < -9007199254740992.0)
+				return ERRNO_INVALID_REQUEST;
+
 			eIdDataType = DataType_Integer;
-			iId = jMsg[strMsgKey].asInt();
+			iId = dId;
 		}
 
 		return ERRNO_OK;
@@ -1004,10 +1038,7 @@ namespace MCP
 		WriteStringIfNotEmpty(jMsg, MSG_KEY_MIMETYPE, strMimeType);
 
 		if (iSize > 0)
-		{
-			Json::Value jSize(iSize);
-			jMsg[MSG_KEY_SIZE] = jSize;
-		}
+			jMsg[MSG_KEY_SIZE] = MakeJsonNumber(iSize);
 
 		WriteIconsIfNotEmpty(jMsg, vecIcons);
 
@@ -1032,8 +1063,8 @@ namespace MCP
 			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
 		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
 			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
-		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isInt())
-			iSize = jMsg[MSG_KEY_SIZE].asInt();
+		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isNumeric())
+			iSize = jMsg[MSG_KEY_SIZE].asDouble();
 
 		ReadIconsIfPresent(jMsg, vecIcons);
 
@@ -1122,8 +1153,10 @@ namespace MCP
 		Json::Value jToolUseId(strToolUseId);
 		jMsg[MSG_KEY_TOOL_USE_ID] = jToolUseId;
 
-		if (jContent.isArray() && !jContent.empty())
+		if (jContent.isArray())
 			jMsg[MSG_KEY_CONTENT] = jContent;
+		else
+			jMsg[MSG_KEY_CONTENT] = Json::Value(Json::arrayValue);
 
 		if (bHasIsError)
 		{
@@ -1400,10 +1433,8 @@ namespace MCP
 
 	bool TextResourceContents::IsValid() const
 	{
-		if (strText.empty() || strUri.empty())
-			return false;
-
-		return true;
+		// text may be an empty string; only the uri is required.
+		return !strUri.empty();
 	}
 
 	int TextResourceContents::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
@@ -1468,10 +1499,8 @@ namespace MCP
 
 	bool BlobResourceContents::IsValid() const
 	{
-		if (strBlob.empty() || strUri.empty())
-			return false;
-
-		return true;
+		// blob may be an empty string; only the uri is required.
+		return !strUri.empty();
 	}
 
 	int BlobResourceContents::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
@@ -1522,10 +1551,7 @@ namespace MCP
 			jMsg[MSG_KEY_MIMETYPE] = jMimeType;
 		}
 		if (iSize > 0)
-		{
-			Json::Value jSize(iSize);
-			jMsg[MSG_KEY_SIZE] = jSize;
-		}
+			jMsg[MSG_KEY_SIZE] = MakeJsonNumber(iSize);
 
 		return ERRNO_OK;
 	}
@@ -1542,8 +1568,8 @@ namespace MCP
 			strDescription = jMsg[MSG_KEY_DESCRIPTION].asString();
 		if (jMsg.isMember(MSG_KEY_MIMETYPE) && jMsg[MSG_KEY_MIMETYPE].isString())
 			strMimeType = jMsg[MSG_KEY_MIMETYPE].asString();
-		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isInt())
-			iSize = jMsg[MSG_KEY_SIZE].asInt();
+		if (jMsg.isMember(MSG_KEY_SIZE) && jMsg[MSG_KEY_SIZE].isNumeric())
+			iSize = jMsg[MSG_KEY_SIZE].asDouble();
 
 		return ERRNO_OK;
 	}
@@ -1559,7 +1585,7 @@ namespace MCP
 	int Resource::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
 	{
 		WriteEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			&annotations, Feature_ToolAnnotations);
+			&annotations);
 
 		return ERRNO_OK;
 	}
@@ -1567,7 +1593,7 @@ namespace MCP
 	int Resource::DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol)
 	{
 		ReadEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			&annotations, Feature_ToolAnnotations);
+			&annotations);
 
 		return ERRNO_OK;
 	}
@@ -1650,7 +1676,7 @@ namespace MCP
 	int ResourceTemplate::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
 	{
 		WriteEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			&annotations, Feature_ToolAnnotations);
+			&annotations);
 
 		return ERRNO_OK;
 	}
@@ -1658,7 +1684,7 @@ namespace MCP
 	int ResourceTemplate::DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol)
 	{
 		ReadEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			&annotations, Feature_ToolAnnotations);
+			&annotations);
 
 		return ERRNO_OK;
 	}
@@ -1674,8 +1700,7 @@ namespace MCP
 		}
 		else if (DataType_Integer == eTokenDataType)
 		{
-			Json::Value jId(iToken);
-			jMsg[MSG_KEY_PROGRESS_TOKEN] = jId;
+			jMsg[MSG_KEY_PROGRESS_TOKEN] = MakeJsonNumber(iToken);
 		}
 
 		return ERRNO_OK;
@@ -1686,18 +1711,25 @@ namespace MCP
 		if (!jMsg.isMember(MSG_KEY_PROGRESS_TOKEN))
 			return ERRNO_INVALID_REQUEST;
 		bool bStrId = jMsg[MSG_KEY_PROGRESS_TOKEN].isString();
-		bool bIntId = jMsg[MSG_KEY_PROGRESS_TOKEN].isInt();
-		if (!bStrId && !bIntId)
+		// Progress tokens are string or number; isNumeric also accepts 1.0 and 1e3.
+		bool bNumId = jMsg[MSG_KEY_PROGRESS_TOKEN].isNumeric();
+		if (!bStrId && !bNumId)
 			return ERRNO_INVALID_REQUEST;
 		if (bStrId)
 		{
 			eTokenDataType = DataType_String;
 			strToken = jMsg[MSG_KEY_PROGRESS_TOKEN].asString();
 		}
-		if (bIntId)
+		if (bNumId)
 		{
+			const double dToken = jMsg[MSG_KEY_PROGRESS_TOKEN].asDouble();
+			// Same safe-range rule as request ids: what cannot be echoed exactly
+			// must not be accepted.
+			if (dToken > 9007199254740992.0 || dToken < -9007199254740992.0)
+				return ERRNO_INVALID_REQUEST;
+
 			eTokenDataType = DataType_Integer;
-			iToken = jMsg[MSG_KEY_PROGRESS_TOKEN].asInt();
+			iToken = dToken;
 		}
 
 		return ERRNO_OK;
@@ -1812,7 +1844,7 @@ namespace MCP
 	int Prompt::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
 	{
 		WriteEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			nullptr, Feature_ToolAnnotations);
+			nullptr);
 
 		return ERRNO_OK;
 	}
@@ -1820,7 +1852,7 @@ namespace MCP
 	int Prompt::DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol)
 	{
 		ReadEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
-			nullptr, Feature_ToolAnnotations);
+			nullptr);
 
 		return ERRNO_OK;
 	}
@@ -1840,6 +1872,14 @@ namespace MCP
 		else if (strContentType == CONST_IMAGE)
 		{
 			imageContent.DoSerialize(jContent);
+		}
+		else if (strContentType == CONST_AUDIO)
+		{
+			audioContent.DoSerialize(jContent);
+		}
+		else if (strContentType == CONST_RESOURCE_LINK)
+		{
+			resourceLink.DoSerialize(jContent);
 		}
 		else if (strContentType == CONST_RESOURCE)
 		{
@@ -1873,6 +1913,14 @@ namespace MCP
 		{
 			imageContent.DoDeserialize(jContent);
 		}
+		else if (strContentType == CONST_AUDIO)
+		{
+			audioContent.DoDeserialize(jContent);
+		}
+		else if (strContentType == CONST_RESOURCE_LINK)
+		{
+			resourceLink.DoDeserialize(jContent);
+		}
 		else if (strContentType == CONST_RESOURCE)
 		{
 			embeddedResource.DoDeserialize(jContent);
@@ -1883,7 +1931,14 @@ namespace MCP
 
 	bool PromptMessage::IsValid() const
 	{
-		return (strRole == CONST_USER || strRole == CONST_ASSISTANT) && !strContentType.empty();
+		if (strRole != CONST_USER && strRole != CONST_ASSISTANT)
+			return false;
+
+		return strContentType == CONST_TEXT
+			|| strContentType == CONST_IMAGE
+			|| strContentType == CONST_AUDIO
+			|| strContentType == CONST_RESOURCE_LINK
+			|| strContentType == CONST_RESOURCE;
 	}
 
 	int PromptMessage::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
@@ -1896,6 +1951,10 @@ namespace MCP
 			return VersionExtrasAccess::Serialize(textContent, jContent, ctxProtocol);
 		if (strContentType == CONST_IMAGE)
 			return VersionExtrasAccess::Serialize(imageContent, jContent, ctxProtocol);
+		if (strContentType == CONST_AUDIO)
+			return VersionExtrasAccess::Serialize(audioContent, jContent, ctxProtocol);
+		if (strContentType == CONST_RESOURCE_LINK)
+			return VersionExtrasAccess::Serialize(resourceLink, jContent, ctxProtocol);
 		if (strContentType == CONST_RESOURCE)
 			return VersionExtrasAccess::Serialize(embeddedResource, jContent, ctxProtocol);
 

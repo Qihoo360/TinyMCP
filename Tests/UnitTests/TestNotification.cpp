@@ -174,4 +174,40 @@ TEST_CASE("unit.notification")
 	CHECK_EQ(std::string("tinymcp"), jLogging[MSG_KEY_PARAMS][MSG_KEY_LOGGER].asString());
 	CHECK_EQ(std::string("hello"), jLogging[MSG_KEY_PARAMS][MSG_KEY_DATA]["message"].asString());
 	CHECK(!jLogging[MSG_KEY_PARAMS].isMember(MSG_KEY_META));
+
+	// progress/total are JSON numbers and keep fractional values.
+	ProgressNotification progress(false);
+	progress.strMethod = METHOD_NOTIFICATION_PROGRESS;
+	progress.progressToken.eTokenDataType = DataType_Integer;
+	progress.progressToken.iToken = 5;
+	progress.iProgress = 0.5;
+	progress.iTotal = 2.5;
+	MessageContextAccess::Set(progress, ctxLegacy);
+	CHECK(progress.IsValid());
+
+	Json::Value jProgress = SerializeNotification(progress);
+	CHECK_EQ(0.5, jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS].asDouble());
+	CHECK_EQ(2.5, jProgress[MSG_KEY_PARAMS][MSG_KEY_TOTAL].asDouble());
+	CHECK(jProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS_TOKEN].isInt());
+
+	ProgressNotification parsedProgress(false);
+	CHECK_EQ(ERRNO_OK, parsedProgress.DoDeserialize(jProgress));
+	CHECK(parsedProgress.iProgress > 0.49 && parsedProgress.iProgress < 0.51);
+	CHECK(parsedProgress.iTotal > 2.49 && parsedProgress.iTotal < 2.51);
+
+	// Integral values keep the legacy integer spelling.
+	progress.iProgress = 1;
+	progress.iTotal = 4;
+	Json::Value jIntegralProgress = SerializeNotification(progress);
+	CHECK(jIntegralProgress[MSG_KEY_PARAMS][MSG_KEY_PROGRESS].isInt());
+	CHECK(jIntegralProgress[MSG_KEY_PARAMS][MSG_KEY_TOTAL].isInt());
+
+	// Progress tokens are string or number; a fractional number is preserved.
+	Json::Value jFractionalToken(Json::objectValue);
+	jFractionalToken[MSG_KEY_PROGRESS_TOKEN] = 1.5;
+	ProgressToken fractionalToken;
+	CHECK_EQ(ERRNO_OK, fractionalToken.DoDeserialize(jFractionalToken));
+	Json::Value jFractionalTokenOut(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, fractionalToken.DoSerialize(jFractionalTokenOut));
+	CHECK_EQ(1.5, jFractionalTokenOut[MSG_KEY_PROGRESS_TOKEN].asDouble());
 }

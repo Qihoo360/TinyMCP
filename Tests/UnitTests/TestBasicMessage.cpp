@@ -145,7 +145,10 @@ TEST_CASE("unit.message")
 	resource.DoSerialize(jLegacyResource);
 	VersionExtrasAccess::Serialize(resource, jLegacyResource, ctxLegacy);
 	CHECK(!jLegacyResource.isMember(MSG_KEY_TITLE));
-	CHECK(!jLegacyResource.isMember(MSG_KEY_ANNOTATIONS));
+	// annotations exist in 2024-11-05; lastModified does not.
+	CHECK_EQ(std::string(CONST_USER),
+		jLegacyResource[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
+	CHECK(!jLegacyResource[MSG_KEY_ANNOTATIONS].isMember(MSG_KEY_LAST_MODIFIED));
 	CHECK(!jLegacyResource.isMember(MSG_KEY_META));
 
 	Json::Value jModernResource(Json::objectValue);
@@ -426,7 +429,7 @@ TEST_CASE("unit.content_blocks")
 	const ProtocolContext ctxLegacy = MakeLegacyContext();
 	const ProtocolContext ctxModern = MakeModernContext();
 
-	// Text content: annotations and _meta never leak into the legacy profile.
+	// Text content: annotations exist in every revision, _meta is modern only.
 	TextContent text;
 	text.strType = CONST_TEXT;
 	text.strText = "hello";
@@ -440,7 +443,9 @@ TEST_CASE("unit.content_blocks")
 	Json::Value jLegacyText(Json::objectValue);
 	text.DoSerialize(jLegacyText);
 	VersionExtrasAccess::Serialize(text, jLegacyText, ctxLegacy);
-	CHECK(!jLegacyText.isMember(MSG_KEY_ANNOTATIONS));
+	CHECK_EQ(std::string(CONST_USER), jLegacyText[MSG_KEY_ANNOTATIONS][MSG_KEY_AUDIENCE][0].asString());
+	CHECK(jLegacyText[MSG_KEY_ANNOTATIONS][MSG_KEY_PRIORITY].asDouble() > 0.49);
+	CHECK(!jLegacyText[MSG_KEY_ANNOTATIONS].isMember(MSG_KEY_LAST_MODIFIED));
 	CHECK(!jLegacyText.isMember(MSG_KEY_META));
 
 	Json::Value jModernText(Json::objectValue);
@@ -630,6 +635,105 @@ TEST_CASE("unit.content_blocks")
 	promptMessage.DoSerialize(jPromptMessage);
 	VersionExtrasAccess::Serialize(promptMessage, jPromptMessage, ctxModern);
 	CHECK_EQ(std::string("abc"), jPromptMessage[MSG_KEY_CONTENT][MSG_KEY_META]["trace"].asString());
+
+	// An empty text/blob is legal; the embedded resource must still be emitted.
+	EmbeddedResource emptyTextEmbedded;
+	emptyTextEmbedded.strType = CONST_RESOURCE;
+	emptyTextEmbedded.textResource.strUri = "file:///empty.txt";
+	CHECK(emptyTextEmbedded.IsValid());
+	Json::Value jEmptyTextEmbedded(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, emptyTextEmbedded.DoSerialize(jEmptyTextEmbedded));
+	CHECK_EQ(std::string("file:///empty.txt"),
+		jEmptyTextEmbedded[MSG_KEY_RESOURCE][MSG_KEY_URI].asString());
+	CHECK(jEmptyTextEmbedded[MSG_KEY_RESOURCE].isMember(MSG_KEY_TEXT));
+	CHECK_EQ(std::string(""), jEmptyTextEmbedded[MSG_KEY_RESOURCE][MSG_KEY_TEXT].asString());
+
+	EmbeddedResource emptyBlobEmbedded;
+	emptyBlobEmbedded.strType = CONST_RESOURCE;
+	emptyBlobEmbedded.blobResource.strUri = "file:///empty.bin";
+	CHECK(emptyBlobEmbedded.IsValid());
+	Json::Value jEmptyBlobEmbedded(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, emptyBlobEmbedded.DoSerialize(jEmptyBlobEmbedded));
+	CHECK(jEmptyBlobEmbedded[MSG_KEY_RESOURCE].isMember(MSG_KEY_BLOB));
+	CHECK_EQ(std::string(""), jEmptyBlobEmbedded[MSG_KEY_RESOURCE][MSG_KEY_BLOB].asString());
+
+	// Prompt messages support every ContentBlock of 2026-07-28.
+	PromptMessage audioMessage;
+	audioMessage.strRole = CONST_USER;
+	audioMessage.strContentType = CONST_AUDIO;
+	audioMessage.audioContent.strType = CONST_AUDIO;
+	audioMessage.audioContent.strData = "AAAA";
+	audioMessage.audioContent.strMimeType = "audio/wav";
+	CHECK(audioMessage.IsValid());
+
+	Json::Value jAudioMessage(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, audioMessage.DoSerialize(jAudioMessage));
+	CHECK_EQ(std::string(CONST_AUDIO), jAudioMessage[MSG_KEY_CONTENT][MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("audio/wav"), jAudioMessage[MSG_KEY_CONTENT][MSG_KEY_MIMETYPE].asString());
+
+	PromptMessage parsedAudioMessage;
+	CHECK_EQ(ERRNO_OK, parsedAudioMessage.DoDeserialize(jAudioMessage));
+	CHECK_EQ(std::string(CONST_AUDIO), parsedAudioMessage.strContentType);
+	CHECK_EQ(std::string("AAAA"), parsedAudioMessage.audioContent.strData);
+
+	PromptMessage linkMessage;
+	linkMessage.strRole = CONST_ASSISTANT;
+	linkMessage.strContentType = CONST_RESOURCE_LINK;
+	linkMessage.resourceLink.strType = CONST_RESOURCE_LINK;
+	linkMessage.resourceLink.strName = "readme";
+	linkMessage.resourceLink.strUri = "file:///readme.md";
+	CHECK(linkMessage.IsValid());
+
+	Json::Value jLinkMessage(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, linkMessage.DoSerialize(jLinkMessage));
+	CHECK_EQ(std::string(CONST_RESOURCE_LINK), jLinkMessage[MSG_KEY_CONTENT][MSG_KEY_TYPE].asString());
+	CHECK_EQ(std::string("file:///readme.md"), jLinkMessage[MSG_KEY_CONTENT][MSG_KEY_URI].asString());
+
+	PromptMessage invalidMessage;
+	invalidMessage.strRole = CONST_USER;
+	invalidMessage.strContentType = "video";
+	CHECK(!invalidMessage.IsValid());
+
+	// The nested content array of a tool result is mandatory, even when empty.
+	ToolResultContent emptyToolResult;
+	emptyToolResult.strType = CONST_TOOL_RESULT;
+	emptyToolResult.strToolUseId = "call-1";
+	Json::Value jEmptyToolResult(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, emptyToolResult.DoSerialize(jEmptyToolResult));
+	CHECK(jEmptyToolResult[MSG_KEY_CONTENT].isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(0), jEmptyToolResult[MSG_KEY_CONTENT].size());
+
+	// audience/priority/theme are closed sets; invalid values never leave the SDK.
+	Annotations invalidAnnotations;
+	invalidAnnotations.vecAudience.push_back("robot");
+	invalidAnnotations.bHasPriority = true;
+	invalidAnnotations.dPriority = 5.0;
+	Json::Value jInvalidAnnotations(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, invalidAnnotations.DoSerialize(jInvalidAnnotations));
+	CHECK(!jInvalidAnnotations.isMember(MSG_KEY_AUDIENCE));
+	CHECK_EQ(1.0, jInvalidAnnotations[MSG_KEY_PRIORITY].asDouble());
+
+	Icon invalidThemeIcon;
+	invalidThemeIcon.strSrc = "https://example.com/icon.png";
+	invalidThemeIcon.strTheme = "blue";
+	Json::Value jInvalidThemeIcon(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, invalidThemeIcon.DoSerialize(jInvalidThemeIcon));
+	CHECK(!jInvalidThemeIcon.isMember(MSG_KEY_THEME));
+
+	// size is a JSON number: fractional values survive, integral ones keep the
+	// legacy integer spelling.
+	Resource sizedResource;
+	sizedResource.strName = "n";
+	sizedResource.strUri = "file:///n";
+	sizedResource.iSize = 1.5;
+	Json::Value jFractionalSize(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, sizedResource.DoSerialize(jFractionalSize));
+	CHECK_EQ(1.5, jFractionalSize[MSG_KEY_SIZE].asDouble());
+
+	sizedResource.iSize = 2;
+	Json::Value jIntegralSize(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, sizedResource.DoSerialize(jIntegralSize));
+	CHECK(jIntegralSize[MSG_KEY_SIZE].isInt());
 }
 
 TEST_CASE("unit.meta")

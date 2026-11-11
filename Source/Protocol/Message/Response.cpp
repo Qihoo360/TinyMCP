@@ -68,13 +68,15 @@ namespace MCP
 			&& !bMrtrRetry)
 		{
 			if (iTtlMs >= 0)
-			{
-				Json::Value jTtlMs(iTtlMs);
-				jResult[MSG_KEY_TTL_MS] = jTtlMs;
-			}
+				jResult[MSG_KEY_TTL_MS] = MakeJsonNumber(iTtlMs);
 
 			if (!strCacheScope.empty())
-				jResult[MSG_KEY_CACHE_SCOPE] = strCacheScope;
+			{
+				// cacheScope is a closed enum in the schema; never publish a
+				// caller supplied value outside it.
+				jResult[MSG_KEY_CACHE_SCOPE] =
+					(strCacheScope == CACHE_SCOPE_PUBLIC) ? CACHE_SCOPE_PUBLIC : CACHE_SCOPE_PRIVATE;
+			}
 		}
 
 		Json::Value jMeta(Json::objectValue);
@@ -339,27 +341,8 @@ namespace MCP
 				jContent.append(jEmbedded);
 			}
 		}
-		if (ctxProtocol.Supports(Feature_ContentToolUse))
-		{
-			for (auto& toolUse : vecToolUseContent)
-			{
-				Json::Value jToolUse(Json::objectValue);
-				if (ERRNO_OK == toolUse.DoSerialize(jToolUse))
-				{
-					VersionExtrasAccess::Serialize(toolUse, jToolUse, ctxProtocol);
-					jContent.append(jToolUse);
-				}
-			}
-			for (auto& toolResult : vecToolResultContent)
-			{
-				Json::Value jToolResult(Json::objectValue);
-				if (ERRNO_OK == toolResult.DoSerialize(jToolResult))
-				{
-					VersionExtrasAccess::Serialize(toolResult, jToolResult, ctxProtocol);
-					jContent.append(jToolResult);
-				}
-			}
-		}
+		// tool_use/tool_result belong to SamplingMessageContentBlock, not to a
+		// tools/call result (ContentBlock is text/image/audio/resource_link/resource).
 		jResult[MSG_KEY_CONTENT] = jContent;
 
 		if (ctxProtocol.Supports(Feature_StructuredContent) && structuredContent.HasValue())
@@ -383,20 +366,9 @@ namespace MCP
 
 	bool CallToolResult::IsValid() const
 	{
-		// An MRTR round trip carries no content until the input is supplied.
-		if (RESULT_TYPE_INPUT_REQUIRED == strResultType)
-			return requestId.IsValid();
-
-		if (vecTextContent.empty()
-			&& vecImageContent.empty()
-			&& vecAudioContent.empty()
-			&& vecResourceLinkContent.empty()
-			&& vecEmbeddedResource.empty()
-			&& vecToolUseContent.empty()
-			&& vecToolResultContent.empty())
-			return false;
-
-		return true;
+		// content is required but may be empty: a tool can return only
+		// structuredContent, and MRTR round trips carry no content yet.
+		return Response::IsValid();
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -660,10 +632,7 @@ namespace MCP
 		jCompletion[MSG_KEY_VALUES] = jValues;
 
 		if (iTotal >= 0)
-		{
-			Json::Value jTotal(iTotal);
-			jCompletion[MSG_KEY_TOTAL] = jTotal;
-		}
+			jCompletion[MSG_KEY_TOTAL] = MakeJsonNumber(iTotal);
 
 		Json::Value jHasMore(bHasMore);
 		jCompletion[MSG_KEY_HAS_MORE] = jHasMore;
@@ -684,7 +653,8 @@ namespace MCP
 
 	bool CompleteResult::IsValid() const
 	{
-		return !vecValues.empty();
+		// completion.values may be empty when no option matches the prefix.
+		return Response::IsValid();
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////

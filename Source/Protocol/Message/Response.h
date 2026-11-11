@@ -20,7 +20,8 @@ namespace MCP
 		std::string strResultType;
 		MCP::InputRequests inputRequests;
 		std::string strRequestState;
-		int iTtlMs{ -1 };
+		// ttlMs is a JSON number in the 2026-07-28 schema.
+		double iTtlMs{ -1 };
 		std::string strCacheScope;
 		Json::Value jResultMeta;
 		Json::Value jServerInfo;
@@ -127,8 +128,6 @@ namespace MCP
 		std::vector<MCP::AudioContent> vecAudioContent;
 		std::vector<MCP::ResourceLink> vecResourceLinkContent;
 		std::vector<MCP::EmbeddedResource> vecEmbeddedResource;
-		std::vector<MCP::ToolUseContent> vecToolUseContent;
-		std::vector<MCP::ToolResultContent> vecToolResultContent;
 		MCP::StructuredContent structuredContent;
 
 		bool IsValid() const override;
@@ -235,7 +234,8 @@ namespace MCP
 		}
 
 		std::vector<std::string> vecValues;
-		int iTotal{ -1 };
+		// completion.total is a JSON number; -1 means unset.
+		double iTotal{ -1 };
 		bool bHasMore{ false };
 
 		bool IsValid() const override;

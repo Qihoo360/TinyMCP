@@ -86,7 +86,8 @@ namespace MCP
 		}
 
 		DataType eIdDataType{ DataType_Unknown };
-		int iId{ -1 };
+		// JSON-RPC ids are string or number; a double keeps fractional values.
+		double iId{ -1 };
 		std::string strId;
 
 		bool IsValid() const override;
@@ -408,7 +409,7 @@ namespace MCP
 		std::string strTitle;
 		std::string strDescription;
 		std::string strMimeType;
-		int iSize{ 0 };
+		double iSize{ 0 };
 		std::vector<Icon> vecIcons;
 		Annotations annotations;
 		Json::Value jMeta;
@@ -618,7 +619,7 @@ namespace MCP
 		std::string strUri;
 		std::string strDescription;
 		std::string strMimeType;
-		int iSize{ 0 };
+		double iSize{ 0 };
 		std::string strTitle;
 		std::vector<Icon> vecIcons;
 		Annotations annotations;
@@ -725,9 +726,11 @@ namespace MCP
 		}
 
 		std::string strRole; // "user" or "assistant"
-		std::string strContentType; // "text", "image", or "resource"
+		std::string strContentType; // "text", "image", "audio", "resource_link" or "resource"
 		TextContent textContent;
 		ImageContent imageContent;
+		AudioContent audioContent;
+		ResourceLink resourceLink;
 		EmbeddedResource embeddedResource;
 
 		bool IsValid() const override;
@@ -750,7 +753,8 @@ namespace MCP
 		}
 
 		DataType eTokenDataType{ DataType_Unknown };
-		int iToken{ -1 };
+		// Progress tokens are string or number; a double keeps fractional values.
+		double iToken{ -1 };
 		std::string strToken;
 
 		bool IsValid() const override;

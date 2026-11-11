@@ -221,4 +221,44 @@ TEST_CASE("unit.response")
 	DiscoverResult emptyDiscover(false);
 	emptyDiscover.requestId = MakeRequestId(12);
 	CHECK(!emptyDiscover.IsValid());
+
+	// content is required but may be empty: structuredContent-only results and
+	// MRTR round trips are legal.
+	CallToolResult emptyContentTool(false);
+	emptyContentTool.requestId = MakeRequestId(15);
+	MessageContextAccess::Set(emptyContentTool, ctxModern);
+	Json::Value jEmptyContentTool = SerializeMessage(emptyContentTool);
+	CHECK(jEmptyContentTool[MSG_KEY_RESULT][MSG_KEY_CONTENT].isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(0),
+		jEmptyContentTool[MSG_KEY_RESULT][MSG_KEY_CONTENT].size());
+
+	// completion.values may be empty when no option matches the prefix.
+	CompleteResult emptyCompletion(false);
+	emptyCompletion.requestId = MakeRequestId(16);
+	MessageContextAccess::Set(emptyCompletion, ctxModern);
+	Json::Value jEmptyCompletion = SerializeMessage(emptyCompletion);
+	CHECK(jEmptyCompletion[MSG_KEY_RESULT][MSG_KEY_COMPLETION][MSG_KEY_VALUES].isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(0),
+		jEmptyCompletion[MSG_KEY_RESULT][MSG_KEY_COMPLETION][MSG_KEY_VALUES].size());
+	CHECK(!jEmptyCompletion[MSG_KEY_RESULT][MSG_KEY_COMPLETION].isMember(MSG_KEY_TOTAL));
+
+	// completion.total is a JSON number.
+	emptyCompletion.vecValues.push_back("a");
+	emptyCompletion.iTotal = 2.5;
+	Json::Value jFractionalTotal = SerializeMessage(emptyCompletion);
+	CHECK_EQ(2.5, jFractionalTotal[MSG_KEY_RESULT][MSG_KEY_COMPLETION][MSG_KEY_TOTAL].asDouble());
+
+	emptyCompletion.iTotal = 3;
+	Json::Value jIntegralTotal = SerializeMessage(emptyCompletion);
+	CHECK(jIntegralTotal[MSG_KEY_RESULT][MSG_KEY_COMPLETION][MSG_KEY_TOTAL].isInt());
+
+	// cacheScope is a closed enum; an unknown value is normalized to "private".
+	ListToolsResult unknownScope(false);
+	unknownScope.requestId = MakeRequestId(17);
+	MessageContextAccess::Set(unknownScope, ctxModern);
+	unknownScope.iTtlMs = 10;
+	unknownScope.strCacheScope = "shared";
+	Json::Value jUnknownScope = SerializeMessage(unknownScope);
+	CHECK_EQ(std::string(CACHE_SCOPE_PRIVATE),
+		jUnknownScope[MSG_KEY_RESULT][MSG_KEY_CACHE_SCOPE].asString());
 }

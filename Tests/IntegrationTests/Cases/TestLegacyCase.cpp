@@ -107,7 +107,7 @@ namespace MCP
 			{
 				static const char* FORBIDDEN_KEYS[] = {
 					"resultType", "ttlMs", "cacheScope", "extensions", "structuredContent",
-					"title", "icons", "outputSchema", "annotations",
+					"title", "icons", "outputSchema",
 					"audio", "resource_link", "tool_use", "tool_result"
 				};
 

@@ -382,13 +382,11 @@ namespace MCP
 			CHECK_EQ(std::string(RESULT_TYPE_COMPLETE), jRich[MSG_KEY_RESULT_TYPE].asString());
 			CHECK(!jRich.isMember(MSG_KEY_TTL_MS));
 			CHECK(!jRich.isMember(MSG_KEY_CACHE_SCOPE));
-			CHECK_EQ(6, static_cast<int>(jRich[MSG_KEY_CONTENT].size()));
+			CHECK_EQ(4, static_cast<int>(jRich[MSG_KEY_CONTENT].size()));
 			CHECK_EQ(std::string(CONST_TEXT), jRich[MSG_KEY_CONTENT][0][MSG_KEY_TYPE].asString());
 			CHECK_EQ(std::string(CONST_IMAGE), jRich[MSG_KEY_CONTENT][1][MSG_KEY_TYPE].asString());
 			CHECK_EQ(std::string(CONST_AUDIO), jRich[MSG_KEY_CONTENT][2][MSG_KEY_TYPE].asString());
 			CHECK_EQ(std::string(CONST_RESOURCE_LINK), jRich[MSG_KEY_CONTENT][3][MSG_KEY_TYPE].asString());
-			CHECK_EQ(std::string(CONST_TOOL_USE), jRich[MSG_KEY_CONTENT][4][MSG_KEY_TYPE].asString());
-			CHECK_EQ(std::string(CONST_TOOL_RESULT), jRich[MSG_KEY_CONTENT][5][MSG_KEY_TYPE].asString());
 
 			// SDK reserved _meta keys win over application provided values.
 			CHECK(ExpectResponse(client, 6, METHOD_TOOLS_CALL,

@@ -218,24 +218,6 @@ namespace MCP
 						richLink.strUri = CTestServer::RESOURCE_URI;
 						spRichResult->vecResourceLinkContent.push_back(richLink);
 
-						MCP::ToolUseContent richToolUse;
-						richToolUse.strType = MCP::CONST_TOOL_USE;
-						richToolUse.strId = "call-1";
-						richToolUse.strName = CTestServer::TOOL_NAME;
-						richToolUse.jInput["input"] = "nested";
-						spRichResult->vecToolUseContent.push_back(richToolUse);
-
-						MCP::ToolResultContent richToolResult;
-						richToolResult.strType = MCP::CONST_TOOL_RESULT;
-						richToolResult.strToolUseId = "call-1";
-						Json::Value jNestedText(Json::objectValue);
-						jNestedText[MCP::MSG_KEY_TYPE] = MCP::CONST_TEXT;
-						jNestedText[MCP::MSG_KEY_TEXT] = "nested";
-						richToolResult.jContent.append(jNestedText);
-						richToolResult.bHasIsError = true;
-						richToolResult.bIsError = false;
-						spRichResult->vecToolResultContent.push_back(richToolResult);
-
 						spRichResult->bIsError = false;
 
 						return NotifyResult(spRichResult);

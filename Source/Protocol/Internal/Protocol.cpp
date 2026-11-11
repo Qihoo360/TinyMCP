@@ -61,8 +61,8 @@ namespace MCP
 				Feature_ContentAudio,
 				Feature_ContentResourceLink,
 				Feature_ContentToolUse,
-				Feature_ContentAnnotations,
 				Feature_LogLevelInMeta,
+				Feature_AnnotationLastModified,
 			};
 			for (const ProtocolFeature& eFeature : arrFeatures)
 				profile.bitsFeatures.set(static_cast<size_t>(eFeature));

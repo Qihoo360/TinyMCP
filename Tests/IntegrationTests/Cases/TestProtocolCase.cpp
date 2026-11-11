@@ -552,13 +552,14 @@ TEST_CASE("integration.modern_core")
 	const Json::Value& jContent = jCallResult[MSG_KEY_CONTENT];
 	for (Json::ArrayIndex i = 0; i < jContent.size(); ++i)
 		setTypes.insert(jContent[i][MSG_KEY_TYPE].asString());
-	CHECK_EQ(static_cast<size_t>(6), setTypes.size());
+	CHECK_EQ(static_cast<size_t>(4), setTypes.size());
 	CHECK(1 == setTypes.count(CONST_TEXT));
 	CHECK(1 == setTypes.count(CONST_IMAGE));
 	CHECK(1 == setTypes.count(CONST_AUDIO));
 	CHECK(1 == setTypes.count(CONST_RESOURCE_LINK));
-	CHECK(1 == setTypes.count(CONST_TOOL_USE));
-	CHECK(1 == setTypes.count(CONST_TOOL_RESULT));
+	// tool_use/tool_result belong to sampling content, not to tools/call.
+	CHECK(0 == setTypes.count(CONST_TOOL_USE));
+	CHECK(0 == setTypes.count(CONST_TOOL_RESULT));
 
 	// Cacheable reads carry hints, unknown resources keep the parameter error.
 	CHECK(ExpectResponse(driver, MakeRequest(6, METHOD_RESOURCES_READ,

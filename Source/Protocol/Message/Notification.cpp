@@ -126,13 +126,10 @@ namespace MCP
 
 		Json::Value jParams(Json::objectValue);
 		progressToken.DoSerialize(jParams);
-		Json::Value jProgress(iProgress);
-		jParams[MSG_KEY_PROGRESS] = jProgress;
-		if (iTotal != -1)
-		{
-			Json::Value jTotal(iTotal);
-			jParams[MSG_KEY_TOTAL] = jTotal;
-		}
+		// Serialized as a JSON number; integral values keep their legacy spelling.
+		jParams[MSG_KEY_PROGRESS] = MakeJsonNumber(iProgress);
+		if (iTotal >= 0)
+			jParams[MSG_KEY_TOTAL] = MakeJsonNumber(iTotal);
 		WriteVersionParamsMeta(jParams, GetProtocolContext());
 		jMsg[MSG_KEY_PARAMS] = jParams;
 		
@@ -148,12 +145,12 @@ namespace MCP
 		if (!jMsg.isMember(MSG_KEY_PARAMS) || !jMsg[MSG_KEY_PARAMS].isObject())
 			return ERRNO_INVALID_NOTIFICATION;
 		auto& jParams = jMsg[MSG_KEY_PARAMS];
-		if (!jParams.isMember(MSG_KEY_PROGRESS) || !jParams[MSG_KEY_PROGRESS].isInt())
+		if (!jParams.isMember(MSG_KEY_PROGRESS) || !jParams[MSG_KEY_PROGRESS].isNumeric())
 			return ERRNO_INVALID_NOTIFICATION;
-		iProgress = jParams[MSG_KEY_PROGRESS].asInt();
-		if (jParams.isMember(MSG_KEY_TOTAL) && jParams[MSG_KEY_TOTAL].isInt())
+		iProgress = jParams[MSG_KEY_PROGRESS].asDouble();
+		if (jParams.isMember(MSG_KEY_TOTAL) && jParams[MSG_KEY_TOTAL].isNumeric())
 		{
-			iTotal = jParams[MSG_KEY_TOTAL].asInt();
+			iTotal = jParams[MSG_KEY_TOTAL].asDouble();
 		}
 
 		return progressToken.DoDeserialize(jParams);
@@ -167,7 +164,7 @@ namespace MCP
 		if (strMethod.compare(METHOD_NOTIFICATION_PROGRESS) != 0)
 			return false;
 
-		if (-1 == iProgress)
+		if (iProgress < 0)
 			return false;
 
 		return progressToken.IsValid();

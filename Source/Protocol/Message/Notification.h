@@ -71,8 +71,9 @@ namespace MCP
 		}
 
 		MCP::ProgressToken progressToken;
-		int iProgress{ -1 };
-		int iTotal{ -1 };
+		// progress/total are JSON numbers, so fractional values are preserved.
+		double iProgress{ -1 };
+		double iTotal{ -1 };
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

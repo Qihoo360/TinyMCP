@@ -245,9 +245,9 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - 字段门控一律使用 `ctxProtocol.Supports(Feature_X)`，**禁止使用 `IsStateless()` 或版本字符串比较来门控字段**。这样未来版本增加/移除字段只需调整 profile 的 feature 位。
 - 现代专属字段只有在对应 feature 为真时序列化，包括：
   - `Feature_ResultType` → `resultType`；`Feature_Mrtr` → `inputRequests`/`requestState`；`Feature_StructuredContent` → `structuredContent`；`_meta.serverInfo` 由 `Feature_ResultMeta` 控制；
-  - `Feature_ToolTitle` → Tool/Resource/ResourceTemplate/Prompt 的 `title`/`icons`，以及 Tool 的 `outputSchema`；`Feature_ToolAnnotations` → Tool/Resource/ResourceTemplate 的 `annotations`/`ToolAnnotations`；`Feature_ImplementationExtras` → `Implementation` 的 `title`/`description`/`icons`/`websiteUrl`；
+  - `Feature_ToolTitle` → Tool/Resource/ResourceTemplate/Prompt 的 `title`/`icons`，以及 Tool 的 `outputSchema`；`Feature_ToolAnnotations` → Tool 的 `annotations`/`ToolAnnotations`（Resource/ResourceTemplate/Prompt 的 `annotations` 自 2024-11-05 即存在，不门控）；`Feature_ImplementationExtras` → `Implementation` 的 `title`/`description`/`icons`/`websiteUrl`；
   - `Feature_EntityMeta` → Tool/Resource/ResourceTemplate/Prompt/Content/`ResourceContents` 的对象级 `_meta`（与 title/annotations 解耦，未来只开扩展不开标题时仍能输出 `_meta`）；
-  - `Feature_ContentAudio`/`Feature_ContentResourceLink`/`Feature_ContentToolUse` → 对应新增 Content 类型；`Feature_ContentAnnotations` → 所有 ContentBlock 的 `annotations`；
+  - `Feature_ContentAudio`/`Feature_ContentResourceLink`/`Feature_ContentToolUse` → 对应新增 Content 类型；所有 ContentBlock 的 `annotations` 自 2024-11-05 即存在，不门控；`Feature_AnnotationLastModified` → `annotations.lastModified`（2026-07-28 新增）；
   - `Feature_Extensions` → `capabilities.extensions`（唯一例外：显式注册扩展时 Handshake 的 `initialize` 也透传；这是扩展规范要求，不属于版本 feature）；`Feature_CompletionsCapability` → `capabilities.completions`（legacy 仍用 `experimental.completion`）。
 - 新增可选字段一律“有值才写”：即使 feature 开启，未赋值的可选字段也不输出空对象/空数组，避免无意义 diff。
 - 数据对象（`Tool`/`Resource`/`ResourceTemplate`/`Prompt`/`Implementation`/各 `Content` 子类）不持有版本上下文（它们由服务端原型共享，异步线程序列化时加字段会竞态）。统一新增 `void DoSerializeVersionExtras(Json::Value& jObj, const ProtocolContext& ctx) const`，只写该对象在 `ctx` 下允许的新增字段；**现有 `DoSerialize` 签名与行为不变**。旧调用链不传 `ctx`、不调用 extras；现代调用链在基础 `DoSerialize` 之后调用。旧代码直接 `tool.DoSerialize(jObj)` 的输出因此不受影响。
@@ -511,7 +511,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 5. `Tool`：补 `title`、`icons`、`outputSchema`、`annotations`、`_meta`；`title`/`icons`/`outputSchema` 由 `Feature_ToolTitle` 门控，`annotations` 由 `Feature_ToolAnnotations` 门控，`_meta` 由 `Feature_EntityMeta` 门控；提供 `SetUiResourceUri()`（写入 `_meta.ui.resourceUri`），不提供 `SetUiVisibility`。
 6. `ToolAnnotations`：补 `title?`、`readOnlyHint?`、`destructiveHint?`、`idempotentHint?`、`openWorldHint?`（均为 hint，按 schema 原样序列化）。
 7. `Resource` / `ResourceTemplate` / `Prompt`：补 `title`、`icons`、`_meta`（Resource/ResourceTemplate 另补 `annotations`）。
-8. `ResourceContents`（`TextResourceContents`/`BlobResourceContents`）：补 `_meta`（`Feature_EntityMeta` 门控）；所有 `ContentBlock`（text/image/audio/resource_link/tool_use/tool_result）补 `annotations`（`Feature_ContentAnnotations` 门控）与 `_meta`（`Feature_EntityMeta` 门控）。
+8. `ResourceContents`（`TextResourceContents`/`BlobResourceContents`）：补 `_meta`（`Feature_EntityMeta` 门控）；所有 `ContentBlock`（text/image/audio/resource_link）补 `annotations`（2024-11-05 起即存在，不门控，仅 `lastModified` 由 `Feature_AnnotationLastModified` 门控）与 `_meta`（`Feature_EntityMeta` 门控）。
 9. `AudioContent`、`ResourceLink`、`ToolUseContent`、`ToolResultContent`：按 schema 实现序列化/反序列化；`ToolResultContent.structuredContent` 随 `Feature_ContentToolUse` 输出。
 10. `ServerCapabilities`：补 `completions`（存在标志）与 `extensions`（`std::map<std::string, Json::Value>`）。现代 discover 与 legacy `initialize` 结果共用同一 `extensions` 容器；legacy 的 `experimental` 原样保留；`extensions` 为空 map 时**不得输出**该键。新增 `void DoSerializeVersionExtras(Json::Value& jObj, const ProtocolContext& ctx) const`：`completions` 仅 `Feature_CompletionsCapability` 为真时输出；`extensions` 在 `Feature_Extensions` 为真或显式启用扩展（legacy 透传标记 `bExtensionPassthrough`）时输出；`DiscoverResult`/`InitializeResult` 在基础序列化后调用该方法。
 11. `ClientCapabilities`：新增客户端能力容器（现代 `elicitation.form/url`、`roots`、`sampling`、`extensions`），并支持 legacy `initialize.params.capabilities.extensions` 的读取与 `SupportsExtension(id)` 查询；不需要完整反序列化所有子字段。
@@ -896,7 +896,7 @@ ctest --test-dir build-tests --output-on-failure
 | `unit.constants` | 两个协议版本字符串、method 名、错误码（`-32001` 保留 + `-32020`~`-32022`）、`notifications/tools/list_changed` |
 | `unit.version_registry` | 注册表 `Find`/`GetSupportedVersions`/默认 Handshake 与最新 Stateless profile；`ProtocolContext` 默认值；`Supports()` feature 位；新增假 profile 后版本列表与 feature 自动生效；未知版本返回不可用上下文 |
 | `unit.message` | `Message` 基础字段、时间戳/runtimeId、序列化稳定性、可选字段 |
-| `unit.content_blocks` | text/image/audio/resource_link/tool_use/tool_result 的序列化与校验；`annotations`（`Feature_ContentAnnotations`）、内容 `_meta`（`Feature_EntityMeta`）；空文本边界 |
+| `unit.content_blocks` | text/image/audio/resource_link/tool_use/tool_result 的序列化与校验；`annotations`（两版均输出，`lastModified` 仅现代）、内容 `_meta`（`Feature_EntityMeta`）；空文本/空 blob 边界 |
 | `unit.request` | 现代 `_meta` 解析、版本读取、`inputResponses`/`requestState`、`subscriptions/listen` 的 `params.notifications` 嵌套 |
 | `unit.response` | `resultType`、`InputRequests inputRequests`、缓存字段仅在 6 类结果输出、`bMrtrRetry` 抑制缓存、`jServerInfo` 合并、`_meta` 保留应用非保留键、`RequestId subscriptionId` 类型保留 |
 | `unit.notification` | ack 结构（`SubscriptionFilters`）、订阅通知、取消通知、日志通知结构；`RequestId subscriptionId` 类型保留；legacy 不出现 `subscriptionId` |
