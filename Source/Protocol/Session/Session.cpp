@@ -2563,6 +2563,24 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
+	bool CMCPSession::IsAsyncTaskCancelledLocked(const std::shared_ptr<MCP::CMCPTask>& spTask)
+	{
+		auto spProcessRequestTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
+		if (!spProcessRequestTask)
+			return false;
+
+		auto spRequest = spProcessRequestTask->GetRequest();
+		if (!spRequest)
+			return false;
+
+		const uint64_t nTaskSequence = spProcessRequestTask->GetAsyncSequence();
+		return std::any_of(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest, nTaskSequence](auto& cancellation)
+			{
+				return cancellation.first.IsEqual(spRequest->requestId)
+					&& cancellation.second >= nTaskSequence;
+			});
+	}
+
 	int CMCPSession::AsyncThreadProc(uint64_t nEpoch)
 	{
 		while (m_bRunAsyncTask.load() && m_nAsyncThreadEpoch.load() == nEpoch)
@@ -2586,14 +2604,19 @@ namespace MCP
 
 				if (bOwnsTasks)
 				{
-					std::lock_guard<std::mutex> _cacheLock(m_mtxAsyncThread);
-					std::for_each(m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end(), [this](auto& spTask)
-						{
-							if (spTask)
-							{
-								spTask->Cancel();
-							}
-						});
+					std::vector<std::shared_ptr<MCP::CMCPTask>> vecCached;
+					{
+						std::lock_guard<std::mutex> _cacheLock(m_mtxAsyncThread);
+						vecCached = m_vecAsyncTasksCache;
+					}
+
+					// Cancel outside the lock: business code may block or call
+					// CancelTask, which takes the same lock.
+					for (auto& spTask : vecCached)
+					{
+						if (spTask)
+							spTask->Cancel();
+					}
 				}
 
 				break;
@@ -2612,32 +2635,14 @@ namespace MCP
 				m_deqAsyncTasks.pop_front();
 			}
 
-			//  Process task cancellation requests
-			std::for_each(m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end(), [this](auto& spTask) 
-				{
-					if (spTask)
-					{
-						auto spProcessRequestTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
-						if (spProcessRequestTask)
-						{
-							auto spRequest = spProcessRequestTask->GetRequest();
-							if (spRequest)
-							{
-								const uint64_t nTaskSequence = spProcessRequestTask->GetAsyncSequence();
-								auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest, nTaskSequence](auto& cancellation)
-									{
-										// Only cancellations issued after this task was
-										// enqueued may cancel it.
-										return cancellation.first.IsEqual(spRequest->requestId)
-											&& cancellation.second >= nTaskSequence;
-									}
-								);
-								if (itrFound != m_vecCancelledTaskIds.end())
-									spTask->Cancel();
-							}
-						}
-					}
-				});
+			// Process task cancellation requests. Matching cached tasks are only
+			// collected here and cancelled after the lock is released.
+			std::vector<std::shared_ptr<MCP::CMCPTask>> vecToCancel;
+			for (auto& spTask : m_vecAsyncTasksCache)
+			{
+				if (IsAsyncTaskCancelledLocked(spTask))
+					vecToCancel.push_back(spTask);
+			}
 
 			// A cancellation that arrives before the worker starts a queued task
 			// must drop it: the task has not observed the request yet, so no
@@ -2645,22 +2650,7 @@ namespace MCP
 			vecTasks.erase(
 				std::remove_if(vecTasks.begin(), vecTasks.end(), [this](auto& spTask)
 					{
-						auto spProcessRequestTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask);
-						if (!spProcessRequestTask)
-							return false;
-
-						auto spRequest = spProcessRequestTask->GetRequest();
-						if (!spRequest)
-							return false;
-
-						const uint64_t nTaskSequence = spProcessRequestTask->GetAsyncSequence();
-						auto itrFound = std::find_if(m_vecCancelledTaskIds.begin(), m_vecCancelledTaskIds.end(), [&spRequest, nTaskSequence](auto& cancellation)
-							{
-								return cancellation.first.IsEqual(spRequest->requestId)
-									&& cancellation.second >= nTaskSequence;
-							});
-
-						return itrFound != m_vecCancelledTaskIds.end();
+						return IsAsyncTaskCancelledLocked(spTask);
 					}),
 				vecTasks.end());
 
@@ -2681,11 +2671,33 @@ namespace MCP
 
 			_lock.unlock();
 
+			for (auto& spTask : vecToCancel)
+				spTask->Cancel();
+			vecToCancel.clear();
+
 			// Cache new tasks
 			for (auto& spTask : vecTasks)
 			{
 				if (!spTask)
 					continue;
+
+				// The batch was taken in one go, so state may have changed while an
+				// earlier task executed: a cancellation for this request arrived, the
+				// client was replaced, or the worker was told to stop. Such a task must
+				// not start at all.
+				{
+					std::lock_guard<std::mutex> _cacheLock(m_mtxAsyncThread);
+					if (IsAsyncTaskCancelledLocked(spTask))
+						continue;
+
+					if (m_nClientGeneration != nClientGeneration || !m_bRunAsyncTask.load()
+						|| m_nAsyncThreadEpoch.load() != nEpoch)
+					{
+						if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
+							spProcessTask->MarkStale();
+						continue;
+					}
+				}
 
 				int iExecuteErrCode = ERRNO_INTERNAL_ERROR;
 				try

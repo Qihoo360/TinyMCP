@@ -204,6 +204,9 @@ namespace MCP
 		// that do not settle in time stay parked.
 		void DrainUnfinishedTasks(std::chrono::milliseconds tmTimeout);
 		int AsyncThreadProc(uint64_t nEpoch);
+		// Caller holds m_mtxAsyncThread. True when a pending cancellation targets
+		// this task (only cancellations issued after it was enqueued count).
+		bool IsAsyncTaskCancelledLocked(const std::shared_ptr<MCP::CMCPTask>& spTask);
 
 		// Tasks never reach back to the session singleton. The session binds the
 		// services they need when it creates or clones them for dispatch.

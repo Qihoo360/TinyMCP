@@ -261,6 +261,106 @@ TEST_CASE("unit.async_cancel")
 	driver.Stop();
 }
 
+// The worker takes every queued task as one batch. A cancellation that arrives
+// while an earlier task of that batch is still executing must stop the later
+// task before it starts.
+TEST_CASE("unit.async_cancel_in_batch")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	// 200 occupies the worker, so 201 and 202 are queued and taken together.
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(200, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"a\",\"action\":\"slow\"}}")));
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(201, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"b\",\"action\":\"slow\"}}")));
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(202, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"c\"}}")));
+
+	// Once 200 answered, the worker is executing 201 out of the [201, 202] batch.
+	CHECK(driver.WaitForOutputCount(2, WAIT_TIMEOUT_MS));
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	CHECK_EQ(ERRNO_OK, driver.Send(
+		"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":202}}"));
+
+	// 201 still answers; a later request proves the worker went past 202.
+	CHECK(driver.WaitForOutputCount(3, WAIT_TIMEOUT_MS));
+	CHECK(ExpectResponse(driver, MakeRequest(203, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"d\"}}"), jResponse));
+	CHECK_EQ(203, jResponse[MSG_KEY_ID].asInt());
+
+	bool bAnswered201 = false;
+	bool bAnswered202 = false;
+	for (size_t i = 1; i < driver.GetOutputCount(); ++i)
+	{
+		Json::Value jOutput;
+		if (!ParseJson(driver.GetOutput(i), jOutput) || !jOutput.isMember(MSG_KEY_ID))
+			continue;
+		if (201 == jOutput[MSG_KEY_ID].asInt())
+			bAnswered201 = true;
+		if (202 == jOutput[MSG_KEY_ID].asInt())
+			bAnswered202 = true;
+	}
+
+	CHECK(bAnswered201);
+	CHECK(!bAnswered202);
+
+	driver.Stop();
+}
+
+// A task whose Cancel() calls back into CancelTask must not deadlock the
+// worker: the session cancels tasks only after releasing its task lock.
+TEST_CASE("unit.async_cancel_reentrant")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+	KeepAliveProbe::s_bHangStarted.store(false);
+	KeepAliveProbe::s_bCancelRequested.store(false);
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(2, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"reenter\"}}")));
+	auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WAIT_TIMEOUT_MS);
+	while (!KeepAliveProbe::s_bHangStarted.load() && std::chrono::steady_clock::now() < tpDeadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	CHECK(KeepAliveProbe::s_bHangStarted.load());
+
+	CHECK_EQ(ERRNO_OK, driver.Send(
+		"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":2}}"));
+	tpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WAIT_TIMEOUT_MS);
+	while (!KeepAliveProbe::s_bCancelRequested.load() && std::chrono::steady_clock::now() < tpDeadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	CHECK(KeepAliveProbe::s_bCancelRequested.load());
+
+	// The worker is still alive and serves the next call.
+	CHECK(ExpectResponse(driver, MakeRequest(3, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"alive\"}}"), jResponse));
+	CHECK_EQ(3, jResponse[MSG_KEY_ID].asInt());
+
+	driver.Stop();
+}
+
 // Malformed or hostile input must never take the server down, and every request
 // whose id can be recovered must be answered instead of left pending.
 TEST_CASE("unit.robustness")

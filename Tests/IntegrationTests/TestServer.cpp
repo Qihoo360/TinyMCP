@@ -1,6 +1,7 @@
 ﻿#include "TestServer.h"
 
 #include <Public/PublicDef.h>
+#include <Session/Session.h>
 
 #include <chrono>
 #include <memory>
@@ -446,7 +447,8 @@ namespace MCP
 					// Shutdown probe: never replies on its own. The background thread
 					// holds the task until Cancel() arrives, then reports cancellation
 					// after a short cleanup, like a tool driving an external process.
-					if ("hang" == strAction)
+					// The reenter variant also calls back into CancelTask from Cancel().
+					if ("hang" == strAction || "reenter" == strAction)
 					{
 						auto spSelf = SharedFromThis<CTestEchoTask>();
 						if (!spSelf)
@@ -454,6 +456,7 @@ namespace MCP
 
 						m_bKeepAliveProbe = true;
 						m_bHangProbe = true;
+						m_bReenterProbe = ("reenter" == strAction);
 						std::thread([spSelf]()
 							{
 								KeepAliveProbe::s_bHangStarted.store(true);
@@ -494,6 +497,10 @@ namespace MCP
 
 				int Cancel() override
 				{
+					// Business code may cancel through the public API from inside
+					// Cancel(); the session must not hold its task lock here.
+					if (m_bReenterProbe && GetRequest())
+						MCP::CMCPSession::GetInstance().CancelTask(GetRequest()->requestId);
 					if (m_bHangProbe)
 						KeepAliveProbe::s_bCancelRequested.store(true);
 					return MCP::ERRNO_OK;
@@ -502,6 +509,7 @@ namespace MCP
 			private:
 				bool m_bKeepAliveProbe{ false };
 				bool m_bHangProbe{ false };
+				bool m_bReenterProbe{ false };
 			};
 
 			class CTestReadResourceTask : public MCP::ProcessReadResourceRequest
