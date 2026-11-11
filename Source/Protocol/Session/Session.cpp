@@ -1,4 +1,4 @@
-#include "Session.h"
+﻿#include "Session.h"
 #include "../Public/PublicDef.h"
 #include "../Public/StringHelper.h"
 #include "../Message/BasicMessage.h"
@@ -341,7 +341,7 @@ namespace MCP
 		// remain untouched -- they were populated at server start and are not per-client.
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxMessages);
-			m_hashMessage.clear();
+			m_hashMessageCount.clear();
 		}
 
 		{
@@ -436,7 +436,7 @@ namespace MCP
 		}
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxMessages);
-			m_hashMessage[MessageCategory_Request].push_back(spMsg);
+			m_hashMessageCount[MessageCategory_Request]++;
 		}
 
 		// Protocol.cpp owns the method surface of each revision; the switch below
@@ -865,7 +865,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxMessages);
-			m_hashMessage[MessageCategory_Response].push_back(spMsg);
+			m_hashMessageCount[MessageCategory_Response]++;
 		}
 
 		return ERRNO_INTERNAL_ERROR;
@@ -880,7 +880,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		{
 			std::lock_guard<std::mutex> _lock(m_mtxMessages);
-			m_hashMessage[MessageCategory_Notification].push_back(spMsg);
+			m_hashMessageCount[MessageCategory_Notification]++;
 		}
 
 		if (ERRNO_OK != iErrCode)
@@ -1545,11 +1545,11 @@ namespace MCP
 	size_t CMCPSession::GetMessageCount(MessageCategory eCategory) const
 	{
 		std::lock_guard<std::mutex> _lock(m_mtxMessages);
-		auto it = m_hashMessage.find(eCategory);
-		if (it == m_hashMessage.end())
+		auto it = m_hashMessageCount.find(eCategory);
+		if (it == m_hashMessageCount.end())
 			return 0;
 
-		return it->second.size();
+		return it->second;
 	}
 
 	std::shared_ptr<MCP::ProcessRequest> CMCPSession::GetServerCallToolsTask(const std::string& strToolName)

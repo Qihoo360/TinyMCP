@@ -253,7 +253,9 @@ namespace MCP
 		MCP::LoggingLevel m_loggingLevel;
 
 		mutable std::mutex m_mtxMessages;
-		std::unordered_map<MessageCategory, std::vector<std::shared_ptr<MCP::Message>>> m_hashMessage;
+		// Only counts are kept: storing every message of a long-lived connection
+		// would grow without bound, and nothing reads the messages back.
+		std::unordered_map<MessageCategory, size_t> m_hashMessageCount;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessCallToolRequest>> m_hashCallToolsTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessReadResourceRequest>> m_hashReadResourceTasks;
 		std::unordered_map<std::string, std::shared_ptr<MCP::ProcessSubscribeResourceRequest>> m_hashSubscribeResourceTasks;
