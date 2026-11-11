@@ -112,7 +112,13 @@ namespace MCP
 		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
 			{
 				for (const auto& pair : mapExtensions)
+				{
 					capabilities.mapExtensions[pair.first] = pair.second;
+					// MCP Apps is modern-only even when registered through the
+					// generic extension API.
+					if (pair.first == EXTENSION_UI)
+						capabilities.setModernOnlyExtensions.insert(pair.first);
+				}
 
 				capabilities.bExtensionPassthrough = !capabilities.mapExtensions.empty();
 			});
@@ -122,7 +128,8 @@ namespace MCP
 	{
 		Session().UpdateServerCapabilities([&](MCP::ServerCapabilities& capabilities)
 			{
-				capabilities.mapExtensions[EXTENSION_MCP_APPS_UI] = Json::Value(Json::objectValue);
+				capabilities.mapExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+				capabilities.setModernOnlyExtensions.insert(EXTENSION_UI);
 				capabilities.bExtensionPassthrough = true;
 			});
 	}

@@ -207,6 +207,23 @@ TEST_CASE("unit.message")
 	VersionExtrasAccess::Serialize(emptyCapabilities, jEmptyCapabilities, ctxModern);
 	CHECK(!jEmptyCapabilities.isMember(MSG_KEY_EXTENSIONS));
 
+	// An explicitly registered modern-only extension never reaches legacy output,
+	// while other passthrough extensions keep their legacy advertisement.
+	ServerCapabilities passthroughCapabilities;
+	passthroughCapabilities.bExtensionPassthrough = true;
+	passthroughCapabilities.mapExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+	passthroughCapabilities.mapExtensions["example/echo"] = Json::Value(Json::objectValue);
+	passthroughCapabilities.setModernOnlyExtensions.insert(EXTENSION_UI);
+
+	Json::Value jPassthroughLegacy(Json::objectValue);
+	VersionExtrasAccess::Serialize(passthroughCapabilities, jPassthroughLegacy, ctxLegacy);
+	CHECK(jPassthroughLegacy[MSG_KEY_EXTENSIONS].isMember("example/echo"));
+	CHECK(!jPassthroughLegacy[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+
+	Json::Value jPassthroughModern(Json::objectValue);
+	VersionExtrasAccess::Serialize(passthroughCapabilities, jPassthroughModern, ctxModern);
+	CHECK(jPassthroughModern[MSG_KEY_EXTENSIONS].isMember(EXTENSION_UI));
+
 	// Capability deserialization keeps unknown extension payloads intact.
 	ServerCapabilities parsedCapabilities;
 	Json::Value jParsedCapabilities(Json::objectValue);

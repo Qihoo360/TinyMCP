@@ -978,13 +978,12 @@ TEST_CASE("integration.apps")
 	CTestServer::s_Instance.RegisterServerAppsCapabilities();
 	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
 
-	// Legacy initialize passes explicitly registered extensions through.
+	// Legacy initialize never advertises MCP Apps, even after it is registered.
 	Json::Value jLegacyInit;
 	CHECK(ExpectResponse(driver, MakeLegacyInitialize(1), jLegacyInit));
 	const Json::Value& jLegacyExtensions =
 		jLegacyInit[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS];
-	CHECK(jLegacyExtensions.isObject());
-	CHECK(jLegacyExtensions.isMember(EXTENSION_MCP_APPS_UI));
+	CHECK(!jLegacyExtensions.isObject() || !jLegacyExtensions.isMember(EXTENSION_UI));
 	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
 
 	Json::Value jResponse;
@@ -992,7 +991,7 @@ TEST_CASE("integration.apps")
 		MakeModernParams("2026-07-28", "{}")), jResponse));
 	const Json::Value& jExtensions = jResponse[MSG_KEY_RESULT][MSG_KEY_CAPABILITIES][MSG_KEY_EXTENSIONS];
 	CHECK(jExtensions.isObject());
-	CHECK(jExtensions.isMember(EXTENSION_MCP_APPS_UI));
+	CHECK(jExtensions.isMember(EXTENSION_UI));
 
 	// tools/list exposes _meta.ui.resourceUri on the app entry point.
 	CHECK(ExpectResponse(driver, MakeRequest(11, METHOD_TOOLS_LIST,

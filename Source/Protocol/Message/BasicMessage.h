@@ -5,6 +5,7 @@
 #include "Message.h"
 
 #include <map>
+#include <set>
 
 namespace MCP
 {
@@ -243,6 +244,9 @@ namespace MCP
 		MCP::Logging logging;
 		bool bCompletions{ false };
 		std::map<std::string, Json::Value> mapExtensions;
+		// Extensions that are only valid on the stateless era. They are dropped by
+		// the legacy passthrough so the handshake surface never advertises them.
+		std::set<std::string> setModernOnlyExtensions;
 		// A registered extension is explicitly opted in by the application, so a
 		// handshake-era initialize response must pass it through even though the
 		// legacy profile does not declare Feature_Extensions.

@@ -633,13 +633,23 @@ namespace MCP
 
 		// Extensions belong to the stateless era by default, but an explicit
 		// registration is an application opt-in that legacy initialize must also
-		// advertise.
+		// advertise. Modern-only extensions never reach the legacy surface.
 		if (!mapExtensions.empty() && (ctxProtocol.Supports(Feature_Extensions) || bExtensionPassthrough))
 		{
+			const bool bSupportsExtensions = ctxProtocol.Supports(Feature_Extensions);
+
 			Json::Value jExtensions(Json::objectValue);
 			for (const auto& pair : mapExtensions)
+			{
+				if (!bSupportsExtensions
+					&& setModernOnlyExtensions.find(pair.first) != setModernOnlyExtensions.end())
+					continue;
+
 				jExtensions[pair.first] = pair.second;
-			jMsg[MSG_KEY_EXTENSIONS] = jExtensions;
+			}
+
+			if (!jExtensions.empty())
+				jMsg[MSG_KEY_EXTENSIONS] = jExtensions;
 		}
 
 		return ERRNO_OK;
