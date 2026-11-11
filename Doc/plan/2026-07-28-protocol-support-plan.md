@@ -547,7 +547,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - 新增 `DiscoverResult`：`supportedVersions`、`capabilities`、`instructions?` 必填/可选按 schema；`resultType`、`ttlMs`、`cacheScope` 必须输出；`serverInfo` 只在 `_meta` 中；`supportedVersions` 来自 `CProtocolRegistry`。
 - 新增 `SubscriptionsListenResult`：仅服务端优雅关闭时发送，`_meta["io.modelcontextprotocol/subscriptionId"]` 必填且保留请求 id 类型。
 - `CallToolResult`/`GetPromptResult`/`ReadResourceResult`/四类 `List*Result` 继承上述能力。
-- `CallToolResult` 补 `MCP::StructuredContent structuredContent` 与 `_meta`；`structuredContent` 仅在 `Feature_StructuredContent` 为真且 `HasValue()` 时输出；`_meta` 的应用键有值才写，`serverInfo` 由辅助方法按 `Feature_ResultMeta` 写入，两者不互相替代。
+- `CallToolResult` 补 `MCP::StructuredContent structuredContent` 与 `_meta`；`structuredContent` 支持任意 JSON 值（object/array/string/number/boolean/null），仅在 `Feature_StructuredContent` 为真且 `HasValue()` 时输出；`_meta` 的应用键有值才写，`serverInfo` 由辅助方法按 `Feature_ResultMeta` 写入，两者不互相替代。
 
 通知：
 

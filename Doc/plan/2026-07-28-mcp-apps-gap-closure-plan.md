@@ -166,8 +166,8 @@
    - `BuildUiResourceContents` 内部调用 `TextResourceContents::SetUiMeta()`，从 `Resource` 复制 `_meta.ui`，保证 `resources/read` 与声明一致。
    - 不输出废弃的扁平键 `_meta["ui/resourceUri"]`：`SetUiResourceUri` 只写嵌套路径；应用手写该键属于未支持用法，文档需注明。
 3. `Source/Protocol/Message/Response.h/.cpp`、`BasicMessage.h/.cpp`
-   - 新增 `MCP::StructuredContent` 数据模型：私有 `Json::Value m_jData`，提供 `Set(const Json::Value&)`、`Get()`、`HasValue()`、`Clear()`、`IsValid()`、`DoSerialize()`、`DoDeserialize()`；不新增 `MessageType`（它不是 JSON-RPC 消息，仅作结果字段模型）。
-   - `CallToolResult` 的 `Json::Value jStructuredContent` 改为 `MCP::StructuredContent structuredContent`；仅在 `Feature_StructuredContent` 且 `HasValue()` 时序列化，`IsValid()` 要求对象。
+   - 新增 `MCP::StructuredContent` 数据模型：私有 `Json::Value m_jData` 与 `bool m_bHasValue`，提供 `Set(const Json::Value&)`、`Get()`、`HasValue()`、`Clear()`、`IsValid()`、`DoSerialize()`、`DoDeserialize()`；不新增 `MessageType`（它不是 JSON-RPC 消息，仅作结果字段模型）。
+   - `CallToolResult` 的 `Json::Value jStructuredContent` 改为 `MCP::StructuredContent structuredContent`；仅在 `Feature_StructuredContent` 且 `HasValue()` 时序列化。规范允许任意 JSON 值（object/array/string/number/boolean/null），`m_bHasValue` 用于区分“未设置”与“显式 null”。
    - `ToolResultContent` 的 `jStructuredContent` 同步改为 `structuredContent`，保持同名同语义字段一致。
    - 迁移 `Example/MCPServer/Source/EchoTask.cpp` 的 `spResult->jStructuredContent = jStructured` 以及 `Tests/UnitTests/TestResponse.cpp`、`TestBasicMessage.cpp` 的直接赋值，改用 `structuredContent.Set(...)`。
 4. 计划文档
@@ -249,7 +249,7 @@
    - `BuildUiResourceContents`（若实现）复制 uri/mime/meta。
    - `ui://` 前缀、MIME 默认值、`Start()` 校验的四个负例。
    - 迁移后仓库内不再出现示例/测试代码手写 `jMeta["ui"]`。
-   - `StructuredContent` 的 `Set/Get/HasValue/IsValid`、序列化/反序列化；非对象输入被拒绝。
+   - `StructuredContent` 的 `Set/Get/HasValue/IsValid`、序列化/反序列化；object/array/string/number/boolean/null 均可接受，未设置与显式 null 可区分。
    - 迁移后示例/测试不再直接赋值 `jStructuredContent`。
    - `InputRequests`/`InputResponses` 的 `Set/Get/Has/HasValue/IsValid` 与序列化；`Request`/`Response` 的字段改为对应类型。
    - `RequestId::WriteValue` 保留 string/integer 类型；ACK、订阅通知、优雅关闭三处一致。

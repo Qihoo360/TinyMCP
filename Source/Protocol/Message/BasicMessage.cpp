@@ -2422,15 +2422,10 @@ namespace MCP
 	// StructuredContent
 	void StructuredContent::Set(const Json::Value& jValue)
 	{
-		// Only JSON objects are valid structured content; anything else clears the
-		// field instead of silently producing an invalid payload.
-		if (!jValue.isObject())
-		{
-			Clear();
-			return;
-		}
-
+		// 2026-07-28 allows any JSON value: object, array, string, number,
+		// boolean, or null.
 		m_jData = jValue;
+		m_bHasValue = true;
 	}
 
 	const Json::Value& StructuredContent::Get() const
@@ -2440,40 +2435,29 @@ namespace MCP
 
 	bool StructuredContent::HasValue() const
 	{
-		return m_jData.isObject() && !m_jData.empty();
+		return m_bHasValue;
 	}
 
 	void StructuredContent::Clear()
 	{
 		m_jData = Json::Value();
+		m_bHasValue = false;
 	}
 
 	bool StructuredContent::IsValid() const
 	{
-		return m_jData.isNull() || m_jData.isObject();
+		return true;
 	}
 
 	int StructuredContent::DoSerialize(Json::Value& jValue) const
 	{
-		if (!IsValid())
-			return ERRNO_INVALID_RESPONSE;
-
 		jValue = m_jData;
 		return ERRNO_OK;
 	}
 
 	int StructuredContent::DoDeserialize(const Json::Value& jValue)
 	{
-		if (jValue.isNull())
-		{
-			Clear();
-			return ERRNO_OK;
-		}
-
-		if (!jValue.isObject())
-			return ERRNO_INVALID_RESPONSE;
-
-		m_jData = jValue;
+		Set(jValue);
 		return ERRNO_OK;
 	}
 }

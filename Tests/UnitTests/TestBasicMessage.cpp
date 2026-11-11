@@ -302,14 +302,32 @@ TEST_CASE("unit.message")
 	jsonSchema.Clear();
 	CHECK(!jsonSchema.HasValue());
 
-	// structuredContent only accepts JSON objects and only serializes when set.
+	// structuredContent accepts any JSON value defined by 2026-07-28: object,
+	// array, string, number, boolean, or null.
 	StructuredContent structuredContent;
 	CHECK(!structuredContent.HasValue());
 	CHECK(structuredContent.IsValid());
 	structuredContent.Set(Json::Value(42));
-	CHECK(!structuredContent.HasValue());
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.Get().isInt());
+	CHECK_EQ(42, structuredContent.Get().asInt());
+
 	structuredContent.Set(Json::Value(Json::objectValue));
-	CHECK(!structuredContent.HasValue());
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.Get().isObject());
+
+	structuredContent.Set(Json::Value());
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.Get().isNull());
+
+	Json::Value jStructuredArray(Json::arrayValue);
+	jStructuredArray.append(Json::Value(1));
+	jStructuredArray.append(Json::Value(2));
+	structuredContent.Set(jStructuredArray);
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.Get().isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(2), structuredContent.Get().size());
+
 	Json::Value jStructuredValue(Json::objectValue);
 	jStructuredValue[MSG_KEY_VALUE] = 42;
 	structuredContent.Set(jStructuredValue);
@@ -320,7 +338,11 @@ TEST_CASE("unit.message")
 	Json::Value jStructuredRoundTrip;
 	CHECK_EQ(ERRNO_OK, structuredContent.DoSerialize(jStructuredRoundTrip));
 	CHECK_EQ(42, jStructuredRoundTrip[MSG_KEY_VALUE].asInt());
-	CHECK_EQ(ERRNO_INVALID_RESPONSE, structuredContent.DoDeserialize(Json::Value("not-an-object")));
+	CHECK_EQ(ERRNO_OK, structuredContent.DoDeserialize(jStructuredArray));
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.Get().isArray());
+	CHECK_EQ(ERRNO_OK, structuredContent.DoDeserialize(Json::Value("text")));
+	CHECK(structuredContent.Get().isString());
 	structuredContent.Clear();
 	CHECK(!structuredContent.HasValue());
 

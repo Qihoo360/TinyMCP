@@ -157,7 +157,7 @@ MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool t
 
 The SDK does not validate HTML5 and does not enforce the `resources/read` MIME type at runtime; the app owns both. HTML may be returned as `text` or `blob`. Tools must still return meaningful text content so hosts without Apps support degrade gracefully. The flat `_meta["ui/resourceUri"]` key is never emitted.
 
-`structuredContent` is set with `CallToolResult::structuredContent.Set(json)` (or `ToolResultContent::structuredContent`), not by assigning JSON directly.
+`structuredContent` is set with `CallToolResult::structuredContent.Set(json)` (or `ToolResultContent::structuredContent`), not by assigning JSON directly. Any JSON value is accepted: object, array, string, number, boolean, or null.
 
 The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK. The example's `ui://echo/app.html` nevertheless embeds a small demo bridge (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`) so the App can be exercised end to end; that HTML is demo glue, not SDK behaviour.
 

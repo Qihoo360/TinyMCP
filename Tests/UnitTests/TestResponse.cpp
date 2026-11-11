@@ -139,6 +139,35 @@ TEST_CASE("unit.response")
 	CHECK(!jLegacyTool[MSG_KEY_RESULT].isMember(MSG_KEY_STRUCTURED_CONTENT));
 	CHECK(!jLegacyTool[MSG_KEY_RESULT].isMember(MSG_KEY_RESULT_TYPE));
 
+	// structuredContent may be an array, and an explicit null is not the same as
+	// an unset field.
+	CallToolResult arrayTool(false);
+	arrayTool.requestId = MakeRequestId(13);
+	MessageContextAccess::Set(arrayTool, ctxModern);
+	arrayTool.vecTextContent.push_back(text);
+	Json::Value jStructuredArray(Json::arrayValue);
+	Json::Value jFirst(Json::objectValue);
+	jFirst[MSG_KEY_NAME] = "Alice";
+	jStructuredArray.append(jFirst);
+	jStructuredArray.append("Bob");
+	arrayTool.structuredContent.Set(jStructuredArray);
+
+	Json::Value jArrayTool = SerializeMessage(arrayTool);
+	const Json::Value& jArrayStructured = jArrayTool[MSG_KEY_RESULT][MSG_KEY_STRUCTURED_CONTENT];
+	CHECK(jArrayStructured.isArray());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(2), jArrayStructured.size());
+	CHECK_EQ(std::string("Alice"), jArrayStructured[0][MSG_KEY_NAME].asString());
+
+	CallToolResult nullTool(false);
+	nullTool.requestId = MakeRequestId(14);
+	MessageContextAccess::Set(nullTool, ctxModern);
+	nullTool.vecTextContent.push_back(text);
+	nullTool.structuredContent.Set(Json::Value());
+
+	Json::Value jNullTool = SerializeMessage(nullTool);
+	CHECK(jNullTool[MSG_KEY_RESULT].isMember(MSG_KEY_STRUCTURED_CONTENT));
+	CHECK(jNullTool[MSG_KEY_RESULT][MSG_KEY_STRUCTURED_CONTENT].isNull());
+
 	// Reserved _meta keys owned by the SDK win over application supplied values,
 	// while unrelated application keys survive the merge.
 	SubscriptionsListenResult listenResult(false);

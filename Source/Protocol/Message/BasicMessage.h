@@ -452,7 +452,7 @@ namespace MCP
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
-	// structuredContent is a JSON object carried by tool results. It is not a
+	// structuredContent is a JSON value carried by tool results. It is not a
 	// JSON-RPC message, so it is modelled as a plain field type.
 	struct StructuredContent
 	{
@@ -467,6 +467,8 @@ namespace MCP
 
 	private:
 		Json::Value m_jData;
+		// Distinguishes "not set" from an explicit JSON null value.
+		bool m_bHasValue{ false };
 	};
 
 	// 2026-07-28 tool result content block. Nested content blocks are kept as
