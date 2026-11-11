@@ -1,6 +1,9 @@
 ﻿#include "Server.h"
 #include "../Internal/SessionAccess.h"
+#include "../Public/StringHelper.h"
 #include "../Session/Session.h"
+
+#include <set>
 
 namespace MCP
 {
@@ -9,6 +12,63 @@ namespace MCP
 		CMCPSession& Session()
 		{
 			return CMCPSession::GetInstance();
+		}
+
+		bool IsStringArrayOf(const Json::Value& jValue, const std::set<std::string>& setAllowed)
+		{
+			if (!jValue.isArray())
+				return false;
+
+			for (const auto& jItem : jValue)
+			{
+				if (!jItem.isString() || setAllowed.find(jItem.asString()) == setAllowed.end())
+					return false;
+			}
+
+			return true;
+		}
+
+		// Rejects Apps declarations the specification forbids, before the server
+		// starts serving. Dynamic resource templates never take part in UI
+		// references, so only registered concrete resources are matched.
+		int ValidateAppsConfiguration(const std::vector<MCP::Tool>& vecTools, const std::vector<MCP::Resource>& vecResources)
+		{
+			std::set<std::string> setUiResourceUris;
+			for (const auto& resource : vecResources)
+			{
+				if (!IsUiResourceUri(resource.strUri))
+					continue;
+
+				if (!IsMcpAppMimeType(resource.strMimeType))
+					return ERRNO_INVALID_PARAMS;
+
+				setUiResourceUris.insert(resource.strUri);
+			}
+
+			const std::set<std::string> setVisibility{ UI_VISIBILITY_MODEL, UI_VISIBILITY_APP };
+			for (const auto& tool : vecTools)
+			{
+				if (!tool.jMeta.isObject()
+					|| !tool.jMeta.isMember(MSG_KEY_UI)
+					|| !tool.jMeta[MSG_KEY_UI].isObject())
+					continue;
+
+				const Json::Value& jUi = tool.jMeta[MSG_KEY_UI];
+				if (jUi.isMember(MSG_KEY_RESOURCE_URI))
+				{
+					const Json::Value& jResourceUri = jUi[MSG_KEY_RESOURCE_URI];
+					if (!jResourceUri.isString() || !IsUiResourceUri(jResourceUri.asString()))
+						return ERRNO_INVALID_PARAMS;
+
+					if (setUiResourceUris.find(jResourceUri.asString()) == setUiResourceUris.end())
+						return ERRNO_INVALID_PARAMS;
+				}
+
+				if (jUi.isMember(MSG_KEY_VISIBILITY) && !IsStringArrayOf(jUi[MSG_KEY_VISIBILITY], setVisibility))
+					return ERRNO_INVALID_PARAMS;
+			}
+
+			return ERRNO_OK;
 		}
 	}
 
@@ -146,7 +206,16 @@ namespace MCP
 
 	void CMCPServerBase::RegisterServerUiResources(const std::vector<MCP::Resource>& resources, bool bPagination)
 	{
-		RegisterServerResources(resources, bPagination);
+		// ui:// resources are MCP Apps by definition, so a missing MIME type is
+		// filled in here instead of changing the generic registration API.
+		std::vector<MCP::Resource> vecUiResources = resources;
+		for (auto& resource : vecUiResources)
+		{
+			if (IsUiResourceUri(resource.strUri) && resource.strMimeType.empty())
+				resource.strMimeType = MIME_TYPE_MCP_APP;
+		}
+
+		RegisterServerResources(vecUiResources, bPagination);
 	}
 
 	void CMCPServerBase::RegisterServerTools(const std::vector<MCP::Tool>& tools, bool bPagination)
@@ -208,6 +277,16 @@ namespace MCP
 		int iErrCode = Session().SetSupportedProtocolVersions(m_vecSupportedProtocolVersions);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
+
+		// Only validate when the application opted into MCP Apps, so a server that
+		// never registered it keeps its previous startup behaviour.
+		const MCP::ServerCapabilities capabilities = Session().GetServerCapabilities();
+		if (capabilities.mapExtensions.find(EXTENSION_UI) != capabilities.mapExtensions.end())
+		{
+			iErrCode = ValidateAppsConfiguration(Session().GetServerTools(), Session().GetServerResources());
+			if (ERRNO_OK != iErrCode)
+				return iErrCode;
+		}
 
 		iErrCode = Session().Ready();
 		if (ERRNO_OK != iErrCode)

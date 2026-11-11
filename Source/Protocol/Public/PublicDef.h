@@ -108,6 +108,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_CSP = "csp";
 	static constexpr const char* MSG_KEY_PERMISSIONS = "permissions";
 	static constexpr const char* MSG_KEY_RESOURCE_URI = "resourceUri";
+	static constexpr const char* MSG_KEY_VISIBILITY = "visibility";
 
 	// 2026-07-28 icon, annotation and client capability keys.
 	static constexpr const char* MSG_KEY_SRC = "src";
@@ -143,6 +144,8 @@ namespace MCP
 	static constexpr const char* CACHE_SCOPE_PRIVATE = "private";
 	static constexpr const char* EXTENSION_UI = "io.modelcontextprotocol/ui";
 	static constexpr const char* MIME_TYPE_MCP_APP = "text/html;profile=mcp-app";
+	static constexpr const char* UI_VISIBILITY_MODEL = "model";
+	static constexpr const char* UI_VISIBILITY_APP = "app";
 	
 	static constexpr const char* LOGGING_LEVEL_DEBUG = "debug";
 	static constexpr const char* LOGGING_LEVEL_INFO = "info";

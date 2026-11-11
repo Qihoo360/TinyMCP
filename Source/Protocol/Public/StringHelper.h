@@ -1,11 +1,25 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <codecvt>
 #include <locale>
+#include <vector>
+
+#include "PublicDef.h"
 
 namespace MCP
 {
+	// The ui:// scheme is reserved for MCP Apps resources.
+	inline bool IsUiResourceUri(const std::string& strUri)
+	{
+		return strUri.compare(0, 5, "ui://") == 0;
+	}
+
+	inline bool IsMcpAppMimeType(const std::string& strMimeType)
+	{
+		return strMimeType == MIME_TYPE_MCP_APP;
+	}
+
 	namespace StringHelper
 	{
 		inline std::wstring utf8_string_to_wstring(const std::string& str) 
