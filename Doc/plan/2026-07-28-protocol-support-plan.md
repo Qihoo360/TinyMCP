@@ -907,7 +907,7 @@ ctest --test-dir build-tests --output-on-failure
 | `unit.subscriptions` | 过滤器嵌套、ack-first、`subscriptionId` 类型保留、精确 URI 匹配、取消/优雅关闭清理 |
 | `unit.caching` | 仅 6 类结果、`complete` 才输出、MRTR 不输出、默认值与显式覆盖、仅 `Feature_Caching` 开启时输出 |
 | `unit.capabilities` | `completions` 由 `Feature_CompletionsCapability` 门控、`extensions` 显式透传、Apps `{}`、legacy initialize 透传、list_changed 能力、`logging` 能力保留 |
-| `unit.apps` | `_meta.ui.resourceUri`/`visibility`、`UiResourceMeta` 全字段（csp 四域、permissions 四键、domain、prefersBorder、jExtra）、`ui://`、MIME 默认值、`Start()` 四个负例、`StructuredContent`、`JsonSchema`、降级内容 |
+| `unit.apps` | `_meta.ui.resourceUri`/`visibility`、`UiResourceMeta` 全字段（csp 四域、permissions 四键、domain、prefersBorder、jExtra）、`ui://`、MIME 默认值、`Start()` 四个负例、`StructuredContent`、降级内容 |
 | `unit.legacy_compat` | 2024-11-05 输出不含现代字段；initialize 版本与能力不变；`-32001` 取值不变 |
 
 ## 8. 风险与规避

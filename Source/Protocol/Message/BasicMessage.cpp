@@ -698,63 +698,6 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
-	// JsonSchema
-	void JsonSchema::Set(const Json::Value& jValue)
-	{
-		if (!jValue.isObject())
-		{
-			Clear();
-			return;
-		}
-
-		m_jData = jValue;
-	}
-
-	const Json::Value& JsonSchema::Get() const
-	{
-		return m_jData;
-	}
-
-	bool JsonSchema::HasValue() const
-	{
-		return m_jData.isObject() && !m_jData.empty();
-	}
-
-	void JsonSchema::Clear()
-	{
-		m_jData = Json::Value();
-	}
-
-	bool JsonSchema::IsValid() const
-	{
-		return m_jData.isNull() || m_jData.isObject();
-	}
-
-	int JsonSchema::DoSerialize(Json::Value& jValue) const
-	{
-		if (!IsValid())
-			return ERRNO_INVALID_RESPONSE;
-
-		jValue = m_jData;
-		return ERRNO_OK;
-	}
-
-	int JsonSchema::DoDeserialize(const Json::Value& jValue)
-	{
-		if (jValue.isNull())
-		{
-			Clear();
-			return ERRNO_OK;
-		}
-
-		if (!jValue.isObject())
-			return ERRNO_PARSE_ERROR;
-
-		m_jData = jValue;
-		return ERRNO_OK;
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////
 	// Tool
 	int Tool::DoSerialize(Json::Value& jMsg) const
 	{
@@ -767,7 +710,7 @@ namespace MCP
 			jMsg[MSG_KEY_DESCRIPTION] = jDesc;
 		}
 
-		jMsg[MSG_KEY_INPUT_SCHEMA] = inputSchema.Get();
+		jMsg[MSG_KEY_INPUT_SCHEMA] = jInputSchema;
 
 		return ERRNO_OK;
 	}
@@ -783,7 +726,7 @@ namespace MCP
 
 		if (!jMsg.isMember(MSG_KEY_INPUT_SCHEMA) || !jMsg[MSG_KEY_INPUT_SCHEMA].isObject())
 			return ERRNO_PARSE_ERROR;
-		inputSchema.DoDeserialize(jMsg[MSG_KEY_INPUT_SCHEMA]);
+		jInputSchema = jMsg[MSG_KEY_INPUT_SCHEMA];
 
 		return ERRNO_OK;
 	}
@@ -793,7 +736,7 @@ namespace MCP
 		if (strName.empty())
 			return false;
 
-		if (!inputSchema.Get().isObject())
+		if (!jInputSchema.isObject())
 			return false;
 
 		return true;
@@ -806,8 +749,8 @@ namespace MCP
 			WriteStringIfNotEmpty(jMsg, MSG_KEY_TITLE, strTitle);
 			WriteIconsIfNotEmpty(jMsg, vecIcons);
 
-			if (outputSchema.Get().isObject() && !outputSchema.Get().empty())
-				jMsg[MSG_KEY_OUTPUT_SCHEMA] = outputSchema.Get();
+			if (jOutputSchema.isObject() && !jOutputSchema.empty())
+				jMsg[MSG_KEY_OUTPUT_SCHEMA] = jOutputSchema;
 		}
 
 		if (ctxProtocol.Supports(Feature_ToolAnnotations) && annotations.HasValue())
@@ -832,7 +775,7 @@ namespace MCP
 			ReadIconsIfPresent(jMsg, vecIcons);
 
 			if (jMsg.isMember(MSG_KEY_OUTPUT_SCHEMA) && jMsg[MSG_KEY_OUTPUT_SCHEMA].isObject())
-				outputSchema.DoDeserialize(jMsg[MSG_KEY_OUTPUT_SCHEMA]);
+				jOutputSchema = jMsg[MSG_KEY_OUTPUT_SCHEMA];
 		}
 
 		if (ctxProtocol.Supports(Feature_ToolAnnotations)

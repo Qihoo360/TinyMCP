@@ -28,7 +28,7 @@ TEST_CASE("unit.apps")
 
 	Tool tool;
 	tool.strName = "echo_app";
-	tool.inputSchema.Set(Json::Value(Json::objectValue));
+	tool.jInputSchema = Json::Value(Json::objectValue);
 	tool.SetUiResourceUri("ui://echo/app.html");
 	tool.SetUiVisibility({ UI_VISIBILITY_MODEL, UI_VISIBILITY_APP });
 

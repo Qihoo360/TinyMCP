@@ -266,23 +266,6 @@ namespace MCP
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
-	// JSON Schema object used by Tool.inputSchema/outputSchema. Only object
-	// schemas are supported, matching the MCP schema requirement.
-	struct JsonSchema
-	{
-	public:
-		void Set(const Json::Value& jValue);
-		const Json::Value& Get() const;
-		bool HasValue() const;
-		void Clear();
-		bool IsValid() const;
-		int DoSerialize(Json::Value& jValue) const;
-		int DoDeserialize(const Json::Value& jValue);
-
-	private:
-		Json::Value m_jData;
-	};
-
 	struct Tool : public MCP::Message
 	{
 		Tool()
@@ -293,10 +276,10 @@ namespace MCP
 
 		std::string strName;
 		std::string strDescription;
-		MCP::JsonSchema inputSchema;
+		Json::Value jInputSchema;
 		std::string strTitle;
 		std::vector<Icon> vecIcons;
-		MCP::JsonSchema outputSchema;
+		Json::Value jOutputSchema;
 		ToolAnnotations annotations;
 		Json::Value jMeta;
 

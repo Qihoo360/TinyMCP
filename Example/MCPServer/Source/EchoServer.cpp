@@ -34,14 +34,14 @@ namespace Implementation
 		RegisterServerAppsCapabilities();
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
-		auto ParseInputSchema = [](const char* pszSchema, MCP::JsonSchema& schema) -> bool
+		auto ParseInputSchema = [](const char* pszSchema, Json::Value& jSchemaValue) -> bool
 		{
 			Json::Reader reader;
 			Json::Value jSchema;
 			if (!reader.parse(pszSchema, jSchema) || !jSchema.isObject())
 				return false;
 
-			schema.Set(jSchema);
+			jSchemaValue = jSchema;
 			return true;
 		};
 
@@ -50,7 +50,7 @@ namespace Implementation
         MCP::Tool tool;
         tool.strName = Implementation::CEchoTask::TOOL_NAME;
         tool.strDescription = Implementation::CEchoTask::TOOL_DESCRIPTION;
-        if (!ParseInputSchema(Implementation::CEchoTask::TOOL_INPUT_SCHEMA, tool.inputSchema))
+        if (!ParseInputSchema(Implementation::CEchoTask::TOOL_INPUT_SCHEMA, tool.jInputSchema))
             return MCP::ERRNO_PARSE_ERROR;
 		vecTools.push_back(tool);
 
@@ -58,7 +58,7 @@ namespace Implementation
 		MCP::Tool confirmTool;
 		confirmTool.strName = Implementation::CEchoConfirmTask::TOOL_NAME;
 		confirmTool.strDescription = Implementation::CEchoConfirmTask::TOOL_DESCRIPTION;
-		if (!ParseInputSchema(Implementation::CEchoConfirmTask::TOOL_INPUT_SCHEMA, confirmTool.inputSchema))
+		if (!ParseInputSchema(Implementation::CEchoConfirmTask::TOOL_INPUT_SCHEMA, confirmTool.jInputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
 		vecTools.push_back(confirmTool);
 
@@ -66,9 +66,9 @@ namespace Implementation
 		MCP::Tool appTool;
 		appTool.strName = Implementation::CEchoAppTask::TOOL_NAME;
 		appTool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.inputSchema))
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.jInputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.outputSchema))
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.jOutputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
 		appTool.SetUiResourceUri(Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
 		appTool.SetUiVisibility({ MCP::UI_VISIBILITY_MODEL, MCP::UI_VISIBILITY_APP });

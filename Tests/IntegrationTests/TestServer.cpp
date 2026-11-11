@@ -927,7 +927,7 @@ namespace MCP
 			Json::Value jInputSchema(Json::objectValue);
 			if (!reader.parse("{\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"]}", jInputSchema) || !jInputSchema.isObject())
 				return MCP::ERRNO_PARSE_ERROR;
-			tool.inputSchema.Set(jInputSchema);
+			tool.jInputSchema = jInputSchema;
 
 			std::vector<MCP::Tool> vecTools;
 			vecTools.push_back(tool);
@@ -937,7 +937,7 @@ namespace MCP
 				MCP::Tool appTool;
 				appTool.strName = CTestServer::APP_TOOL_NAME;
 				appTool.strDescription = "MCP App entry point.";
-				appTool.inputSchema.Set(jInputSchema);
+				appTool.jInputSchema = jInputSchema;
 				appTool.SetUiResourceUri(CTestServer::UI_RESOURCE_URI);
 				appTool.SetUiVisibility({ MCP::UI_VISIBILITY_MODEL, MCP::UI_VISIBILITY_APP });
 				vecTools.push_back(appTool);

@@ -62,7 +62,7 @@
 | A11 | `structuredContent` 用 `StructuredContent` 数据模型封装，不在结果类型上直接暴露 `Json::Value` | 与 `TextContent`/`InputRequests` 的建模方式一致；调用者通过 `Set/Get` 使用，序列化/校验集中在类型内部 |
 | A12 | 复用已有封装类型：`InputRequests`/`InputResponses`/`RequestId` 已存在但未被使用，直接接入，不新建平行类型 | 消除“类型已实现却仍用裸 JSON”的不一致 |
 | A13 | 公共发送 API 改为类型化：`SendSubscriptionNotification` 只接受 `ResourceUpdatedNotification`，旧签名不保留 | 调用者不再手写通知 params；list_changed 已有专用发送方法 |
-| A14 | `Tool.inputSchema`/`outputSchema` 用 `JsonSchema` 包装；`ToolResultContent.jContent` 维持裸 JSON | JSON Schema 字段含义明确，包装成本低；`jContent` 是多态内容数组，类型化成本高，本次不做 |
+| A14 | `Tool.jInputSchema` 保持 `Json::Value`；新增 `Tool.jOutputSchema` 也用 `Json::Value`；`ToolResultContent.jContent` 维持裸 JSON | `jInputSchema` 是 2024-11-05 公开成员，包装成 `JsonSchema` 会破坏旧项目源码兼容性，因此不引入包装层 |
 
 ## 4. 实施步骤
 
@@ -210,12 +210,12 @@
    - list_changed 继续使用 `SendToolListChanged`/`SendPromptListChanged`/`SendResourceListChanged`。
    - 更新示例与测试，改为构造 `ResourceUpdatedNotification`。
 5. `JsonSchema`
-   - 新增 `MCP::JsonSchema`：私有 `Json::Value m_jData`，提供 `Set/Get/HasValue/IsValid/DoSerialize/DoDeserialize`；`IsValid()` 要求对象。
-   - `Tool.jInputSchema`/`jOutputSchema` 改为 `MCP::JsonSchema inputSchema`/`outputSchema`；同步 `Tool::IsValid`、序列化/反序列化、`EchoServer` 与测试。
-   - 这是破坏性字段改名，README 必须给出迁移说明；`ToolResultContent.jContent` 按确认结果保持裸 JSON。
+   - 不引入 `MCP::JsonSchema` 包装。`Tool.jInputSchema` 是 2024-11-05 的公开成员，改名/改类型会破坏历史项目（如 MCPServers）的源码兼容性。
+   - 新增 `Tool.jOutputSchema`，同样使用 `Json::Value`；`Tool::IsValid`、序列化/反序列化、`EchoServer` 与测试按裸 JSON 处理。
+   - `ToolResultContent.jContent` 保持裸 JSON。
 6. 计划文档
    - 修正主计划 Step 2/3/5 中 `structuredContent`、`inputRequests/inputResponses`、`subscriptionId` 的裸 JSON 表述，改为对应数据模型。
-   - 修正主计划 Step 2 中 `Tool.inputSchema/outputSchema` 的描述，改为 `JsonSchema`。
+   - 主计划中 `Tool.inputSchema/outputSchema` 的描述保持 `jInputSchema`/`jOutputSchema` 裸 JSON。
    - 修正主计划 Step 4/5 中 `SendSubscriptionNotification` 的签名说明，改为类型化 `ResourceUpdatedNotification`。
 
 门禁：
@@ -237,7 +237,7 @@
    - `Example/MCPServer/Source/EchoTask.cpp`：`CEchoAppResourceReadTask` 通过 `TextResourceContents::SetUiMeta()` 补 `_meta.ui`，或直接使用 `BuildUiResourceContents()`，与 `EchoServer.cpp` 中的 `UiResourceMeta` 保持一致。
    - `EchoServer.cpp`：把现有 `appResource.jMeta[...]` 手写改为 `appResource.SetUiMeta(uiMeta)`；给 `echo_app` 调用 `SetUiVisibility({UI_VISIBILITY_MODEL, UI_VISIBILITY_APP})`。
    - `EchoServer.cpp`：定时推送改为构造 `ResourceUpdatedNotification` 调用 typed `SendSubscriptionNotification`。
-   - `EchoServer.cpp`：`ParseInputSchema` 改为 `JsonSchema.Set()`，不再直接写 `jInputSchema`/`jOutputSchema`。
+   - `EchoServer.cpp`：`ParseInputSchema` 直接写 `jInputSchema`/`jOutputSchema`（保持旧成员类型）。
    - 清理示例中所有手写 `_meta.ui` 的代码，统一走 setter。
 2. 单元测试
    - `Tools::SetUiResourceUri` 保留其它 `_meta.ui` 键，且不产生扁平 `_meta["ui/resourceUri"]`。
@@ -254,7 +254,7 @@
    - `InputRequests`/`InputResponses` 的 `Set/Get/Has/HasValue/IsValid` 与序列化；`Request`/`Response` 的字段改为对应类型。
    - `RequestId::WriteValue` 保留 string/integer 类型；ACK、订阅通知、优雅关闭三处一致。
    - `SubscriptionFilters` 只输出被授予的项；空授予输出空对象。
-   - `JsonSchema` 的 `Set/Get/HasValue/IsValid`；非对象输入被拒绝。
+   - `Tool.jInputSchema`/`jOutputSchema` 按裸 `Json::Value` 序列化与校验；旧代码直接赋值仍可编译。
    - `SendSubscriptionNotification` 的 typed 签名编译通过，旧签名不再存在（编译期负例可省略）。
 3. 集成测试
    - legacy `initialize` 不出现 `io.modelcontextprotocol/ui`，即使已注册。
@@ -285,12 +285,12 @@
    - 写明 `ui://` 仅供 Apps 使用、扁平 `_meta["ui/resourceUri"]` 不再输出、`resources/read` 内容 MIME 不做运行时强制。
    - 写明 UI 元数据统一通过 `UiResourceMeta`/setter 声明，示例不示范手写 `jMeta`。
    - 写明 `structuredContent` 通过 `StructuredContent.Set()` 设置，示例不直接赋值 `jStructuredContent`。
-   - 写明破坏性迁移：`Tool.inputSchema`/`outputSchema` 改用 `JsonSchema`；`SendSubscriptionNotification` 改为接收 `ResourceUpdatedNotification`，旧签名已删除。
+   - 写明兼容性约束：`Tool.jInputSchema` 保持 `Json::Value`，新增 `jOutputSchema` 也是 `Json::Value`；`SendSubscriptionNotification` 改为接收 `ResourceUpdatedNotification`，旧签名已删除。
    - 写明 `inputRequests`/`inputResponses`、`subscriptionId`、ACK 过滤器使用 `InputRequests`/`InputResponses`/`RequestId`/`SubscriptionFilters`。
 2. `Doc/plan/2026-07-28-protocol-support-plan.md`
    - 按 Phase 3 修正 4.7 首句/4.7 元数据/4.7 可见性/D21/Step 0。
    - 修正 Step 2/3/5：`structuredContent`、`inputRequests/inputResponses`、`subscriptionId`、ACK 过滤器由裸 `Json::Value` 改为对应数据模型。
-   - 修正 Step 2/4/5：`Tool.inputSchema/outputSchema` 改为 `JsonSchema`；`SendSubscriptionNotification` 改为类型化 `ResourceUpdatedNotification`。
+   - 修正 Step 2/4/5：`Tool.jInputSchema`/`jOutputSchema` 保持裸 JSON；`SendSubscriptionNotification` 改为类型化 `ResourceUpdatedNotification`。
    - 在 7.6 增加上述负例与新增字段断言。
 3. 新增本文件作为补全计划，不修改已入库的规范与 schema 原文。
 
@@ -326,7 +326,7 @@
 14. `subscriptionId` 使用 `RequestId`，ACK、订阅通知、优雅关闭均保留 string/integer 类型。
 15. ACK 使用 `SubscriptionFilters`，只输出被授予的项；空授予输出空对象。
 16. `SendSubscriptionNotification` 只接受 `ResourceUpdatedNotification`，旧签名已删除，示例与测试同步。
-17. `Tool` 使用 `JsonSchema`；`ToolResultContent.jContent` 保持裸 JSON 并在文档中说明原因。
+17. `Tool` 的 `jInputSchema`/`jOutputSchema` 保持裸 `Json::Value`；`ToolResultContent.jContent` 同样保持裸 JSON。
 
 ## 7. 风险与规避
 
@@ -341,7 +341,7 @@
 | 示例与测试配置漂移 | 示例与 `CTestServer` 使用同一组 csp/permissions/visibility；集成测试断言完整字段 |
 | `StructuredContent` 改动影响既有调用方 | 该字段仅本分支引入；迁移示例/测试，未设置时不输出，legacy 行为不变 |
 | 破坏性 API 调整影响既有调用方 | 仅涉及本分支新增能力相关 API；README 提供迁移示例，示例/测试同步更新 |
-| `JsonSchema` 只接受对象 | MCP schema 要求 `inputSchema`/`outputSchema` 为 object；布尔 schema 不支持，文档写明 |
+| JSON Schema 按裸 JSON 透传 | 不校验根 `type: "object"`；布尔 schema 也可透传，保持与历史项目一致 |
 
 ## 8. 明确不做
 

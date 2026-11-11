@@ -101,11 +101,11 @@ TEST_CASE("unit.message")
 	tool.strDescription = "Echo input";
 	Json::Value jInputSchema(Json::objectValue);
 	jInputSchema[MSG_KEY_TYPE] = "object";
-	tool.inputSchema.Set(jInputSchema);
+	tool.jInputSchema = jInputSchema;
 	tool.strTitle = "Echo tool";
 	Json::Value jOutputSchema(Json::objectValue);
 	jOutputSchema[MSG_KEY_TYPE] = "object";
-	tool.outputSchema.Set(jOutputSchema);
+	tool.jOutputSchema = jOutputSchema;
 	tool.annotations.strTitle = "Echo annotations";
 	tool.annotations.bHasReadOnlyHint = true;
 	tool.annotations.bReadOnlyHint = true;
@@ -284,26 +284,6 @@ TEST_CASE("unit.message")
 	CHECK_EQ(ERRNO_OK, inputResponses.DoSerialize(jInputRequests));
 	inputResponses.Clear();
 	CHECK(!inputResponses.HasValue());
-
-	// JsonSchema only accepts JSON objects and only serializes when set.
-	JsonSchema jsonSchema;
-	CHECK(!jsonSchema.HasValue());
-	CHECK(jsonSchema.IsValid());
-	jsonSchema.Set(Json::Value(1));
-	CHECK(!jsonSchema.HasValue());
-	jsonSchema.Set(Json::Value(Json::objectValue));
-	CHECK(!jsonSchema.HasValue());
-	Json::Value jSchemaValue(Json::objectValue);
-	jSchemaValue[MSG_KEY_TYPE] = "object";
-	jsonSchema.Set(jSchemaValue);
-	CHECK(jsonSchema.HasValue());
-	CHECK_EQ(std::string("object"), jsonSchema.Get()[MSG_KEY_TYPE].asString());
-	Json::Value jSchemaRoundTrip;
-	CHECK_EQ(ERRNO_OK, jsonSchema.DoSerialize(jSchemaRoundTrip));
-	CHECK_EQ(std::string("object"), jSchemaRoundTrip[MSG_KEY_TYPE].asString());
-	CHECK_EQ(ERRNO_PARSE_ERROR, jsonSchema.DoDeserialize(Json::Value(1)));
-	jsonSchema.Clear();
-	CHECK(!jsonSchema.HasValue());
 
 	// structuredContent accepts any JSON value defined by 2026-07-28: object,
 	// array, string, number, boolean, or null.

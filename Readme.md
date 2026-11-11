@@ -161,7 +161,7 @@ The SDK does not validate HTML5 and does not enforce the `resources/read` MIME t
 
 The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK. The example's `ui://echo/app.html` nevertheless embeds a small demo bridge (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`) so the App can be exercised end to end; that HTML is demo glue, not SDK behaviour.
 
-**Migration notes:** `Tool.inputSchema`/`outputSchema` are `MCP::JsonSchema` (`Set()` before registering). `SendSubscriptionNotification` only accepts `MCP::ResourceUpdatedNotification`; the old `(method, params, uri)` signature is gone. MRTR fields use `MCP::InputResponses`/`InputRequests`, subscription ids use `MCP::RequestId`, and acknowledgment filters use `MCP::SubscriptionFilters`.
+**Migration notes:** `Tool.jInputSchema` keeps its original `Json::Value` type (legacy source compatible); `outputSchema` is `Tool.jOutputSchema`. `SendSubscriptionNotification` only accepts `MCP::ResourceUpdatedNotification`; the old `(method, params, uri)` signature is gone. MRTR fields use `MCP::InputResponses`/`InputRequests`, subscription ids use `MCP::RequestId`, and acknowledgment filters use `MCP::SubscriptionFilters`.
 
 `io.modelcontextprotocol/ui` is a modern-only extension, so a legacy `initialize` response never echoes it even when `RegisterServerAppsCapabilities()` was called; other explicitly registered extensions still pass through.
 
