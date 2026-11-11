@@ -340,7 +340,7 @@ namespace MCP
 			CHECK(jCapabilities.isMember(MSG_KEY_PROMPTS));
 			CHECK(jCapabilities.isMember(MSG_KEY_LOGGING));
 			CHECK(jCapabilities.isMember(MSG_KEY_COMPLETIONS));
-			CHECK(jCapabilities[MSG_KEY_EXTENSIONS][EXTENSION_MCP_APPS_UI].isObject());
+			CHECK(jCapabilities[MSG_KEY_EXTENSIONS][EXTENSION_UI].isObject());
 
 			// tools/list exposes the legacy tool and the Apps entry point.
 			CHECK(ExpectResponse(client, 2, METHOD_TOOLS_LIST,

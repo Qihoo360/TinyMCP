@@ -96,7 +96,6 @@ namespace MCP
 	static constexpr const char* MSG_KEY_LOG_LEVEL = "logLevel";
 	static constexpr const char* MSG_KEY_MODE = "mode";
 	static constexpr const char* MSG_KEY_REQUIRED_CAPABILITIES = "requiredCapabilities";
-	static constexpr const char* EXTENSION_MCP_APPS_UI = "io.modelcontextprotocol/ui";
 	static constexpr const char* MSG_KEY_TITLE = "title";
 	static constexpr const char* MSG_KEY_ICONS = "icons";
 	static constexpr const char* MSG_KEY_WEBSITE_URL = "websiteUrl";
@@ -110,6 +109,16 @@ namespace MCP
 	static constexpr const char* MSG_KEY_RESOURCE_URI = "resourceUri";
 	static constexpr const char* MSG_KEY_VISIBILITY = "visibility";
 	static constexpr const char* MSG_KEY_MIME_TYPES = "mimeTypes";
+	static constexpr const char* MSG_KEY_DOMAIN = "domain";
+	static constexpr const char* MSG_KEY_PREFERS_BORDER = "prefersBorder";
+	static constexpr const char* MSG_KEY_CONNECT_DOMAINS = "connectDomains";
+	static constexpr const char* MSG_KEY_RESOURCE_DOMAINS = "resourceDomains";
+	static constexpr const char* MSG_KEY_FRAME_DOMAINS = "frameDomains";
+	static constexpr const char* MSG_KEY_BASE_URI_DOMAINS = "baseUriDomains";
+	static constexpr const char* MSG_KEY_CAMERA = "camera";
+	static constexpr const char* MSG_KEY_MICROPHONE = "microphone";
+	static constexpr const char* MSG_KEY_GEOLOCATION = "geolocation";
+	static constexpr const char* MSG_KEY_CLIPBOARD_WRITE = "clipboardWrite";
 
 	// 2026-07-28 icon, annotation and client capability keys.
 	static constexpr const char* MSG_KEY_SRC = "src";

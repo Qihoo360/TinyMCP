@@ -268,7 +268,7 @@ namespace Implementation
 		Json::Value jStructured(Json::objectValue);
 		jStructured["echo"] = strInput;
 		jStructured["length"] = static_cast<Json::UInt>(strInput.size());
-		spResult->jStructuredContent = jStructured;
+		spResult->structuredContent.Set(jStructured);
 		spResult->bIsError = false;
 
 		return NotifyResult(spResult);

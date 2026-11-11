@@ -294,6 +294,8 @@ namespace MCP
 	public:
 		// Writes _meta.ui.resourceUri used by the MCP Apps extension.
 		void SetUiResourceUri(const std::string& strUri);
+		// Writes _meta.ui.visibility while keeping resourceUri and unknown keys.
+		void SetUiVisibility(const std::vector<std::string>& vecVisibility);
 	};
 
 	struct TextContent : public MCP::Message
@@ -431,6 +433,23 @@ namespace MCP
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
 
+	// structuredContent is a JSON object carried by tool results. It is not a
+	// JSON-RPC message, so it is modelled as a plain field type.
+	struct StructuredContent
+	{
+	public:
+		void Set(const Json::Value& jValue);
+		const Json::Value& Get() const;
+		bool HasValue() const;
+		void Clear();
+		bool IsValid() const;
+		int DoSerialize(Json::Value& jValue) const;
+		int DoDeserialize(const Json::Value& jValue);
+
+	private:
+		Json::Value m_jData;
+	};
+
 	// 2026-07-28 tool result content block. Nested content blocks are kept as
 	// raw JSON so callers can pass through client supplied structures.
 	struct ToolResultContent : public MCP::Message
@@ -445,7 +464,7 @@ namespace MCP
 		Json::Value jContent;
 		bool bHasIsError{ false };
 		bool bIsError{ false };
-		Json::Value jStructuredContent;
+		MCP::StructuredContent structuredContent;
 		Annotations annotations;
 		Json::Value jMeta;
 
@@ -459,6 +478,29 @@ namespace MCP
 	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
+	};
+
+	// MCP Apps resource metadata carried by _meta.ui. Unknown sub-keys are kept
+	// verbatim so a newer revision can pass through fields the SDK does not model.
+	struct UiResourceMeta
+	{
+	public:
+		std::vector<std::string> vecConnectDomains;
+		std::vector<std::string> vecResourceDomains;
+		std::vector<std::string> vecFrameDomains;
+		std::vector<std::string> vecBaseUriDomains;
+		bool bCamera{ false };
+		bool bMicrophone{ false };
+		bool bGeolocation{ false };
+		bool bClipboardWrite{ false };
+		std::string strDomain;
+		bool bHasDomain{ false };
+		bool bPrefersBorder{ false };
+		bool bHasPrefersBorder{ false };
+		Json::Value jExtra;
+
+		bool HasValue() const;
+		int DoSerialize(Json::Value& jUi) const;
 	};
 
 	struct TextResourceContents : public MCP::Message
@@ -480,6 +522,9 @@ namespace MCP
 		// Protocol revision adaptation is SDK internal; callers use
 		// VersionExtrasAccess in Internal/VersionExtras.h.
 		friend struct VersionExtrasAccess;
+
+		// Writes _meta.ui while keeping unmodeled meta keys intact.
+		void SetUiMeta(const UiResourceMeta& uiMeta);
 
 	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
@@ -562,10 +607,17 @@ namespace MCP
 		// VersionExtrasAccess in Internal/VersionExtras.h.
 		friend struct VersionExtrasAccess;
 
+		// Writes _meta.ui while keeping unmodeled meta keys intact.
+		void SetUiMeta(const UiResourceMeta& uiMeta);
+
 	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);
 	};
+
+	// Builds the resources/read payload of an MCP App so that the contents
+	// metadata always matches the resource declared in resources/list.
+	int BuildUiResourceContents(const Resource& resource, const std::string& strHtml, TextResourceContents& contents);
 
 	struct ResourceTemplate : public MCP::Message
 	{

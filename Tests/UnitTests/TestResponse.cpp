@@ -112,7 +112,9 @@ TEST_CASE("unit.response")
 	text.strText = "ok";
 	text.strType = CONST_TEXT;
 	toolResult.vecTextContent.push_back(text);
-	toolResult.jStructuredContent[MSG_KEY_VALUE] = 42;
+	Json::Value jStructured(Json::objectValue);
+	jStructured[MSG_KEY_VALUE] = 42;
+	toolResult.structuredContent.Set(jStructured);
 
 	Json::Value jTool = SerializeMessage(toolResult);
 	CHECK(!jTool[MSG_KEY_RESULT].isMember(MSG_KEY_TTL_MS));

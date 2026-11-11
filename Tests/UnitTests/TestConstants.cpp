@@ -1,6 +1,7 @@
 ﻿#include "../TestHarness.h"
 
 #include <Public/PublicDef.h>
+#include <Public/StringHelper.h>
 
 #include <string>
 
@@ -50,6 +51,32 @@ TEST_CASE("unit.constants")
 	// MCP Apps extension identifiers.
 	CHECK_EQ(std::string("io.modelcontextprotocol/ui"), std::string(EXTENSION_UI));
 	CHECK_EQ(std::string("text/html;profile=mcp-app"), std::string(MIME_TYPE_MCP_APP));
+
+	// MCP Apps metadata keys and visibility values.
+	CHECK_EQ(std::string("visibility"), std::string(MSG_KEY_VISIBILITY));
+	CHECK_EQ(std::string("domain"), std::string(MSG_KEY_DOMAIN));
+	CHECK_EQ(std::string("prefersBorder"), std::string(MSG_KEY_PREFERS_BORDER));
+	CHECK_EQ(std::string("connectDomains"), std::string(MSG_KEY_CONNECT_DOMAINS));
+	CHECK_EQ(std::string("resourceDomains"), std::string(MSG_KEY_RESOURCE_DOMAINS));
+	CHECK_EQ(std::string("frameDomains"), std::string(MSG_KEY_FRAME_DOMAINS));
+	CHECK_EQ(std::string("baseUriDomains"), std::string(MSG_KEY_BASE_URI_DOMAINS));
+	CHECK_EQ(std::string("camera"), std::string(MSG_KEY_CAMERA));
+	CHECK_EQ(std::string("microphone"), std::string(MSG_KEY_MICROPHONE));
+	CHECK_EQ(std::string("geolocation"), std::string(MSG_KEY_GEOLOCATION));
+	CHECK_EQ(std::string("clipboardWrite"), std::string(MSG_KEY_CLIPBOARD_WRITE));
+	CHECK_EQ(std::string("model"), std::string(UI_VISIBILITY_MODEL));
+	CHECK_EQ(std::string("app"), std::string(UI_VISIBILITY_APP));
+
+	// The ui:// prefix and the MCP App MIME type are recognised by the public
+	// helpers used by startup validation.
+	CHECK(IsUiResourceUri("ui://echo/app.html"));
+	CHECK(!IsUiResourceUri(""));
+	CHECK(!IsUiResourceUri("https://example.com/app.html"));
+	CHECK(!IsUiResourceUri("ui:/echo/app.html"));
+
+	CHECK(IsMcpAppMimeType(MIME_TYPE_MCP_APP));
+	CHECK(!IsMcpAppMimeType(""));
+	CHECK(!IsMcpAppMimeType("text/html"));
 
 	// Result type and cache scope literals from the schema.
 	CHECK_EQ(std::string("complete"), std::string(RESULT_TYPE_COMPLETE));

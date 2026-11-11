@@ -358,8 +358,12 @@ namespace MCP
 		}
 		jResult[MSG_KEY_CONTENT] = jContent;
 
-		if (ctxProtocol.Supports(Feature_StructuredContent) && !jStructuredContent.isNull())
-			jResult[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
+		if (ctxProtocol.Supports(Feature_StructuredContent) && structuredContent.HasValue())
+		{
+			Json::Value jStructuredContent;
+			if (ERRNO_OK == structuredContent.DoSerialize(jStructuredContent))
+				jResult[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
+		}
 
 		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);
 

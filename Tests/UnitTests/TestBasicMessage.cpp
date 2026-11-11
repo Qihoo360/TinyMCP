@@ -262,6 +262,102 @@ TEST_CASE("unit.message")
 
 	InputResponses inputResponses;
 	CHECK(!inputResponses.IsValid());
+
+	// structuredContent only accepts JSON objects and only serializes when set.
+	StructuredContent structuredContent;
+	CHECK(!structuredContent.HasValue());
+	CHECK(structuredContent.IsValid());
+	structuredContent.Set(Json::Value(42));
+	CHECK(!structuredContent.HasValue());
+	structuredContent.Set(Json::Value(Json::objectValue));
+	CHECK(!structuredContent.HasValue());
+	Json::Value jStructuredValue(Json::objectValue);
+	jStructuredValue[MSG_KEY_VALUE] = 42;
+	structuredContent.Set(jStructuredValue);
+	CHECK(structuredContent.HasValue());
+	CHECK(structuredContent.IsValid());
+	CHECK_EQ(42, structuredContent.Get()[MSG_KEY_VALUE].asInt());
+
+	Json::Value jStructuredRoundTrip;
+	CHECK_EQ(ERRNO_OK, structuredContent.DoSerialize(jStructuredRoundTrip));
+	CHECK_EQ(42, jStructuredRoundTrip[MSG_KEY_VALUE].asInt());
+	CHECK_EQ(ERRNO_INVALID_RESPONSE, structuredContent.DoDeserialize(Json::Value("not-an-object")));
+	structuredContent.Clear();
+	CHECK(!structuredContent.HasValue());
+
+	// Tool visibility keeps the resource URI and other _meta.ui keys.
+	Tool visibilityTool;
+	visibilityTool.SetUiResourceUri("ui://echo/app.html");
+	visibilityTool.jMeta[MSG_KEY_UI]["video"] = true;
+	visibilityTool.SetUiVisibility({ UI_VISIBILITY_MODEL, UI_VISIBILITY_APP });
+	CHECK_EQ(std::string("ui://echo/app.html"),
+		visibilityTool.jMeta[MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+	CHECK(visibilityTool.jMeta[MSG_KEY_UI]["video"].asBool());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(2),
+		visibilityTool.jMeta[MSG_KEY_UI][MSG_KEY_VISIBILITY].size());
+	CHECK(!visibilityTool.jMeta.isMember("ui/resourceUri"));
+
+	// UiResourceMeta models every documented field and passes unknown keys through.
+	UiResourceMeta uiMeta;
+	uiMeta.vecConnectDomains.push_back("https://api.example.com");
+	uiMeta.vecResourceDomains.push_back("https://cdn.example.com");
+	uiMeta.vecFrameDomains.push_back("https://frame.example.com");
+	uiMeta.vecBaseUriDomains.push_back("https://base.example.com");
+	uiMeta.bCamera = true;
+	uiMeta.bClipboardWrite = true;
+	uiMeta.strDomain = "example.com";
+	uiMeta.bHasDomain = true;
+	uiMeta.bPrefersBorder = true;
+	uiMeta.bHasPrefersBorder = true;
+	uiMeta.jExtra[MSG_KEY_PERMISSIONS] = Json::Value(Json::objectValue);
+	uiMeta.jExtra[MSG_KEY_PERMISSIONS][MSG_KEY_MICROPHONE] = true;
+	uiMeta.jExtra["futureFlag"] = "keep";
+	CHECK(uiMeta.HasValue());
+
+	Json::Value jUiMeta(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, uiMeta.DoSerialize(jUiMeta));
+	CHECK_EQ(std::string("https://api.example.com"),
+		jUiMeta[MSG_KEY_CSP][MSG_KEY_CONNECT_DOMAINS][0].asString());
+	CHECK_EQ(std::string("https://cdn.example.com"),
+		jUiMeta[MSG_KEY_CSP][MSG_KEY_RESOURCE_DOMAINS][0].asString());
+	CHECK_EQ(std::string("https://frame.example.com"),
+		jUiMeta[MSG_KEY_CSP][MSG_KEY_FRAME_DOMAINS][0].asString());
+	CHECK_EQ(std::string("https://base.example.com"),
+		jUiMeta[MSG_KEY_CSP][MSG_KEY_BASE_URI_DOMAINS][0].asString());
+	CHECK(jUiMeta[MSG_KEY_PERMISSIONS][MSG_KEY_CAMERA].asBool());
+	CHECK(jUiMeta[MSG_KEY_PERMISSIONS][MSG_KEY_CLIPBOARD_WRITE].asBool());
+	CHECK(jUiMeta[MSG_KEY_PERMISSIONS][MSG_KEY_MICROPHONE].asBool());
+	CHECK(!jUiMeta[MSG_KEY_PERMISSIONS].isMember(MSG_KEY_GEOLOCATION));
+	CHECK_EQ(std::string("example.com"), jUiMeta[MSG_KEY_DOMAIN].asString());
+	CHECK(jUiMeta[MSG_KEY_PREFERS_BORDER].asBool());
+	CHECK_EQ(std::string("keep"), jUiMeta["futureFlag"].asString());
+
+	// Resource and contents setters keep unmodeled _meta keys.
+	Resource uiResource;
+	uiResource.strName = "Echo App";
+	uiResource.strUri = "ui://echo/app.html";
+	uiResource.jMeta["trace"] = "keep";
+	uiResource.SetUiMeta(uiMeta);
+	CHECK_EQ(std::string("keep"), uiResource.jMeta["trace"].asString());
+	CHECK_EQ(std::string("example.com"), uiResource.jMeta[MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
+
+	TextResourceContents uiContents;
+	uiContents.SetUiMeta(uiMeta);
+	CHECK_EQ(std::string("example.com"), uiContents.jMeta[MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
+
+	// BuildUiResourceContents copies uri, mime type and the whole _meta.ui tree.
+	Resource listedUiResource;
+	listedUiResource.strUri = "ui://echo/app.html";
+	listedUiResource.strMimeType = MIME_TYPE_MCP_APP;
+	listedUiResource.SetUiMeta(uiMeta);
+	TextResourceContents builtContents;
+	CHECK_EQ(ERRNO_OK, BuildUiResourceContents(listedUiResource, "<html></html>", builtContents));
+	CHECK_EQ(std::string("ui://echo/app.html"), builtContents.strUri);
+	CHECK_EQ(std::string(MIME_TYPE_MCP_APP), builtContents.strMimeType);
+	CHECK_EQ(std::string("<html></html>"), builtContents.strText);
+	CHECK_EQ(std::string("example.com"), builtContents.jMeta[MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
+	CHECK_EQ(std::string("keep"),
+		builtContents.jMeta[MSG_KEY_UI]["futureFlag"].asString());
 }
 
 TEST_CASE("unit.content_blocks")
@@ -394,8 +490,9 @@ TEST_CASE("unit.content_blocks")
 	toolResult.jContent.append(jTextBlock);
 	toolResult.bHasIsError = true;
 	toolResult.bIsError = false;
-	toolResult.jStructuredContent = Json::Value(Json::objectValue);
-	toolResult.jStructuredContent[MSG_KEY_TEXT] = "ok";
+	Json::Value jToolStructured(Json::objectValue);
+	jToolStructured[MSG_KEY_TEXT] = "ok";
+	toolResult.structuredContent.Set(jToolStructured);
 	CHECK(toolResult.IsValid());
 
 	Json::Value jLegacyToolResult(Json::objectValue);

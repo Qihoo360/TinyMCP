@@ -129,7 +129,7 @@ namespace MCP
 		std::vector<MCP::EmbeddedResource> vecEmbeddedResource;
 		std::vector<MCP::ToolUseContent> vecToolUseContent;
 		std::vector<MCP::ToolResultContent> vecToolResultContent;
-		Json::Value jStructuredContent;
+		MCP::StructuredContent structuredContent;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

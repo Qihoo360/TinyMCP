@@ -761,6 +761,20 @@ namespace MCP
 		jMeta[MSG_KEY_UI][MSG_KEY_RESOURCE_URI] = strUri;
 	}
 
+	void Tool::SetUiVisibility(const std::vector<std::string>& vecVisibility)
+	{
+		if (!jMeta.isObject())
+			jMeta = Json::Value(Json::objectValue);
+		if (!jMeta[MSG_KEY_UI].isObject())
+			jMeta[MSG_KEY_UI] = Json::Value(Json::objectValue);
+
+		Json::Value jVisibility(Json::arrayValue);
+		for (const auto& strVisibility : vecVisibility)
+			jVisibility.append(strVisibility);
+
+		jMeta[MSG_KEY_UI][MSG_KEY_VISIBILITY] = jVisibility;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// TextContent
 	int TextContent::DoSerialize(Json::Value& jMsg) const
@@ -1074,7 +1088,7 @@ namespace MCP
 		}
 
 		if (jMsg.isMember(MSG_KEY_STRUCTURED_CONTENT))
-			jStructuredContent = jMsg[MSG_KEY_STRUCTURED_CONTENT];
+			structuredContent.DoDeserialize(jMsg[MSG_KEY_STRUCTURED_CONTENT]);
 
 		return ERRNO_OK;
 	}
@@ -1089,8 +1103,12 @@ namespace MCP
 
 	int ToolResultContent::DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const
 	{
-		if (ctxProtocol.Supports(Feature_StructuredContent) && !jStructuredContent.isNull())
-			jMsg[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
+		if (ctxProtocol.Supports(Feature_StructuredContent) && structuredContent.HasValue())
+		{
+			Json::Value jStructuredContent;
+			if (ERRNO_OK == structuredContent.DoSerialize(jStructuredContent))
+				jMsg[MSG_KEY_STRUCTURED_CONTENT] = jStructuredContent;
+		}
 
 		WriteContentVersionExtras(jMsg, ctxProtocol, jMeta, annotations);
 
@@ -1102,7 +1120,7 @@ namespace MCP
 		if (ctxProtocol.Supports(Feature_StructuredContent)
 			&& jMsg.isMember(MSG_KEY_STRUCTURED_CONTENT))
 		{
-			jStructuredContent = jMsg[MSG_KEY_STRUCTURED_CONTENT];
+			structuredContent.DoDeserialize(jMsg[MSG_KEY_STRUCTURED_CONTENT]);
 		}
 
 		ReadContentVersionExtras(jMsg, ctxProtocol, jMeta, annotations);
@@ -1200,6 +1218,91 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// UiResourceMeta
+	namespace
+	{
+		void WriteStringArray(Json::Value& jObj, const char* lpcszKey, const std::vector<std::string>& vecValues)
+		{
+			if (vecValues.empty())
+				return;
+
+			Json::Value jValues(Json::arrayValue);
+			for (const auto& strValue : vecValues)
+				jValues.append(strValue);
+
+			jObj[lpcszKey] = jValues;
+		}
+	}
+
+	bool UiResourceMeta::HasValue() const
+	{
+		return !vecConnectDomains.empty()
+			|| !vecResourceDomains.empty()
+			|| !vecFrameDomains.empty()
+			|| !vecBaseUriDomains.empty()
+			|| bCamera
+			|| bMicrophone
+			|| bGeolocation
+			|| bClipboardWrite
+			|| bHasDomain
+			|| bHasPrefersBorder
+			|| (jExtra.isObject() && !jExtra.empty());
+	}
+
+	int UiResourceMeta::DoSerialize(Json::Value& jUi) const
+	{
+		if (!jUi.isObject())
+			jUi = Json::Value(Json::objectValue);
+
+		// Unknown fields pass through without overriding anything already set.
+		if (jExtra.isObject())
+		{
+			for (auto it = jExtra.begin(); it != jExtra.end(); ++it)
+			{
+				if (!jUi.isMember(it.name()))
+					jUi[it.name()] = *it;
+			}
+		}
+
+		if (!vecConnectDomains.empty() || !vecResourceDomains.empty()
+			|| !vecFrameDomains.empty() || !vecBaseUriDomains.empty())
+		{
+			if (!jUi[MSG_KEY_CSP].isObject())
+				jUi[MSG_KEY_CSP] = Json::Value(Json::objectValue);
+
+			Json::Value& jCsp = jUi[MSG_KEY_CSP];
+			WriteStringArray(jCsp, MSG_KEY_CONNECT_DOMAINS, vecConnectDomains);
+			WriteStringArray(jCsp, MSG_KEY_RESOURCE_DOMAINS, vecResourceDomains);
+			WriteStringArray(jCsp, MSG_KEY_FRAME_DOMAINS, vecFrameDomains);
+			WriteStringArray(jCsp, MSG_KEY_BASE_URI_DOMAINS, vecBaseUriDomains);
+		}
+
+		if (bCamera || bMicrophone || bGeolocation || bClipboardWrite)
+		{
+			if (!jUi[MSG_KEY_PERMISSIONS].isObject())
+				jUi[MSG_KEY_PERMISSIONS] = Json::Value(Json::objectValue);
+
+			Json::Value& jPermissions = jUi[MSG_KEY_PERMISSIONS];
+			if (bCamera)
+				jPermissions[MSG_KEY_CAMERA] = true;
+			if (bMicrophone)
+				jPermissions[MSG_KEY_MICROPHONE] = true;
+			if (bGeolocation)
+				jPermissions[MSG_KEY_GEOLOCATION] = true;
+			if (bClipboardWrite)
+				jPermissions[MSG_KEY_CLIPBOARD_WRITE] = true;
+		}
+
+		if (bHasDomain)
+			jUi[MSG_KEY_DOMAIN] = strDomain;
+
+		if (bHasPrefersBorder)
+			jUi[MSG_KEY_PREFERS_BORDER] = bPrefersBorder;
+
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// TextResourceContents
 	int TextResourceContents::DoSerialize(Json::Value& jMsg) const
 	{
@@ -1255,6 +1358,16 @@ namespace MCP
 		}
 
 		return ERRNO_OK;
+	}
+
+	void TextResourceContents::SetUiMeta(const UiResourceMeta& uiMeta)
+	{
+		if (!jMeta.isObject())
+			jMeta = Json::Value(Json::objectValue);
+		if (!jMeta[MSG_KEY_UI].isObject())
+			jMeta[MSG_KEY_UI] = Json::Value(Json::objectValue);
+
+		uiMeta.DoSerialize(jMeta[MSG_KEY_UI]);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
@@ -1380,6 +1493,35 @@ namespace MCP
 	{
 		ReadEntityVersionExtras(jMsg, ctxProtocol, strTitle, vecIcons, jMeta,
 			&annotations, Feature_ToolAnnotations);
+
+		return ERRNO_OK;
+	}
+
+	void Resource::SetUiMeta(const UiResourceMeta& uiMeta)
+	{
+		if (!jMeta.isObject())
+			jMeta = Json::Value(Json::objectValue);
+		if (!jMeta[MSG_KEY_UI].isObject())
+			jMeta[MSG_KEY_UI] = Json::Value(Json::objectValue);
+
+		uiMeta.DoSerialize(jMeta[MSG_KEY_UI]);
+	}
+
+	int BuildUiResourceContents(const Resource& resource, const std::string& strHtml, TextResourceContents& contents)
+	{
+		contents.strUri = resource.strUri;
+		contents.strMimeType = resource.strMimeType.empty() ? MIME_TYPE_MCP_APP : resource.strMimeType;
+		contents.strText = strHtml;
+
+		if (resource.jMeta.isObject()
+			&& resource.jMeta.isMember(MSG_KEY_UI)
+			&& resource.jMeta[MSG_KEY_UI].isObject())
+		{
+			// Reuse the resource metadata verbatim so list and read never drift.
+			UiResourceMeta uiMeta;
+			uiMeta.jExtra = resource.jMeta[MSG_KEY_UI];
+			contents.SetUiMeta(uiMeta);
+		}
 
 		return ERRNO_OK;
 	}
@@ -2146,6 +2288,65 @@ namespace MCP
 			return ERRNO_PARSE_ERROR;
 
 		jItems = jMsg;
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// StructuredContent
+	void StructuredContent::Set(const Json::Value& jValue)
+	{
+		// Only JSON objects are valid structured content; anything else clears the
+		// field instead of silently producing an invalid payload.
+		if (!jValue.isObject())
+		{
+			Clear();
+			return;
+		}
+
+		m_jData = jValue;
+	}
+
+	const Json::Value& StructuredContent::Get() const
+	{
+		return m_jData;
+	}
+
+	bool StructuredContent::HasValue() const
+	{
+		return m_jData.isObject() && !m_jData.empty();
+	}
+
+	void StructuredContent::Clear()
+	{
+		m_jData = Json::Value();
+	}
+
+	bool StructuredContent::IsValid() const
+	{
+		return m_jData.isNull() || m_jData.isObject();
+	}
+
+	int StructuredContent::DoSerialize(Json::Value& jValue) const
+	{
+		if (!IsValid())
+			return ERRNO_INVALID_RESPONSE;
+
+		jValue = m_jData;
+		return ERRNO_OK;
+	}
+
+	int StructuredContent::DoDeserialize(const Json::Value& jValue)
+	{
+		if (jValue.isNull())
+		{
+			Clear();
+			return ERRNO_OK;
+		}
+
+		if (!jValue.isObject())
+			return ERRNO_INVALID_RESPONSE;
+
+		m_jData = jValue;
 		return ERRNO_OK;
 	}
 }
