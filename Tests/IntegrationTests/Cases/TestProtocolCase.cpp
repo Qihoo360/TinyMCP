@@ -993,24 +993,35 @@ TEST_CASE("integration.apps")
 	CHECK(jExtensions.isObject());
 	CHECK(jExtensions.isMember(EXTENSION_UI));
 
-	// tools/list exposes _meta.ui.resourceUri on the app entry point.
+	// tools/list exposes _meta.ui.resourceUri and visibility on the app entry point.
 	CHECK(ExpectResponse(driver, MakeRequest(11, METHOD_TOOLS_LIST,
 		MakeModernParams("2026-07-28", "{}")), jResponse));
 	Json::Value jAppTool;
 	CHECK(FindTool(jResponse[MSG_KEY_RESULT], CTestServer::APP_TOOL_NAME, jAppTool));
 	CHECK_EQ(std::string(CTestServer::UI_RESOURCE_URI),
 		jAppTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_RESOURCE_URI].asString());
+	CHECK_EQ(static_cast<Json::ArrayIndex>(2),
+		jAppTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_VISIBILITY].size());
+	CHECK_EQ(std::string(UI_VISIBILITY_MODEL),
+		jAppTool[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_VISIBILITY][0].asString());
 
-	// resources/list exposes the UI mime type and ui metadata.
+	// resources/list exposes the UI mime type and the full ui metadata.
 	CHECK(ExpectResponse(driver, MakeRequest(12, METHOD_RESOURCES_LIST,
 		MakeModernParams("2026-07-28", "{}")), jResponse));
 	Json::Value jUiResource;
 	CHECK(FindResource(jResponse[MSG_KEY_RESULT], CTestServer::UI_RESOURCE_URI, jUiResource));
 	CHECK_EQ(std::string(MIME_TYPE_MCP_APP), jUiResource[MSG_KEY_MIMETYPE].asString());
 	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP].isObject());
-	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS].isObject());
-	CHECK(!jUiResource[MSG_KEY_META][MSG_KEY_UI].isMember("domain"));
-	CHECK(!jUiResource[MSG_KEY_META][MSG_KEY_UI].isMember("prefersBorder"));
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_CONNECT_DOMAINS].isArray());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_RESOURCE_DOMAINS].isArray());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_FRAME_DOMAINS].isArray());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_BASE_URI_DOMAINS].isArray());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS][MSG_KEY_CAMERA].asBool());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS][MSG_KEY_MICROPHONE].asBool());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS][MSG_KEY_GEOLOCATION].asBool());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS][MSG_KEY_CLIPBOARD_WRITE].asBool());
+	CHECK_EQ(std::string("example.com"), jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
+	CHECK(jUiResource[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PREFERS_BORDER].asBool());
 
 	// resources/read returns the same metadata with the UI mime type.
 	CHECK(ExpectResponse(driver, MakeRequest(13, METHOD_RESOURCES_READ,
@@ -1018,10 +1029,20 @@ TEST_CASE("integration.apps")
 			"\"uri\":\"" + std::string(CTestServer::UI_RESOURCE_URI) + "\"")), jResponse));
 	const Json::Value& jContents = jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENTS][0];
 	CHECK_EQ(std::string(MIME_TYPE_MCP_APP), jContents[MSG_KEY_MIMETYPE].asString());
-	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP]["connectDomains"].isArray());
-	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS]["clipboardWrite"].asBool());
-	CHECK(!jContents[MSG_KEY_META][MSG_KEY_UI].isMember("domain"));
-	CHECK(!jContents[MSG_KEY_META][MSG_KEY_UI].isMember("prefersBorder"));
+	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_CONNECT_DOMAINS].isArray());
+	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_CSP][MSG_KEY_BASE_URI_DOMAINS].isArray());
+	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PERMISSIONS][MSG_KEY_CLIPBOARD_WRITE].asBool());
+	CHECK_EQ(std::string("example.com"), jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
+	CHECK(jContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_PREFERS_BORDER].asBool());
+
+	// A blob form HTML payload is served with the same UI metadata.
+	CHECK(ExpectResponse(driver, MakeRequest(18, METHOD_RESOURCES_READ,
+		MakeModernParams("2026-07-28", "{}", std::string(),
+			"\"uri\":\"" + std::string(CTestServer::UI_BLOB_RESOURCE_URI) + "\"")), jResponse));
+	const Json::Value& jBlobContents = jResponse[MSG_KEY_RESULT][MSG_KEY_CONTENTS][0];
+	CHECK_EQ(std::string(MIME_TYPE_MCP_APP), jBlobContents[MSG_KEY_MIMETYPE].asString());
+	CHECK(!jBlobContents[MSG_KEY_BLOB].asString().empty());
+	CHECK_EQ(std::string("example.com"), jBlobContents[MSG_KEY_META][MSG_KEY_UI][MSG_KEY_DOMAIN].asString());
 
 	// Client extension capabilities and custom _meta keys are readable.
 	CHECK(ExpectResponse(driver, MakeRequest(14, METHOD_TOOLS_CALL,

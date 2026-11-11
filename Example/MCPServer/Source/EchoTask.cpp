@@ -453,6 +453,10 @@ namespace Implementation
 </body>
 </html>
 )";
+		// Keep resources/read metadata identical to the registered ui:// resource.
+		MCP::UiResourceMeta uiMeta;
+		uiMeta.bClipboardWrite = true;
+		textContent.SetUiMeta(uiMeta);
 		spResult->vecTextResourceContents.push_back(textContent);
 
 		return NotifyResult(spResult);

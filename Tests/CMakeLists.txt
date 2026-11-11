@@ -23,6 +23,7 @@ add_executable(TinyMCPTests
 	UnitTests/TestResponse.cpp
 	UnitTests/TestNotification.cpp
 	UnitTests/TestLegacyCompat.cpp
+	UnitTests/TestApps.cpp
 	IntegrationTests/MemoryTransport.cpp
 	IntegrationTests/TestServer.cpp
 	IntegrationTests/Driver.cpp

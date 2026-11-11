@@ -35,6 +35,7 @@ namespace MCP
 			static constexpr const char* PROMPT_NAME = "echo_prompt";
 			static constexpr const char* APP_TOOL_NAME = "echo_app";
 			static constexpr const char* UI_RESOURCE_URI = "ui://echo/app.html";
+			static constexpr const char* UI_BLOB_RESOURCE_URI = "ui://echo/app-blob.html";
 			static constexpr const char* MRTR_RESOURCE_URI = "test://echo/mrtr";
 
 			// Registers the extra modern fixtures (app tool/UI resource/extra read

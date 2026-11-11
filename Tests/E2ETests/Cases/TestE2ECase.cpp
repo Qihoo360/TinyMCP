@@ -730,13 +730,13 @@ namespace MCP
 
 			// The legacy resource view never carries _meta either.
 			CHECK(ExpectResponse(client, 5, METHOD_RESOURCES_LIST, std::string(), jResponse));
-			CHECK_EQ(2, static_cast<int>(jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES].size()));
+			CHECK_EQ(3, static_cast<int>(jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES].size()));
 			for (Json::ArrayIndex i = 0; i < jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES].size(); ++i)
 				CHECK(!jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES][i].isMember(MSG_KEY_META));
 
 			CHECK(ExpectResponse(client, 6, METHOD_RESOURCES_LIST,
 				MakeModernParams(PROTOCOL_VER_2026_07_28, "{}"), jResponse));
-			CHECK_EQ(2, static_cast<int>(jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES].size()));
+			CHECK_EQ(3, static_cast<int>(jResponse[MSG_KEY_RESULT][MSG_KEY_RESOURCES].size()));
 
 			CHECK_EQ(ERRNO_OK, client.Stop(0));
 		}

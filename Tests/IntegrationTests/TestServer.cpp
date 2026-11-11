@@ -52,6 +52,26 @@ namespace MCP
 				return jInputRequests;
 			}
 
+			// The modern fixtures publish every documented UI field so integration
+			// tests can assert the full metadata surface.
+			MCP::UiResourceMeta MakeUiMeta()
+			{
+				MCP::UiResourceMeta uiMeta;
+				uiMeta.vecConnectDomains.push_back("https://api.example.com");
+				uiMeta.vecResourceDomains.push_back("https://cdn.example.com");
+				uiMeta.vecFrameDomains.push_back("https://frame.example.com");
+				uiMeta.vecBaseUriDomains.push_back("https://base.example.com");
+				uiMeta.bCamera = true;
+				uiMeta.bMicrophone = true;
+				uiMeta.bGeolocation = true;
+				uiMeta.bClipboardWrite = true;
+				uiMeta.strDomain = "example.com";
+				uiMeta.bHasDomain = true;
+				uiMeta.bPrefersBorder = true;
+				uiMeta.bHasPrefersBorder = true;
+				return uiMeta;
+			}
+
 			class CTestEchoTask : public MCP::ProcessCallToolRequest
 			{
 			public:
@@ -608,11 +628,56 @@ namespace MCP
 					textResource.strUri = spReadResourceRequest->strUri;
 					textResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
 					textResource.strText = "<html><body>Echo App</body></html>";
-					MCP::UiResourceMeta uiMeta;
-					uiMeta.vecConnectDomains.push_back("https://example.com");
-					uiMeta.bClipboardWrite = true;
-					textResource.SetUiMeta(uiMeta);
+					textResource.SetUiMeta(MakeUiMeta());
 					spResult->vecTextResourceContents.push_back(textResource);
+
+					return NotifyResult(spResult);
+				}
+
+				int Cancel() override
+				{
+					return MCP::ERRNO_OK;
+				}
+			};
+
+			// Serves the UI resource as a blob, which is also a valid MCP App
+			// content form.
+			class CTestReadUiBlobResourceTask : public MCP::ProcessReadResourceRequest
+			{
+			public:
+				CTestReadUiBlobResourceTask(const std::shared_ptr<MCP::Request>& spRequest)
+					: ProcessReadResourceRequest(spRequest)
+				{
+				}
+
+				std::shared_ptr<MCP::CMCPTask> Clone() const override
+				{
+					auto spClone = std::make_shared<CTestReadUiBlobResourceTask>(nullptr);
+					if (spClone)
+						*spClone = *this;
+
+					return spClone;
+				}
+
+				int Execute() override
+				{
+					if (!IsValid())
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					auto spReadResourceRequest = std::dynamic_pointer_cast<MCP::ReadResourceRequest>(m_spRequest);
+					if (!spReadResourceRequest)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					auto spResult = BuildResult();
+					if (!spResult)
+						return MCP::ERRNO_INTERNAL_ERROR;
+
+					MCP::BlobResourceContents blobResource;
+					blobResource.strUri = spReadResourceRequest->strUri;
+					blobResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+					blobResource.strBlob = "PGh0bWw+PC9odG1sPg==";
+					blobResource.SetUiMeta(MakeUiMeta());
+					spResult->vecBlobResourceContents.push_back(blobResource);
 
 					return NotifyResult(spResult);
 				}
@@ -892,6 +957,7 @@ namespace MCP
 				appTool.strDescription = "MCP App entry point.";
 				appTool.inputSchema.Set(jInputSchema);
 				appTool.SetUiResourceUri(CTestServer::UI_RESOURCE_URI);
+				appTool.SetUiVisibility({ MCP::UI_VISIBILITY_MODEL, MCP::UI_VISIBILITY_APP });
 				vecTools.push_back(appTool);
 			}
 
@@ -913,11 +979,16 @@ namespace MCP
 				uiResource.strUri = CTestServer::UI_RESOURCE_URI;
 				uiResource.strDescription = "MCP App UI resource";
 				uiResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
-				MCP::UiResourceMeta uiMeta;
-				uiMeta.vecConnectDomains.push_back("https://example.com");
-				uiMeta.bClipboardWrite = true;
-				uiResource.SetUiMeta(uiMeta);
+				uiResource.SetUiMeta(MakeUiMeta());
 				vecResources.push_back(uiResource);
+
+				MCP::Resource blobUiResource;
+				blobUiResource.strName = "Echo App (blob)";
+				blobUiResource.strUri = CTestServer::UI_BLOB_RESOURCE_URI;
+				blobUiResource.strDescription = "MCP App UI resource served as a blob";
+				blobUiResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
+				blobUiResource.SetUiMeta(MakeUiMeta());
+				vecResources.push_back(blobUiResource);
 			}
 
 			RegisterServerResources(vecResources, false);
@@ -953,6 +1024,11 @@ namespace MCP
 				if (!spReadUiResourceTask)
 					return MCP::ERRNO_INTERNAL_ERROR;
 				RegisterReadResourceTasks(CTestServer::UI_RESOURCE_URI, spReadUiResourceTask);
+
+				auto spReadUiBlobResourceTask = std::make_shared<CTestReadUiBlobResourceTask>(nullptr);
+				if (!spReadUiBlobResourceTask)
+					return MCP::ERRNO_INTERNAL_ERROR;
+				RegisterReadResourceTasks(CTestServer::UI_BLOB_RESOURCE_URI, spReadUiBlobResourceTask);
 
 				auto spReadMrtrResourceTask = std::make_shared<CTestReadMrtrResourceTask>(nullptr);
 				if (!spReadMrtrResourceTask)

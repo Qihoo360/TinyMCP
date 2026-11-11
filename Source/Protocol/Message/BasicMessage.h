@@ -570,6 +570,9 @@ namespace MCP
 		// VersionExtrasAccess in Internal/VersionExtras.h.
 		friend struct VersionExtrasAccess;
 
+		// Writes _meta.ui while keeping unmodeled meta keys intact.
+		void SetUiMeta(const UiResourceMeta& uiMeta);
+
 	private:
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 		int DoDeserializeVersionExtras(const Json::Value& jMsg, const ProtocolContext& ctxProtocol);

@@ -1493,6 +1493,16 @@ namespace MCP
 		return ERRNO_OK;
 	}
 
+	void BlobResourceContents::SetUiMeta(const UiResourceMeta& uiMeta)
+	{
+		if (!jMeta.isObject())
+			jMeta = Json::Value(Json::objectValue);
+		if (!jMeta[MSG_KEY_UI].isObject())
+			jMeta[MSG_KEY_UI] = Json::Value(Json::objectValue);
+
+		uiMeta.DoSerialize(jMeta[MSG_KEY_UI]);
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Resource
 	int Resource::DoSerialize(Json::Value& jMsg) const
