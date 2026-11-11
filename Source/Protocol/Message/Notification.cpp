@@ -50,14 +50,18 @@ namespace MCP
 		if (!ctxProtocol.Supports(Feature_ListenSubscriptions))
 			return;
 
-		if (!bHasSubscriptionId || jSubscriptionId.isNull())
+		if (!bHasSubscriptionId || !subscriptionId.IsValid())
+			return;
+
+		Json::Value jValue;
+		if (ERRNO_OK != subscriptionId.WriteValue(jValue) || jValue.isNull())
 			return;
 
 		Json::Value jMeta(Json::objectValue);
 		if (jParams.isMember(MSG_KEY_META) && jParams[MSG_KEY_META].isObject())
 			jMeta = jParams[MSG_KEY_META];
 
-		jMeta[META_KEY_SUBSCRIPTION_ID] = jSubscriptionId;
+		jMeta[META_KEY_SUBSCRIPTION_ID] = jValue;
 		jParams[MSG_KEY_META] = jMeta;
 	}
 
@@ -308,7 +312,9 @@ namespace MCP
 		// notifications is a required member of the acknowledgment params, even
 		// when the server grants nothing.
 		Json::Value jParams(Json::objectValue);
-		jParams[MSG_KEY_NOTIFICATIONS] = jNotifications.isObject() ? jNotifications : Json::Value(Json::objectValue);
+		Json::Value jNotifications(Json::objectValue);
+		filters.DoSerialize(jNotifications);
+		jParams[MSG_KEY_NOTIFICATIONS] = jNotifications;
 
 		WriteVersionParamsMeta(jParams, GetProtocolContext());
 
@@ -328,7 +334,7 @@ namespace MCP
 
 		auto& jParams = jMsg[MSG_KEY_PARAMS];
 		if (jParams.isMember(MSG_KEY_NOTIFICATIONS) && jParams[MSG_KEY_NOTIFICATIONS].isObject())
-			jNotifications = jParams[MSG_KEY_NOTIFICATIONS];
+			filters.DoDeserialize(jParams[MSG_KEY_NOTIFICATIONS]);
 
 		if (jParams.isMember(MSG_KEY_META) && jParams[MSG_KEY_META].isObject())
 		{
@@ -336,7 +342,8 @@ namespace MCP
 			if (jMeta.isMember(META_KEY_SUBSCRIPTION_ID))
 			{
 				bHasSubscriptionId = true;
-				jSubscriptionId = jMeta[META_KEY_SUBSCRIPTION_ID];
+				subscriptionId.SetMsgKey(META_KEY_SUBSCRIPTION_ID);
+				subscriptionId.DoDeserialize(jMeta);
 			}
 		}
 
@@ -393,5 +400,71 @@ namespace MCP
 			return false;
 
 		return true;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// SubscriptionFilters
+	bool SubscriptionFilters::HasValue() const
+	{
+		return bToolsListChanged
+			|| bPromptsListChanged
+			|| bResourcesListChanged
+			|| !vecResourceSubscriptions.empty();
+	}
+
+	bool SubscriptionFilters::IsValid() const
+	{
+		return true;
+	}
+
+	int SubscriptionFilters::DoSerialize(Json::Value& jMsg) const
+	{
+		if (!jMsg.isObject())
+			jMsg = Json::Value(Json::objectValue);
+
+		if (bToolsListChanged)
+			jMsg[MSG_KEY_TOOLS_LIST_CHANGED] = true;
+		if (bPromptsListChanged)
+			jMsg[MSG_KEY_PROMPTS_LIST_CHANGED] = true;
+		if (bResourcesListChanged)
+			jMsg[MSG_KEY_RESOURCES_LIST_CHANGED] = true;
+
+		if (!vecResourceSubscriptions.empty())
+		{
+			Json::Value jSubscriptions(Json::arrayValue);
+			for (const auto& strUri : vecResourceSubscriptions)
+				jSubscriptions.append(strUri);
+			jMsg[MSG_KEY_RESOURCE_SUBSCRIPTIONS] = jSubscriptions;
+		}
+
+		return ERRNO_OK;
+	}
+
+	int SubscriptionFilters::DoDeserialize(const Json::Value& jMsg)
+	{
+		if (!jMsg.isObject())
+			return ERRNO_PARSE_ERROR;
+
+		bToolsListChanged = jMsg.isMember(MSG_KEY_TOOLS_LIST_CHANGED)
+			&& jMsg[MSG_KEY_TOOLS_LIST_CHANGED].isBool()
+			&& jMsg[MSG_KEY_TOOLS_LIST_CHANGED].asBool();
+		bPromptsListChanged = jMsg.isMember(MSG_KEY_PROMPTS_LIST_CHANGED)
+			&& jMsg[MSG_KEY_PROMPTS_LIST_CHANGED].isBool()
+			&& jMsg[MSG_KEY_PROMPTS_LIST_CHANGED].asBool();
+		bResourcesListChanged = jMsg.isMember(MSG_KEY_RESOURCES_LIST_CHANGED)
+			&& jMsg[MSG_KEY_RESOURCES_LIST_CHANGED].isBool()
+			&& jMsg[MSG_KEY_RESOURCES_LIST_CHANGED].asBool();
+
+		vecResourceSubscriptions.clear();
+		if (jMsg.isMember(MSG_KEY_RESOURCE_SUBSCRIPTIONS) && jMsg[MSG_KEY_RESOURCE_SUBSCRIPTIONS].isArray())
+		{
+			for (const auto& jUri : jMsg[MSG_KEY_RESOURCE_SUBSCRIPTIONS])
+			{
+				if (jUri.isString())
+					vecResourceSubscriptions.push_back(jUri.asString());
+			}
+		}
+
+		return ERRNO_OK;
 	}
 }

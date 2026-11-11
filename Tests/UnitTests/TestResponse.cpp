@@ -37,6 +37,14 @@ namespace
 		return requestId;
 	}
 
+	RequestId MakeStringRequestId(const std::string& strId)
+	{
+		RequestId requestId;
+		requestId.eIdDataType = DataType_String;
+		requestId.strId = strId;
+		return requestId;
+	}
+
 	Json::Value SerializeMessage(const Message& msg)
 	{
 		Json::Value jMsg(Json::objectValue);
@@ -58,7 +66,9 @@ TEST_CASE("unit.response")
 	MessageContextAccess::Set(legacyResult, ctxLegacy);
 	legacyResult.iTtlMs = 1500;
 	legacyResult.strCacheScope = CACHE_SCOPE_PRIVATE;
-	legacyResult.jInputRequests[MSG_KEY_TYPE] = "confirm";
+	Json::Value jLegacyRequests(Json::objectValue);
+	jLegacyRequests[MSG_KEY_TYPE] = "confirm";
+	legacyResult.inputRequests.Set(jLegacyRequests);
 	legacyResult.strRequestState = "legacy-state";
 	legacyResult.jServerInfo[MSG_KEY_NAME] = "tinymcp";
 
@@ -78,7 +88,9 @@ TEST_CASE("unit.response")
 	MessageContextAccess::Set(modernResult, ctxModern);
 	modernResult.iTtlMs = 2500;
 	modernResult.strCacheScope = CACHE_SCOPE_PUBLIC;
-	modernResult.jInputRequests["confirm"] = "please";
+	Json::Value jModernRequests(Json::objectValue);
+	jModernRequests["confirm"] = "please";
+	modernResult.inputRequests.Set(jModernRequests);
 	modernResult.strRequestState = "state-token";
 	modernResult.jServerInfo[MSG_KEY_NAME] = "tinymcp";
 	modernResult.jServerInfo[MSG_KEY_VERSION] = "1.0.0";
@@ -132,7 +144,7 @@ TEST_CASE("unit.response")
 	SubscriptionsListenResult listenResult(false);
 	listenResult.requestId = MakeRequestId(10);
 	MessageContextAccess::Set(listenResult, ctxModern);
-	listenResult.jSubscriptionId = Json::Value("sdk-subscription");
+	listenResult.subscriptionId = MakeStringRequestId("sdk-subscription");
 	listenResult.jResultMeta[META_KEY_SUBSCRIPTION_ID] = "application-subscription";
 	listenResult.jResultMeta["application/key"] = "value";
 	listenResult.jServerInfo[MSG_KEY_NAME] = "tinymcp";
@@ -144,7 +156,7 @@ TEST_CASE("unit.response")
 	CHECK_EQ(std::string("tinymcp"), jListenMeta[META_KEY_SERVER_INFO][MSG_KEY_NAME].asString());
 
 	// The subscription id keeps its original JSON type.
-	listenResult.jSubscriptionId = Json::Value(77);
+	listenResult.subscriptionId = MakeRequestId(77);
 	Json::Value jIntListen = SerializeMessage(listenResult);
 	CHECK(jIntListen[MSG_KEY_RESULT][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].isInt());
 	CHECK_EQ(77, jIntListen[MSG_KEY_RESULT][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());

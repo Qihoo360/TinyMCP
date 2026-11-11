@@ -343,13 +343,13 @@ TEST_CASE("unit.subscriptions")
 	// Resource updates require an exact URI match.
 	const std::string strChildUri = std::string(CTestServer::RESOURCE_URI) + "/child";
 	nBefore = driver.GetOutputCount();
-	Json::Value jUpdatedParams(Json::objectValue);
-	jUpdatedParams[MSG_KEY_URI] = strChildUri;
-	CTestServer::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, strChildUri);
+	MCP::ResourceUpdatedNotification updated(false);
+	updated.strUri = strChildUri;
+	CTestServer::GetInstance().SendSubscriptionNotification(updated, strChildUri);
 	CHECK(!driver.WaitForOutputCount(nBefore + 1, QUIET_WAIT_MS));
 
-	jUpdatedParams[MSG_KEY_URI] = CTestServer::RESOURCE_URI;
-	CTestServer::GetInstance().SendSubscriptionNotification(METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI);
+	updated.strUri = CTestServer::RESOURCE_URI;
+	CTestServer::GetInstance().SendSubscriptionNotification(updated, CTestServer::RESOURCE_URI);
 	CHECK(driver.WaitForOutputCount(nBefore + 1, WAIT_TIMEOUT_MS));
 	CHECK(ParseJson(driver.GetOutput(nBefore), jResponse));
 	CHECK_EQ(std::string(METHOD_NOTIFICATION_RESOURCES_UPDATED), jResponse[MSG_KEY_METHOD].asString());
@@ -441,7 +441,7 @@ TEST_CASE("unit.apps")
 
 	Tool tool;
 	tool.strName = "echo_app";
-	tool.jInputSchema = Json::Value(Json::objectValue);
+	tool.inputSchema.Set(Json::Value(Json::objectValue));
 	tool.SetUiResourceUri("ui://echo/app.html");
 	tool.SetUiVisibility({ UI_VISIBILITY_MODEL, UI_VISIBILITY_APP });
 

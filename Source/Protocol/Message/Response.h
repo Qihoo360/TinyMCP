@@ -18,7 +18,7 @@ namespace MCP
 
 		MCP::RequestId requestId;
 		std::string strResultType;
-		Json::Value jInputRequests;
+		MCP::InputRequests inputRequests;
 		std::string strRequestState;
 		int iTtlMs{ -1 };
 		std::string strCacheScope;
@@ -272,7 +272,7 @@ namespace MCP
 		{
 		}
 
-		Json::Value jSubscriptionId;
+		MCP::RequestId subscriptionId;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

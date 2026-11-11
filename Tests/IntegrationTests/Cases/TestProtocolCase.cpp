@@ -892,19 +892,19 @@ TEST_CASE("integration.subscriptions")
 	CHECK_EQ(nBeforePrompt, driver.GetOutputCount());
 
 	// A resource URI outside the granted set stays silent.
-	Json::Value jUpdatedParams(Json::objectValue);
-	jUpdatedParams[MSG_KEY_URI] = "test://echo/other";
+	MCP::ResourceUpdatedNotification updated(false);
+	updated.strUri = "test://echo/other";
 	size_t nBeforeUri = driver.GetOutputCount();
 	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
-		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, "test://echo/other"));
+		updated, "test://echo/other"));
 	WaitQuiet();
 	CHECK_EQ(nBeforeUri, driver.GetOutputCount());
 
 	// The granted URI is delivered.
-	jUpdatedParams[MSG_KEY_URI] = CTestServer::RESOURCE_URI;
+	updated.strUri = CTestServer::RESOURCE_URI;
 	size_t nBeforeGrantedUri = driver.GetOutputCount();
 	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
-		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI));
+		updated, CTestServer::RESOURCE_URI));
 	CHECK(driver.WaitForOutputCount(nBeforeGrantedUri + 1, WAIT_TIMEOUT_MS));
 
 	Json::Value jUpdated;
@@ -926,7 +926,7 @@ TEST_CASE("integration.subscriptions")
 	size_t nBeforeCancelled = driver.GetOutputCount();
 	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendResourceListChanged());
 	CHECK_EQ(ERRNO_OK, CTestServer::GetInstance().SendSubscriptionNotification(
-		METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdatedParams, CTestServer::RESOURCE_URI));
+		updated, CTestServer::RESOURCE_URI));
 	WaitQuiet();
 	CHECK_EQ(nBeforeCancelled, driver.GetOutputCount());
 

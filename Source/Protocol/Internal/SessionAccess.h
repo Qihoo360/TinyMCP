@@ -50,10 +50,10 @@ namespace MCP
 			return session.SendResourceListChanged();
 		}
 
-		static int SendSubscriptionNotification(CMCPSession& session, const std::string& strMethod,
-			const Json::Value& jParams, const std::string& strMatchUri)
+		static int SendSubscriptionNotification(CMCPSession& session,
+			const MCP::ResourceUpdatedNotification& notification, const std::string& strMatchUri)
 		{
-			return session.SendSubscriptionNotification(strMethod, jParams, strMatchUri);
+			return session.SendSubscriptionNotification(notification, strMatchUri);
 		}
 	};
 }

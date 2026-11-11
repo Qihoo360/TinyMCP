@@ -93,7 +93,7 @@ namespace MCP
 					// untouched because action-less calls keep the old behaviour.
 					if ("confirm" == strAction || "confirm_input_only" == strAction)
 					{
-						if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+						if (!m_spRequest->inputResponses.HasValue())
 						{
 							int iErrCode = NotifyInputRequired(MakeElicitationInputRequests(),
 								("confirm" == strAction) ? "echo-confirm-state" : std::string());
@@ -295,10 +295,10 @@ namespace MCP
 					{
 						if ("notify_resource" == strAction)
 						{
-							Json::Value jUpdated(Json::objectValue);
-							jUpdated[MCP::MSG_KEY_URI] = CTestServer::RESOURCE_URI;
+							MCP::ResourceUpdatedNotification updated(false);
+							updated.strUri = CTestServer::RESOURCE_URI;
 							CTestServer::GetInstance().SendSubscriptionNotification(
-								MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jUpdated, CTestServer::RESOURCE_URI);
+								updated, CTestServer::RESOURCE_URI);
 						}
 						else if ("notify_list_changed" == strAction)
 						{
@@ -348,7 +348,7 @@ namespace MCP
 					{
 						const bool bSampling = ("input_sampling" == strAction);
 
-						if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+						if (!m_spRequest->inputResponses.HasValue())
 						{
 							Json::Value jParams(Json::objectValue);
 							if (bSampling)
@@ -608,8 +608,10 @@ namespace MCP
 					textResource.strUri = spReadResourceRequest->strUri;
 					textResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
 					textResource.strText = "<html><body>Echo App</body></html>";
-					textResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_CSP]["connectDomains"].append("https://example.com");
-					textResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_PERMISSIONS]["clipboardWrite"] = true;
+					MCP::UiResourceMeta uiMeta;
+					uiMeta.vecConnectDomains.push_back("https://example.com");
+					uiMeta.bClipboardWrite = true;
+					textResource.SetUiMeta(uiMeta);
 					spResult->vecTextResourceContents.push_back(textResource);
 
 					return NotifyResult(spResult);
@@ -648,7 +650,7 @@ namespace MCP
 					if (!spReadResourceRequest)
 						return MCP::ERRNO_INTERNAL_ERROR;
 
-					bool bHasInputResponses = m_spRequest->jInputResponses.isObject() && !m_spRequest->jInputResponses.empty();
+					bool bHasInputResponses = m_spRequest->inputResponses.HasValue();
 					if (!bHasInputResponses && m_spRequest->strRequestState.empty())
 						return NotifyInputRequired(Json::Value(), "echo-read-state");
 
@@ -878,7 +880,7 @@ namespace MCP
 			Json::Value jInputSchema(Json::objectValue);
 			if (!reader.parse("{\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"]}", jInputSchema) || !jInputSchema.isObject())
 				return MCP::ERRNO_PARSE_ERROR;
-			tool.jInputSchema = jInputSchema;
+			tool.inputSchema.Set(jInputSchema);
 
 			std::vector<MCP::Tool> vecTools;
 			vecTools.push_back(tool);
@@ -888,7 +890,7 @@ namespace MCP
 				MCP::Tool appTool;
 				appTool.strName = CTestServer::APP_TOOL_NAME;
 				appTool.strDescription = "MCP App entry point.";
-				appTool.jInputSchema = jInputSchema;
+				appTool.inputSchema.Set(jInputSchema);
 				appTool.SetUiResourceUri(CTestServer::UI_RESOURCE_URI);
 				vecTools.push_back(appTool);
 			}
@@ -911,8 +913,10 @@ namespace MCP
 				uiResource.strUri = CTestServer::UI_RESOURCE_URI;
 				uiResource.strDescription = "MCP App UI resource";
 				uiResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
-				uiResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_CSP]["connectDomains"].append("https://example.com");
-				uiResource.jMeta[MCP::MSG_KEY_UI][MCP::MSG_KEY_PERMISSIONS]["clipboardWrite"] = true;
+				MCP::UiResourceMeta uiMeta;
+				uiMeta.vecConnectDomains.push_back("https://example.com");
+				uiMeta.bClipboardWrite = true;
+				uiResource.SetUiMeta(uiMeta);
 				vecResources.push_back(uiResource);
 			}
 

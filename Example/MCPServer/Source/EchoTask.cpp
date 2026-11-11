@@ -154,7 +154,7 @@ namespace Implementation
 
 		// First round: no inputResponses yet, so ask the client for an
 		// elicitation round trip and hand back an opaque requestState.
-		if (!m_spRequest->jInputResponses.isObject() || m_spRequest->jInputResponses.empty())
+		if (!m_spRequest->inputResponses.HasValue())
 		{
 			Json::Value jProperties(Json::objectValue);
 			Json::Value jConfirmProperty(Json::objectValue);
@@ -182,7 +182,10 @@ namespace Implementation
 			Json::Value jInputRequests(Json::objectValue);
 			jInputRequests["confirm"] = jConfirmRequest;
 
-			int iErrCode = NotifyInputRequired(jInputRequests, BuildRequestState(strInput));
+			MCP::InputRequests inputRequests;
+			inputRequests.Set(jInputRequests);
+
+			int iErrCode = NotifyInputRequired(inputRequests, BuildRequestState(strInput));
 			if (MCP::ERRNO_OK == iErrCode)
 				return iErrCode;
 

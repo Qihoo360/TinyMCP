@@ -34,10 +34,15 @@ namespace Implementation
 		RegisterServerAppsCapabilities();
 
         // 3. Register the descriptions of the Server's actual capabilities and their calling methods.
-		auto ParseInputSchema = [](const char* pszSchema, Json::Value& jSchema) -> bool
+		auto ParseInputSchema = [](const char* pszSchema, MCP::JsonSchema& schema) -> bool
 		{
 			Json::Reader reader;
-			return reader.parse(pszSchema, jSchema) && jSchema.isObject();
+			Json::Value jSchema;
+			if (!reader.parse(pszSchema, jSchema) || !jSchema.isObject())
+				return false;
+
+			schema.Set(jSchema);
+			return true;
 		};
 
 		std::vector<MCP::Tool> vecTools;
@@ -45,7 +50,7 @@ namespace Implementation
         MCP::Tool tool;
         tool.strName = Implementation::CEchoTask::TOOL_NAME;
         tool.strDescription = Implementation::CEchoTask::TOOL_DESCRIPTION;
-        if (!ParseInputSchema(Implementation::CEchoTask::TOOL_INPUT_SCHEMA, tool.jInputSchema))
+        if (!ParseInputSchema(Implementation::CEchoTask::TOOL_INPUT_SCHEMA, tool.inputSchema))
             return MCP::ERRNO_PARSE_ERROR;
 		vecTools.push_back(tool);
 
@@ -53,7 +58,7 @@ namespace Implementation
 		MCP::Tool confirmTool;
 		confirmTool.strName = Implementation::CEchoConfirmTask::TOOL_NAME;
 		confirmTool.strDescription = Implementation::CEchoConfirmTask::TOOL_DESCRIPTION;
-		if (!ParseInputSchema(Implementation::CEchoConfirmTask::TOOL_INPUT_SCHEMA, confirmTool.jInputSchema))
+		if (!ParseInputSchema(Implementation::CEchoConfirmTask::TOOL_INPUT_SCHEMA, confirmTool.inputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
 		vecTools.push_back(confirmTool);
 
@@ -61,11 +66,12 @@ namespace Implementation
 		MCP::Tool appTool;
 		appTool.strName = Implementation::CEchoAppTask::TOOL_NAME;
 		appTool.strDescription = Implementation::CEchoAppTask::TOOL_DESCRIPTION;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.jInputSchema))
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_INPUT_SCHEMA, appTool.inputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
-		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.jOutputSchema))
+		if (!ParseInputSchema(Implementation::CEchoAppTask::TOOL_OUTPUT_SCHEMA, appTool.outputSchema))
 			return MCP::ERRNO_PARSE_ERROR;
 		appTool.SetUiResourceUri(Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
+		appTool.SetUiVisibility({ MCP::UI_VISIBILITY_MODEL, MCP::UI_VISIBILITY_APP });
 		vecTools.push_back(appTool);
 
         RegisterServerTools(vecTools, false);
@@ -84,17 +90,9 @@ namespace Implementation
 		appResource.strDescription = "MCP Apps UI for the echo server";
 		appResource.strMimeType = MCP::MIME_TYPE_MCP_APP;
 
-		Json::Value jCsp(Json::objectValue);
-		jCsp["connectDomains"] = Json::Value(Json::arrayValue);
-		jCsp["resourceDomains"] = Json::Value(Json::arrayValue);
-
-		Json::Value jPermissions(Json::objectValue);
-		jPermissions["clipboardWrite"] = Json::Value(Json::objectValue);
-
-		Json::Value jUi(Json::objectValue);
-		jUi[MCP::MSG_KEY_CSP] = jCsp;
-		jUi[MCP::MSG_KEY_PERMISSIONS] = jPermissions;
-		appResource.jMeta[MCP::MSG_KEY_UI] = jUi;
+		MCP::UiResourceMeta appUiMeta;
+		appUiMeta.bClipboardWrite = true;
+		appResource.SetUiMeta(appUiMeta);
 
         RegisterServerResources({ resource, appResource }, false);
 
@@ -199,14 +197,13 @@ namespace Implementation
                 if (!CEchoServer::GetInstance().GetTransport())
                     continue;
 
-                Json::Value jParams(Json::objectValue);
-                jParams[MCP::MSG_KEY_URI] = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
+                MCP::ResourceUpdatedNotification updated(false);
+                updated.strUri = Implementation::CEchoAppResourceReadTask::RESOURCE_URI;
 
                 // Only active subscriptions/listen registrations receive this
                 // notification; a server without listeners sends nothing.
                 CEchoServer::GetInstance().SendSubscriptionNotification(
-                    MCP::METHOD_NOTIFICATION_RESOURCES_UPDATED, jParams,
-                    Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
+                    updated, Implementation::CEchoAppResourceReadTask::RESOURCE_URI);
             }
         });
     }

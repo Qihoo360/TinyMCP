@@ -49,8 +49,12 @@ namespace MCP
 
 		if (ctxProtocol.Supports(Feature_Mrtr))
 		{
-			if (jInputRequests.isObject() && !jInputRequests.empty())
+			if (inputRequests.HasValue())
+			{
+				Json::Value jInputRequests(Json::objectValue);
+				inputRequests.DoSerialize(jInputRequests);
 				jResult[MSG_KEY_INPUT_REQUESTS] = jInputRequests;
+			}
 
 			if (!strRequestState.empty())
 				jResult[MSG_KEY_REQUEST_STATE] = strRequestState;
@@ -755,11 +759,15 @@ namespace MCP
 
 		Json::Value jResult(Json::objectValue);
 
-		if (ctxProtocol.Supports(Feature_ListenSubscriptions) && !jSubscriptionId.isNull())
+		if (ctxProtocol.Supports(Feature_ListenSubscriptions) && subscriptionId.IsValid())
 		{
-			Json::Value jMeta(Json::objectValue);
-			jMeta[META_KEY_SUBSCRIPTION_ID] = jSubscriptionId;
-			jResult[MSG_KEY_META] = jMeta;
+			Json::Value jValue;
+			if (ERRNO_OK == subscriptionId.WriteValue(jValue) && !jValue.isNull())
+			{
+				Json::Value jMeta(Json::objectValue);
+				jMeta[META_KEY_SUBSCRIPTION_ID] = jValue;
+				jResult[MSG_KEY_META] = jMeta;
+			}
 		}
 
 		WriteVersionResultFields(jResult, ctxProtocol, jServerInfo);

@@ -37,6 +37,14 @@ namespace
 		return requestId;
 	}
 
+	RequestId MakeStringRequestId(const std::string& strId)
+	{
+		RequestId requestId;
+		requestId.eIdDataType = DataType_String;
+		requestId.strId = strId;
+		return requestId;
+	}
+
 	Json::Value SerializeNotification(const Message& msg)
 	{
 		Json::Value jMsg(Json::objectValue);
@@ -57,8 +65,8 @@ TEST_CASE("unit.notification")
 	ack.strMethod = METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED;
 	MessageContextAccess::Set(ack, ctxModern);
 	ack.bHasSubscriptionId = true;
-	ack.jSubscriptionId = Json::Value("sub-1");
-	ack.jNotifications[MSG_KEY_TOOLS_LIST_CHANGED] = true;
+	ack.subscriptionId = MakeStringRequestId("sub-1");
+	ack.filters.bToolsListChanged = true;
 
 	Json::Value jAck = SerializeNotification(ack);
 	CHECK_EQ(std::string("sub-1"), jAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asString());
@@ -68,13 +76,50 @@ TEST_CASE("unit.notification")
 	MessageContextAccess::Set(parsed, ctxModern);
 	CHECK_EQ(ERRNO_OK, parsed.DoDeserialize(jAck));
 	CHECK(parsed.bHasSubscriptionId);
-	CHECK_EQ(std::string("sub-1"), parsed.jSubscriptionId.asString());
+	CHECK_EQ(std::string("sub-1"), parsed.subscriptionId.strId);
+	CHECK(parsed.filters.bToolsListChanged);
 
 	// Integer subscription ids also survive the round trip.
-	ack.jSubscriptionId = Json::Value(99);
+	ack.subscriptionId = MakeRequestId(99);
 	Json::Value jIntAck = SerializeNotification(ack);
 	CHECK(jIntAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].isInt());
 	CHECK_EQ(99, jIntAck[MSG_KEY_PARAMS][MSG_KEY_META][META_KEY_SUBSCRIPTION_ID].asInt());
+
+	// Subscription filters only publish what was granted; an empty grant still
+	// serializes the required notifications object.
+	SubscriptionFilters emptyGrant;
+	Json::Value jEmptyGrant(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, emptyGrant.DoSerialize(jEmptyGrant));
+	CHECK(jEmptyGrant.empty());
+	CHECK(!emptyGrant.HasValue());
+
+	SubscriptionFilters filters;
+	filters.bToolsListChanged = true;
+	filters.vecResourceSubscriptions.push_back("file:///one.txt");
+	Json::Value jFilters(Json::objectValue);
+	CHECK_EQ(ERRNO_OK, filters.DoSerialize(jFilters));
+	CHECK(jFilters[MSG_KEY_TOOLS_LIST_CHANGED].asBool());
+	CHECK(!jFilters.isMember(MSG_KEY_PROMPTS_LIST_CHANGED));
+	CHECK(!jFilters.isMember(MSG_KEY_RESOURCES_LIST_CHANGED));
+	CHECK_EQ(std::string("file:///one.txt"), jFilters[MSG_KEY_RESOURCE_SUBSCRIPTIONS][0].asString());
+	CHECK(filters.HasValue());
+
+	SubscriptionFilters parsedFilters;
+	CHECK_EQ(ERRNO_OK, parsedFilters.DoDeserialize(jFilters));
+	CHECK(parsedFilters.bToolsListChanged);
+	CHECK_EQ(static_cast<size_t>(1), parsedFilters.vecResourceSubscriptions.size());
+	CHECK_EQ(ERRNO_PARSE_ERROR, parsedFilters.DoDeserialize(Json::Value(1)));
+
+	// RequestId::WriteValue keeps the scalar type without wrapping it in a key.
+	Json::Value jStringId;
+	CHECK_EQ(ERRNO_OK, MakeStringRequestId("sub").WriteValue(jStringId));
+	CHECK(jStringId.isString());
+	CHECK_EQ(std::string("sub"), jStringId.asString());
+
+	Json::Value jIntId;
+	CHECK_EQ(ERRNO_OK, MakeRequestId(5).WriteValue(jIntId));
+	CHECK(jIntId.isInt());
+	CHECK_EQ(5, jIntId.asInt());
 
 	// Legacy output never carries a subscription id.
 	MessageContextAccess::Set(ack, ctxLegacy);
@@ -88,7 +133,7 @@ TEST_CASE("unit.notification")
 	updated.strMethod = METHOD_NOTIFICATION_RESOURCES_UPDATED;
 	updated.strUri = "file:///one.txt";
 	updated.bHasSubscriptionId = true;
-	updated.jSubscriptionId = Json::Value("sub-2");
+	updated.subscriptionId = MakeStringRequestId("sub-2");
 	MessageContextAccess::Set(updated, ctxModern);
 
 	Json::Value jUpdated = SerializeNotification(updated);
@@ -104,7 +149,7 @@ TEST_CASE("unit.notification")
 	cancelled.strMethod = METHOD_NOTIFICATION_CANCELLED;
 	cancelled.requestId = MakeRequestId(3);
 	cancelled.bHasSubscriptionId = true;
-	cancelled.jSubscriptionId = Json::Value("sub-3");
+	cancelled.subscriptionId = MakeStringRequestId("sub-3");
 	MessageContextAccess::Set(cancelled, ctxModern);
 
 	Json::Value jCancelled = SerializeNotification(cancelled);

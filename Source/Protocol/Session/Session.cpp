@@ -57,16 +57,6 @@ namespace MCP
 			return false;
 		}
 
-		Json::Value MakeRequestIdJson(const RequestId& requestId)
-		{
-			Json::Value jId(Json::objectValue);
-			requestId.DoSerialize(jId);
-			if (jId.isMember(MSG_KEY_ID))
-				return jId[MSG_KEY_ID];
-
-			return Json::Value();
-		}
-
 		// A subscription is keyed by both the JSON type and the value of its
 		// listen request id, so "7" and 7 stay independent subscriptions.
 		std::string MakeRequestIdKey(const RequestId& requestId)
@@ -1817,7 +1807,7 @@ namespace MCP
 		// Fill the version specific inputs exactly once. Response serialization is
 		// the only writer of the result, so each feature gate lives in one place.
 		MessageContextAccess::Copy(*spResponse, *spRequest);
-		spResponse->bMrtrRetry = spRequest->jInputResponses.isObject() || !spRequest->strRequestState.empty();
+		spResponse->bMrtrRetry = spRequest->inputResponses.HasValue() || !spRequest->strRequestState.empty();
 
 		if (spResponse->IsCacheableResult())
 		{
@@ -2093,7 +2083,17 @@ namespace MCP
 		}
 
 		if (bHasSubscriptions)
-			return SendSubscriptionNotification(strMethod, Json::Value());
+		{
+			std::shared_ptr<MCP::Notification> spNotification;
+			if (MessageType_ToolListChangedNotification == eMessageType)
+				spNotification = std::make_shared<ToolListChangedNotification>(false);
+			else if (MessageType_PromptListChangedNotification == eMessageType)
+				spNotification = std::make_shared<PromptListChangedNotification>(false);
+			else
+				spNotification = std::make_shared<ResourceListChangedNotification>(false);
+
+			return SendSubscriptionNotificationToTargets(spNotification, strMethod);
+		}
 
 		// The unsubscribed fallback is the legacy push contract. A stateless-era
 		// connection must stay quiet until it authorizes the notification type
@@ -2122,10 +2122,21 @@ namespace MCP
 		return spTransport->Write(strNotification);
 	}
 
-	int CMCPSession::SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri)
+	int CMCPSession::SendSubscriptionNotification(const MCP::ResourceUpdatedNotification& notification,
+		const std::string& strMatchUri)
+	{
+		auto spNotification = std::make_shared<ResourceUpdatedNotification>(notification);
+		if (!spNotification)
+			return ERRNO_INTERNAL_ERROR;
+
+		return SendSubscriptionNotificationToTargets(spNotification, METHOD_NOTIFICATION_RESOURCES_UPDATED, strMatchUri);
+	}
+
+	int CMCPSession::SendSubscriptionNotificationToTargets(const std::shared_ptr<MCP::Notification>& spTemplate,
+		const std::string& strMethod, const std::string& strMatchUri)
 	{
 		const std::shared_ptr<CMCPTransport> spTransport = GetTransport();
-		if (!spTransport)
+		if (!spTransport || !spTemplate)
 			return ERRNO_INTERNAL_ERROR;
 
 		std::vector<SubscriptionState> vecTargets;
@@ -2158,11 +2169,11 @@ namespace MCP
 			std::shared_ptr<MCP::Notification> spNotification;
 			if (METHOD_NOTIFICATION_RESOURCES_UPDATED == strMethod)
 			{
-				auto spUpdatedNotification = std::make_shared<ResourceUpdatedNotification>(false);
-				if (jParams.isObject() && jParams.isMember(MSG_KEY_URI))
-					spUpdatedNotification->strUri = jParams[MSG_KEY_URI].asString();
+				auto spUpdatedTemplate = std::dynamic_pointer_cast<ResourceUpdatedNotification>(spTemplate);
+				if (!spUpdatedTemplate)
+					continue;
 
-				spNotification = spUpdatedNotification;
+				spNotification = std::make_shared<ResourceUpdatedNotification>(*spUpdatedTemplate);
 			}
 			else if (METHOD_NOTIFICATION_TOOLS_LIST_CHANGED == strMethod)
 				spNotification = std::make_shared<ToolListChangedNotification>(false);
@@ -2178,7 +2189,7 @@ namespace MCP
 			if (subscription.spProtocolContext)
 				MessageContextAccess::Set(*spNotification, subscription.spProtocolContext);
 			spNotification->bHasSubscriptionId = true;
-			spNotification->jSubscriptionId = MakeRequestIdJson(subscription.requestId);
+			spNotification->subscriptionId = subscription.requestId;
 
 			std::string strNotification;
 			if (ERRNO_OK != spNotification->Serialize(strNotification))
@@ -2238,7 +2249,7 @@ namespace MCP
 			}
 
 			spResult->requestId = subscription.requestId;
-			spResult->jSubscriptionId = MakeRequestIdJson(subscription.requestId);
+			spResult->subscriptionId = subscription.requestId;
 			PrepareResult(subscription.spListenRequest, spResult);
 
 			std::string strResult;
@@ -2286,19 +2297,14 @@ namespace MCP
 				subscription.setResourceSubscriptions.insert(strUri);
 		}
 
-		Json::Value jGranted(Json::objectValue);
-		if (subscription.bToolsListChanged)
-			jGranted[MSG_KEY_TOOLS_LIST_CHANGED] = true;
-		if (subscription.bPromptsListChanged)
-			jGranted[MSG_KEY_PROMPTS_LIST_CHANGED] = true;
-		if (subscription.bResourcesListChanged)
-			jGranted[MSG_KEY_RESOURCES_LIST_CHANGED] = true;
+		MCP::SubscriptionFilters granted;
+		granted.bToolsListChanged = subscription.bToolsListChanged;
+		granted.bPromptsListChanged = subscription.bPromptsListChanged;
+		granted.bResourcesListChanged = subscription.bResourcesListChanged;
 		if (!subscription.setResourceSubscriptions.empty())
 		{
-			Json::Value jUris(Json::arrayValue);
 			for (const auto& strUri : subscription.setResourceSubscriptions)
-				jUris.append(strUri);
-			jGranted[MSG_KEY_RESOURCE_SUBSCRIPTIONS] = jUris;
+				granted.vecResourceSubscriptions.push_back(strUri);
 		}
 
 		// Register the subscription as inactive until the acknowledgment has been
@@ -2319,8 +2325,8 @@ namespace MCP
 		spAcknowledged->strMethod = METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED;
 		MessageContextAccess::Set(*spAcknowledged, spProtocolContext);
 		spAcknowledged->bHasSubscriptionId = true;
-		spAcknowledged->jSubscriptionId = MakeRequestIdJson(spListenRequest->requestId);
-		spAcknowledged->jNotifications = jGranted;
+		spAcknowledged->subscriptionId = spListenRequest->requestId;
+		spAcknowledged->filters = granted;
 
 		std::string strAcknowledged;
 		if (ERRNO_OK != spAcknowledged->Serialize(strAcknowledged))

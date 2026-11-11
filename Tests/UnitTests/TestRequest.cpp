@@ -64,7 +64,9 @@ TEST_CASE("unit.request")
 	legacyRequest.requestId = MakeRequestId(1);
 	legacyRequest.strMethod = METHOD_TOOLS_LIST;
 	MessageContextAccess::Set(legacyRequest, ctxLegacy);
-	legacyRequest.jInputResponses["confirm"] = "value";
+	Json::Value jLegacyResponses(Json::objectValue);
+	jLegacyResponses["confirm"] = "value";
+	legacyRequest.inputResponses.Set(jLegacyResponses);
 	legacyRequest.strRequestState = "legacy-state";
 
 	Json::Value jLegacy = SerializeRequest(legacyRequest);
@@ -116,7 +118,7 @@ TEST_CASE("unit.request")
 	CHECK_EQ(std::string("Test Client"), modernRequest.meta.clientInfo.strTitle);
 	CHECK_EQ(std::string(LOGGING_LEVEL_DEBUG), modernRequest.meta.strLogLevel);
 	CHECK_EQ(std::string("trace-1"), modernRequest.meta.jExtra["application/trace"].asString());
-	CHECK_EQ(std::string("yes"), modernRequest.jInputResponses["confirm"].asString());
+	CHECK_EQ(std::string("yes"), modernRequest.inputResponses.Get()["confirm"].asString());
 	CHECK_EQ(std::string("state-token"), modernRequest.strRequestState);
 
 	// A handshake context drops the per-request logLevel and the MRTR fields.
@@ -124,7 +126,7 @@ TEST_CASE("unit.request")
 	MessageContextAccess::Set(legacyParsed, ctxLegacy);
 	CHECK_EQ(ERRNO_OK, legacyParsed.DoDeserialize(jMsg));
 	CHECK(legacyParsed.meta.strLogLevel.empty());
-	CHECK(!legacyParsed.jInputResponses.isObject());
+	CHECK(!legacyParsed.inputResponses.HasValue());
 	CHECK(legacyParsed.strRequestState.empty());
 
 	// server/discover requires params._meta once the profile exposes discover.

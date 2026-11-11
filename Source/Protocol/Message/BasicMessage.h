@@ -92,6 +92,8 @@ namespace MCP
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
 		int DoDeserialize(const Json::Value& jMsg) override;
+		// Writes only the scalar id value, preserving string/integer type.
+		int WriteValue(Json::Value& jValue) const;
 
 		inline void SetMsgKey(const std::string& strMsgKey)
 		{
@@ -263,6 +265,23 @@ namespace MCP
 		int DoSerializeVersionExtras(Json::Value& jMsg, const ProtocolContext& ctxProtocol) const;
 	};
 
+	// JSON Schema object used by Tool.inputSchema/outputSchema. Only object
+	// schemas are supported, matching the MCP schema requirement.
+	struct JsonSchema
+	{
+	public:
+		void Set(const Json::Value& jValue);
+		const Json::Value& Get() const;
+		bool HasValue() const;
+		void Clear();
+		bool IsValid() const;
+		int DoSerialize(Json::Value& jValue) const;
+		int DoDeserialize(const Json::Value& jValue);
+
+	private:
+		Json::Value m_jData;
+	};
+
 	struct Tool : public MCP::Message
 	{
 		Tool()
@@ -273,10 +292,10 @@ namespace MCP
 
 		std::string strName;
 		std::string strDescription;
-		Json::Value jInputSchema;
+		MCP::JsonSchema inputSchema;
 		std::string strTitle;
 		std::vector<Icon> vecIcons;
-		Json::Value jOutputSchema;
+		MCP::JsonSchema outputSchema;
 		ToolAnnotations annotations;
 		Json::Value jMeta;
 
@@ -834,29 +853,39 @@ namespace MCP
 		static bool IsReservedKey(const std::string& strKey);
 	};
 
-	// Object map containers used by MRTR. They intentionally keep raw JSON so
-	// the SDK only transports application defined payloads.
+	// Object map containers used by MRTR. The SDK only transports application
+	// defined payloads, so the entries stay raw JSON.
 	struct InputRequests
 	{
 	public:
-		Json::Value jItems;
-
+		void Set(const Json::Value& jItems);
+		const Json::Value& Get() const;
+		bool HasValue() const;
+		void Clear();
 		bool IsValid() const;
 		bool Has(const std::string& strKey) const;
 		const Json::Value& Get(const std::string& strKey) const;
 		int DoSerialize(Json::Value& jMsg) const;
 		int DoDeserialize(const Json::Value& jMsg);
+
+	private:
+		Json::Value m_jItems;
 	};
 
 	struct InputResponses
 	{
 	public:
-		Json::Value jItems;
-
+		void Set(const Json::Value& jItems);
+		const Json::Value& Get() const;
+		bool HasValue() const;
+		void Clear();
 		bool IsValid() const;
 		bool Has(const std::string& strKey) const;
 		const Json::Value& Get(const std::string& strKey) const;
 		int DoSerialize(Json::Value& jMsg) const;
 		int DoDeserialize(const Json::Value& jMsg);
+
+	private:
+		Json::Value m_jItems;
 	};
 }

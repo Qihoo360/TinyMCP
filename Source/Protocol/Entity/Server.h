@@ -7,6 +7,7 @@
 #include <vector>
 #include "../Public/PublicDef.h"
 #include "../Message/BasicMessage.h"
+#include "../Message/Notification.h"
 #include "../Task/BasicTask.h"
 #include "../Transport/Transport.h"
 
@@ -30,7 +31,7 @@ namespace MCP
 		int SendToolListChanged();
 		int SendPromptListChanged();
 		int SendResourceListChanged();
-		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams,
+		int SendSubscriptionNotification(const MCP::ResourceUpdatedNotification& notification,
 			const std::string& strMatchUri = std::string());
 
 		// Declares the protocol revisions this server serves. Call it before

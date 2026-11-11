@@ -102,8 +102,11 @@ namespace MCP
 		// is malformed, ERRNO_MISSING_REQUIRED_CLIENT_CAPABILITY when the client
 		// did not declare a capability needed by one of the input requests.
 		int ValidateInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState) const;
+		int ValidateInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState) const;
 		int SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
 			const Json::Value& jInputRequests, const std::string& strRequestState);
+		int SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
+			const MCP::InputRequests& inputRequests, const std::string& strRequestState);
 		int SendMissingClientCapability(const Json::Value& jRequiredCapabilities);
 
 		std::shared_ptr<MCP::Request> m_spRequest;
@@ -211,6 +214,7 @@ namespace MCP
 		int NotifyResult(std::shared_ptr<MCP::CallToolResult> spResult);
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 	};
 
@@ -244,6 +248,7 @@ namespace MCP
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 	};
 
@@ -327,6 +332,7 @@ namespace MCP
 		int NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData);
 		int NotifyCancelled();
 		int NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState);
+		int NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState);
 		int NotifyMissingClientCapability(const Json::Value& jRequiredCapabilities);
 	};
 

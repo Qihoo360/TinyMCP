@@ -102,10 +102,10 @@ namespace MCP
 		return SessionAccess::SendResourceListChanged(Session());
 	}
 
-	int CMCPServerBase::SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams,
+	int CMCPServerBase::SendSubscriptionNotification(const MCP::ResourceUpdatedNotification& notification,
 		const std::string& strMatchUri)
 	{
-		return SessionAccess::SendSubscriptionNotification(Session(), strMethod, jParams, strMatchUri);
+		return SessionAccess::SendSubscriptionNotification(Session(), notification, strMatchUri);
 	}
 
 	int CMCPServerBase::SetSupportedProtocolVersions(const std::vector<std::string>& vecVersions)

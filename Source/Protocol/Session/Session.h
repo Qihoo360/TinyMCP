@@ -147,7 +147,11 @@ namespace MCP
 		int SendToolListChanged();
 		int SendPromptListChanged();
 		int SendResourceListChanged();
-		int SendSubscriptionNotification(const std::string& strMethod, const Json::Value& jParams, const std::string& strMatchUri = std::string());
+		int SendSubscriptionNotification(const MCP::ResourceUpdatedNotification& notification, const std::string& strMatchUri = std::string());
+		// Copies spTemplate once per matching subscription and stamps it with that
+		// subscription's id before writing.
+		int SendSubscriptionNotificationToTargets(const std::shared_ptr<MCP::Notification>& spTemplate,
+			const std::string& strMethod, const std::string& strMatchUri = std::string());
 		void SetProtocolRegistry(const CProtocolRegistry& registry);
 		const CProtocolRegistry& GetProtocolRegistry() const;
 

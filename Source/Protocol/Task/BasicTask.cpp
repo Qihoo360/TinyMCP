@@ -227,16 +227,26 @@ namespace MCP
 
 	int ProcessRequest::ValidateInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState) const
 	{
+		MCP::InputRequests inputRequests;
+		if (jInputRequests.isObject())
+			inputRequests.Set(jInputRequests);
+
+		return ValidateInputRequired(inputRequests, strRequestState);
+	}
+
+	int ProcessRequest::ValidateInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState) const
+	{
 		if (!m_spRequest || !MessageContextAccess::Get(*m_spRequest).Supports(Feature_Mrtr))
 			return ERRNO_INVALID_PARAMS;
 
-		bool bHasInputRequests = jInputRequests.isObject() && !jInputRequests.empty();
+		const bool bHasInputRequests = inputRequests.HasValue();
 		if (!bHasInputRequests && strRequestState.empty())
 			return ERRNO_INVALID_PARAMS;
 
 		if (!bHasInputRequests)
 			return ERRNO_OK;
 
+		const Json::Value& jInputRequests = inputRequests.Get();
 		const MCP::ClientCapabilities& clientCapabilities = m_spRequest->meta.clientCapabilities;
 		for (auto it = jInputRequests.begin(); it != jInputRequests.end(); ++it)
 		{
@@ -280,6 +290,16 @@ namespace MCP
 	int ProcessRequest::SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
 		const Json::Value& jInputRequests, const std::string& strRequestState)
 	{
+		MCP::InputRequests inputRequests;
+		if (jInputRequests.isObject())
+			inputRequests.Set(jInputRequests);
+
+		return SendInputRequiredResult(spResult, inputRequests, strRequestState);
+	}
+
+	int ProcessRequest::SendInputRequiredResult(const std::shared_ptr<MCP::Response>& spResult,
+		const MCP::InputRequests& inputRequests, const std::string& strRequestState)
+	{
 		if (!spResult || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
@@ -287,7 +307,7 @@ namespace MCP
 			return ERRNO_OK;
 
 		spResult->strResultType = RESULT_TYPE_INPUT_REQUIRED;
-		spResult->jInputRequests = jInputRequests;
+		spResult->inputRequests = inputRequests;
 		spResult->strRequestState = strRequestState;
 
 		std::string strResponse;
@@ -640,7 +660,16 @@ namespace MCP
 
 	int ProcessCallToolRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
 	{
-		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		MCP::InputRequests inputRequests;
+		if (jInputRequests.isObject())
+			inputRequests.Set(jInputRequests);
+
+		return NotifyInputRequired(inputRequests, strRequestState);
+	}
+
+	int ProcessCallToolRequest::NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(inputRequests, strRequestState);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
@@ -648,7 +677,7 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
-		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		int iSendErrCode = SendInputRequiredResult(spResult, inputRequests, strRequestState);
 		MarkFinished();
 		return iSendErrCode;
 	}
@@ -876,7 +905,16 @@ namespace MCP
 
 	int ProcessReadResourceRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
 	{
-		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		MCP::InputRequests inputRequests;
+		if (jInputRequests.isObject())
+			inputRequests.Set(jInputRequests);
+
+		return NotifyInputRequired(inputRequests, strRequestState);
+	}
+
+	int ProcessReadResourceRequest::NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(inputRequests, strRequestState);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
@@ -884,7 +922,7 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
-		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		int iSendErrCode = SendInputRequiredResult(spResult, inputRequests, strRequestState);
 		MarkFinished();
 		return iSendErrCode;
 	}
@@ -1414,7 +1452,16 @@ namespace MCP
 
 	int ProcessGetPromptRequest::NotifyInputRequired(const Json::Value& jInputRequests, const std::string& strRequestState)
 	{
-		int iErrCode = ValidateInputRequired(jInputRequests, strRequestState);
+		MCP::InputRequests inputRequests;
+		if (jInputRequests.isObject())
+			inputRequests.Set(jInputRequests);
+
+		return NotifyInputRequired(inputRequests, strRequestState);
+	}
+
+	int ProcessGetPromptRequest::NotifyInputRequired(const MCP::InputRequests& inputRequests, const std::string& strRequestState)
+	{
+		int iErrCode = ValidateInputRequired(inputRequests, strRequestState);
 		if (ERRNO_OK != iErrCode)
 			return iErrCode;
 
@@ -1422,7 +1469,7 @@ namespace MCP
 		if (!spResult)
 			return ERRNO_INTERNAL_ERROR;
 
-		int iSendErrCode = SendInputRequiredResult(spResult, jInputRequests, strRequestState);
+		int iSendErrCode = SendInputRequiredResult(spResult, inputRequests, strRequestState);
 		MarkFinished();
 		return iSendErrCode;
 	}

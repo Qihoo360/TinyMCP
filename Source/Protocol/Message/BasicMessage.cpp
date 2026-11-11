@@ -355,16 +355,24 @@ namespace MCP
 		if (!_strMsgKey.empty())
 			strMsgKey = _strMsgKey;
 
+		Json::Value jValue;
+		if (ERRNO_OK != WriteValue(jValue))
+			return ERRNO_INVALID_REQUEST;
+
+		if (!jValue.isNull())
+			jMsg[strMsgKey] = jValue;
+
+		return ERRNO_OK;
+	}
+
+	int RequestId::WriteValue(Json::Value& jValue) const
+	{
 		if (DataType_String == eIdDataType)
-		{
-			Json::Value jId(strId);
-			jMsg[strMsgKey] = jId;
-		}
+			jValue = Json::Value(strId);
 		else if (DataType_Integer == eIdDataType)
-		{
-			Json::Value jId(iId);
-			jMsg[strMsgKey] = jId;
-		}
+			jValue = Json::Value(iId);
+		else
+			jValue = Json::Value();
 
 		return ERRNO_OK;
 	}
@@ -656,6 +664,63 @@ namespace MCP
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
+	// JsonSchema
+	void JsonSchema::Set(const Json::Value& jValue)
+	{
+		if (!jValue.isObject())
+		{
+			Clear();
+			return;
+		}
+
+		m_jData = jValue;
+	}
+
+	const Json::Value& JsonSchema::Get() const
+	{
+		return m_jData;
+	}
+
+	bool JsonSchema::HasValue() const
+	{
+		return m_jData.isObject() && !m_jData.empty();
+	}
+
+	void JsonSchema::Clear()
+	{
+		m_jData = Json::Value();
+	}
+
+	bool JsonSchema::IsValid() const
+	{
+		return m_jData.isNull() || m_jData.isObject();
+	}
+
+	int JsonSchema::DoSerialize(Json::Value& jValue) const
+	{
+		if (!IsValid())
+			return ERRNO_INVALID_RESPONSE;
+
+		jValue = m_jData;
+		return ERRNO_OK;
+	}
+
+	int JsonSchema::DoDeserialize(const Json::Value& jValue)
+	{
+		if (jValue.isNull())
+		{
+			Clear();
+			return ERRNO_OK;
+		}
+
+		if (!jValue.isObject())
+			return ERRNO_PARSE_ERROR;
+
+		m_jData = jValue;
+		return ERRNO_OK;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////
 	// Tool
 	int Tool::DoSerialize(Json::Value& jMsg) const
 	{
@@ -668,7 +733,7 @@ namespace MCP
 			jMsg[MSG_KEY_DESCRIPTION] = jDesc;
 		}
 
-		jMsg[MSG_KEY_INPUT_SCHEMA] = jInputSchema;
+		jMsg[MSG_KEY_INPUT_SCHEMA] = inputSchema.Get();
 
 		return ERRNO_OK;
 	}
@@ -684,7 +749,7 @@ namespace MCP
 
 		if (!jMsg.isMember(MSG_KEY_INPUT_SCHEMA) || !jMsg[MSG_KEY_INPUT_SCHEMA].isObject())
 			return ERRNO_PARSE_ERROR;
-		jInputSchema = jMsg[MSG_KEY_INPUT_SCHEMA];
+		inputSchema.DoDeserialize(jMsg[MSG_KEY_INPUT_SCHEMA]);
 
 		return ERRNO_OK;
 	}
@@ -694,7 +759,7 @@ namespace MCP
 		if (strName.empty())
 			return false;
 
-		if (!jInputSchema.isObject())
+		if (!inputSchema.Get().isObject())
 			return false;
 
 		return true;
@@ -707,8 +772,8 @@ namespace MCP
 			WriteStringIfNotEmpty(jMsg, MSG_KEY_TITLE, strTitle);
 			WriteIconsIfNotEmpty(jMsg, vecIcons);
 
-			if (jOutputSchema.isObject() && !jOutputSchema.empty())
-				jMsg[MSG_KEY_OUTPUT_SCHEMA] = jOutputSchema;
+			if (outputSchema.Get().isObject() && !outputSchema.Get().empty())
+				jMsg[MSG_KEY_OUTPUT_SCHEMA] = outputSchema.Get();
 		}
 
 		if (ctxProtocol.Supports(Feature_ToolAnnotations) && annotations.HasValue())
@@ -733,7 +798,7 @@ namespace MCP
 			ReadIconsIfPresent(jMsg, vecIcons);
 
 			if (jMsg.isMember(MSG_KEY_OUTPUT_SCHEMA) && jMsg[MSG_KEY_OUTPUT_SCHEMA].isObject())
-				jOutputSchema = jMsg[MSG_KEY_OUTPUT_SCHEMA];
+				outputSchema.DoDeserialize(jMsg[MSG_KEY_OUTPUT_SCHEMA]);
 		}
 
 		if (ctxProtocol.Supports(Feature_ToolAnnotations)
@@ -2211,14 +2276,40 @@ namespace MCP
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// InputRequests
+	void InputRequests::Set(const Json::Value& jItems)
+	{
+		if (!jItems.isObject())
+		{
+			Clear();
+			return;
+		}
+
+		m_jItems = jItems;
+	}
+
+	const Json::Value& InputRequests::Get() const
+	{
+		return m_jItems;
+	}
+
+	bool InputRequests::HasValue() const
+	{
+		return m_jItems.isObject() && !m_jItems.empty();
+	}
+
+	void InputRequests::Clear()
+	{
+		m_jItems = Json::Value();
+	}
+
 	bool InputRequests::IsValid() const
 	{
-		return jItems.isObject() && !jItems.empty();
+		return HasValue();
 	}
 
 	bool InputRequests::Has(const std::string& strKey) const
 	{
-		return jItems.isObject() && jItems.isMember(strKey);
+		return m_jItems.isObject() && m_jItems.isMember(strKey);
 	}
 
 	const Json::Value& InputRequests::Get(const std::string& strKey) const
@@ -2227,15 +2318,15 @@ namespace MCP
 		if (!Has(strKey))
 			return s_jEmpty;
 
-		return jItems[strKey];
+		return m_jItems[strKey];
 	}
 
 	int InputRequests::DoSerialize(Json::Value& jMsg) const
 	{
-		if (!jItems.isObject())
+		if (!m_jItems.isObject())
 			return ERRNO_OK;
 
-		for (auto it = jItems.begin(); it != jItems.end(); ++it)
+		for (auto it = m_jItems.begin(); it != m_jItems.end(); ++it)
 			jMsg[it.name()] = *it;
 
 		return ERRNO_OK;
@@ -2246,20 +2337,46 @@ namespace MCP
 		if (!jMsg.isObject())
 			return ERRNO_PARSE_ERROR;
 
-		jItems = jMsg;
+		m_jItems = jMsg;
 		return ERRNO_OK;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// InputResponses
+	void InputResponses::Set(const Json::Value& jItems)
+	{
+		if (!jItems.isObject())
+		{
+			Clear();
+			return;
+		}
+
+		m_jItems = jItems;
+	}
+
+	const Json::Value& InputResponses::Get() const
+	{
+		return m_jItems;
+	}
+
+	bool InputResponses::HasValue() const
+	{
+		return m_jItems.isObject() && !m_jItems.empty();
+	}
+
+	void InputResponses::Clear()
+	{
+		m_jItems = Json::Value();
+	}
+
 	bool InputResponses::IsValid() const
 	{
-		return jItems.isObject() && !jItems.empty();
+		return HasValue();
 	}
 
 	bool InputResponses::Has(const std::string& strKey) const
 	{
-		return jItems.isObject() && jItems.isMember(strKey);
+		return m_jItems.isObject() && m_jItems.isMember(strKey);
 	}
 
 	const Json::Value& InputResponses::Get(const std::string& strKey) const
@@ -2268,15 +2385,15 @@ namespace MCP
 		if (!Has(strKey))
 			return s_jEmpty;
 
-		return jItems[strKey];
+		return m_jItems[strKey];
 	}
 
 	int InputResponses::DoSerialize(Json::Value& jMsg) const
 	{
-		if (!jItems.isObject())
+		if (!m_jItems.isObject())
 			return ERRNO_OK;
 
-		for (auto it = jItems.begin(); it != jItems.end(); ++it)
+		for (auto it = m_jItems.begin(); it != m_jItems.end(); ++it)
 			jMsg[it.name()] = *it;
 
 		return ERRNO_OK;
@@ -2287,7 +2404,7 @@ namespace MCP
 		if (!jMsg.isObject())
 			return ERRNO_PARSE_ERROR;
 
-		jItems = jMsg;
+		m_jItems = jMsg;
 		return ERRNO_OK;
 	}
 

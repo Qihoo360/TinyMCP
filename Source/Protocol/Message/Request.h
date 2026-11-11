@@ -21,7 +21,7 @@ namespace MCP
 		std::string strMethod;
 		MCP::ProgressToken progressToken;
 		MCP::MetaObject meta;
-		Json::Value jInputResponses;
+		MCP::InputResponses inputResponses;
 		std::string strRequestState;
 
 		bool IsValid() const override;

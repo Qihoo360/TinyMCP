@@ -48,8 +48,10 @@ namespace MCP
 
 		if (ctxProtocol.Supports(Feature_Mrtr))
 		{
-			if (jInputResponses.isObject() && !jInputResponses.empty())
+			if (inputResponses.HasValue())
 			{
+				Json::Value jInputResponses(Json::objectValue);
+				inputResponses.DoSerialize(jInputResponses);
 				jParams[MSG_KEY_INPUT_RESPONSES] = jInputResponses;
 				bHasParams = true;
 			}
@@ -101,7 +103,7 @@ namespace MCP
 			if (ctxProtocol.Supports(Feature_Mrtr))
 			{
 				if (jParams.isMember(MSG_KEY_INPUT_RESPONSES) && jParams[MSG_KEY_INPUT_RESPONSES].isObject())
-					jInputResponses = jParams[MSG_KEY_INPUT_RESPONSES];
+					inputResponses.DoDeserialize(jParams[MSG_KEY_INPUT_RESPONSES]);
 
 				if (jParams.isMember(MSG_KEY_REQUEST_STATE) && jParams[MSG_KEY_REQUEST_STATE].isString())
 					strRequestState = jParams[MSG_KEY_REQUEST_STATE].asString();

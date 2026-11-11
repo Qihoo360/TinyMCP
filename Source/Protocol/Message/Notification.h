@@ -17,7 +17,7 @@ namespace MCP
 		}
 
 		std::string strMethod;
-		Json::Value jSubscriptionId;
+		MCP::RequestId subscriptionId;
 		bool bHasSubscriptionId{ false };
 
 		bool IsValid() const override;
@@ -134,6 +134,22 @@ namespace MCP
 		int DoSerialize(Json::Value& jMsg) const override;
 	};
 
+	// The filters a subscriptions/listen acknowledgment granted. Unset booleans
+	// are omitted, so an empty grant serializes as an empty object.
+	struct SubscriptionFilters
+	{
+	public:
+		bool bToolsListChanged{ false };
+		bool bPromptsListChanged{ false };
+		bool bResourcesListChanged{ false };
+		std::vector<std::string> vecResourceSubscriptions;
+
+		bool HasValue() const;
+		bool IsValid() const;
+		int DoSerialize(Json::Value& jMsg) const;
+		int DoDeserialize(const Json::Value& jMsg);
+	};
+
 	// 2026-07-28 subscriptions/acknowledged notification.
 	struct SubscriptionsAcknowledgedNotification : public MCP::Notification
 	{
@@ -144,7 +160,7 @@ namespace MCP
 
 		}
 
-		Json::Value jNotifications;
+		MCP::SubscriptionFilters filters;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;
