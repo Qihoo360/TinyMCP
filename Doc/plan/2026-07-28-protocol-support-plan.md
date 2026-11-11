@@ -254,7 +254,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - 旧代码直接构造 `Request`/`Response`/`Tool` 并序列化时，`ctxProtocol` 默认为 `2024-11-05 / Era_Handshake`，所有 feature 为 false，输出必须与升级前逐字节一致。
 - `ttlMs`/`cacheScope`：`server/discover` 由 `Feature_Discover` 必出；其余 5 类（tools/list、prompts/list、resources/list、resources/templates/list、resources/read）由 `Feature_Caching` 控制，且只在 `resultType == "complete"` 且 `!bMrtrRetry` 时序列化；`tools/call`、`prompts/get` 不写。
 - **结果字段写入顺序**：现有响应子类先构建 `jResult`，再 `jMsg["result"] = jResult`，而 `Response::DoSerialize()` 只写 `id`。因此版本扩展字段不能放在 `Response::DoSerialize()` 里写，否则会被子类覆盖。统一改为在 `Response` 增加非虚辅助方法 `void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctx, const Json::Value& jServerInfo) const`（feature 全关时 no-op；`jServerInfo` 为空时不写 `serverInfo`，避免 `Response` 反向依赖 `CMCPSession`），由每个结果子类在赋值 `jMsg["result"]` 之前调用；新增的 `DiscoverResult`/`SubscriptionsListenResult` 同样调用。`Response` 增加 `Json::Value jServerInfo` 与 `bool bMrtrRetry{false}`；`CMCPSession::PrepareResult(const std::shared_ptr<Request>&, const std::shared_ptr<Response>&)` 在序列化前统一复制 `ctxProtocol`、`jServerInfo`（当前 `ServerInfo` 序列化结果）与 `bMrtrRetry`（请求携带 `inputResponses` 或 `requestState`），各任务在 `Serialize()` 前调用，避免逐个 `NotifyResult` 重复。
-- **通知字段写入顺序**：同理，`Notification` 增加 `void WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctx) const`，由各通知子类在构建完 `params` 后、写入消息前调用，确保 `subscriptionId` 与业务字段合并而非覆盖。`Notification` 同时增加 `Json::Value jSubscriptionId` 与 `bool bHasSubscriptionId{false}`，由 `SendSubscriptionNotification` 在发送前设置；`WriteVersionParamsMeta` 据此写入 `io.modelcontextprotocol/subscriptionId`，并保持原始 string/integer 类型。
+- **通知字段写入顺序**：同理，`Notification` 增加 `void WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctx) const`，由各通知子类在构建完 `params` 后、写入消息前调用，确保 `subscriptionId` 与业务字段合并而非覆盖。`Notification` 同时增加 `MCP::RequestId subscriptionId` 与 `bool bHasSubscriptionId{false}`，由 `SendSubscriptionNotification` 在发送前设置；`WriteVersionParamsMeta` 通过 `RequestId::WriteValue()` 写入 `io.modelcontextprotocol/subscriptionId`，并保持原始 string/integer 类型。
 - **新增字段的演进方式**：加 `ProtocolFeature` 枚举值 → 在 `2026-07-28` 及后续 profile 置位 → 在对应 `DoSerializeVersionExtras`/`WriteVersionResultFields` 中按 feature 输出；不修改旧字段的序列化代码，也不在主干里写版本号判断。
 
 ### 4.3 `_meta` 模型
@@ -275,8 +275,8 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 ### 4.4 MRTR
 
 - 仅 `tools/call`、`resources/read`、`prompts/get` 三类请求允许返回 `input_required`；其他请求禁止返回该结果类型。
-- `params.inputResponses`、`params.requestState` 按 schema 可出现在任意客户端请求上；`Request` 基类统一承载 `Json::Value jInputResponses` 与 `std::string strRequestState`，非三类请求只透传、不消费。
-- `Response` 新增：`std::string strResultType{"complete"}`、`Json::Value jInputRequests`、`std::string strRequestState`。
+- `params.inputResponses`、`params.requestState` 按 schema 可出现在任意客户端请求上；`Request` 基类统一承载 `MCP::InputResponses inputResponses` 与 `std::string strRequestState`，非三类请求只透传、不消费。
+- `Response` 新增：`std::string strResultType{"complete"}`、`MCP::InputRequests inputRequests`、`std::string strRequestState`。
 - `InputRequiredResult` 必须至少包含 `inputRequests` 或 `requestState` 之一；两者都没有时不得返回 `input_required`。`NotifyInputRequired(...)` 在两者皆空时返回 `ERRNO_INVALID_PARAMS`，不写出结果。
 - 任务基类提供 `NotifyInputRequired(...)`：写入结果并结束当前任务；由应用在 `Execute()` 中调用。
 - 发送前校验客户端能力：`elicitation/create` → `clientCapabilities.elicitation`，并按 `mode` 细分（`form` 需 `elicitation.form`，`url` 需 `elicitation.url`）；`sampling/createMessage` → `sampling`；`roots/list` → `roots`。客户端未声明对应能力时：
@@ -317,16 +317,17 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 ### 4.7 MCP Apps（服务端子集）
 
-严格按已入库的 `extensions/overview.md`、`extensions/apps/overview.md`、`extensions/apps/build.md` 实施，不引入本地文档没有的字段：
+以已入库的 `Doc/modelcontextprotocol/extensions/apps/apps.mdx` 为准实施：
 
 - 版本边界：MCP Apps 仅随 2026-07-28 提供；2024-11-05 明确不支持 MCP Apps，既不声明该扩展，也不输出任何 UI 元数据（`Tool._meta.ui`、`Resource._meta.ui`、`text/html;profile=mcp-app` 内容）。
-- 扩展标识：`io.modelcontextprotocol/ui`；MIME：`text/html;profile=mcp-app`；URI 方案：`ui://`。
-- 默认关闭：只有调用 `RegisterServerAppsCapabilities()` 后才声明扩展；未注册时 `server/discover` 不出现该扩展。
+- 扩展标识：`io.modelcontextprotocol/ui`；MIME：`text/html;profile=mcp-app`；URI 方案：`ui://`（保留给 MCP Apps）。
+- 默认关闭：只有调用 `RegisterServerAppsCapabilities()` 后才声明扩展；未注册时 `server/discover` 不出现该扩展；legacy `initialize` 即使已注册也不声明。
 - 服务端能力声明：`server/discover` 的 `capabilities.extensions["io.modelcontextprotocol/ui"] = {}`；设置对象为空 `{}`，`mimeTypes` 是客户端声明，不放在服务端设置里。
-- 客户端能力识别：从现代 `_meta["io.modelcontextprotocol/clientCapabilities"].extensions["io.modelcontextprotocol/ui"].mimeTypes` 读取，供应用判断宿主是否支持 UI。
-- 工具关联：`Tool._meta.ui.resourceUri` 指向 `ui://...` 资源；提供 `SetUiResourceUri()` 辅助方法；`_meta` 其余内容保持通用 JSON 透传，不为 `_meta.ui` 建强类型。
-- 资源元数据：`Resource._meta.ui` 只透传本地文档出现的 `csp` 与 `permissions`，两者均为 `Json::Value` 原样序列化，SDK 不解释、不校验、不拆子域；**不实现**本地文档未出现的 `domain`、`prefersBorder`，也不把 CSP 子域建成强类型字段。
-- `resources/read` 返回 `mimeType = text/html;profile=mcp-app` 的文本内容，并带 `_meta.ui`。
+- 客户端能力识别：通过 `ClientCapabilities::FindExtensionSettings()`/`SupportsMimeType()` 读取现代 `_meta["io.modelcontextprotocol/clientCapabilities"].extensions["io.modelcontextprotocol/ui"].mimeTypes`，供应用按请求判断宿主是否支持 UI；注册期无法按连接注册工具变体。
+- 工具关联：`Tool._meta.ui.resourceUri` 指向 `ui://...` 资源，`Tool._meta.ui.visibility` 取值仅 `model`/`app`；提供 `SetUiResourceUri()`/`SetUiVisibility()` setter，不输出已废弃的扁平 `_meta["ui/resourceUri"]`。
+- 资源元数据：通过 `UiResourceMeta` 建模 `csp`（`connectDomains`/`resourceDomains`/`frameDomains`/`baseUriDomains`）、`permissions`（`camera`/`microphone`/`geolocation`/`clipboardWrite`）、`domain`、`prefersBorder`；未知字段用 `jExtra` 透传。`Resource`/`TextResourceContents`/`BlobResourceContents` 通过 `SetUiMeta()` 写入，调用者不手写 `jMeta`。
+- `resources/read` 返回 `mimeType = text/html;profile=mcp-app` 的 text 或 blob 内容，并带 `_meta.ui`；SDK 不做 HTML5 合法性与运行时 MIME 强制。
+- 配置校验：`Start()` 在注册了 Apps 时校验 `ui://` 资源 MIME、工具 `resourceUri` 的 scheme 与引用完整性、`visibility` 取值，失败返回 `-32602`；`RegisterServerUiResources()` 为空的 `ui://` 资源补默认 MIME。
 - 优雅降级：带 UI 的工具仍必须返回有意义的文本 `content`，确保不支持 Apps 的客户端可正常使用。
 - 不实现 `ui/initialize`、`ui/message`、`ui/open-link`、`ui/update-model-context` 等 View↔Host 方法；在 README/注释中明确 SDK 边界。
 
@@ -438,17 +439,9 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 ### Step 0：确认扩展文档（已完成）
 
-扩展文档已入库，无需再下载：
+- `Doc/modelcontextprotocol/extensions/apps/apps.mdx`（SEP-1865，已入库）
 
-- `Doc/modelcontextprotocol/extensions/overview.md`
-- `Doc/modelcontextprotocol/extensions/client-matrix.md`
-- `Doc/modelcontextprotocol/extensions/apps/overview.md`
-- `Doc/modelcontextprotocol/extensions/apps/build.md`
-- `Doc/modelcontextprotocol/extensions/auth/*.md`
-- `Doc/modelcontextprotocol/extensions/skills/overview.md`
-- `Doc/modelcontextprotocol/extensions/tasks/overview.md`
-
-实施时只读这些文件，不修改；也不要再创建 `extensions/apps/2026-01-26/apps.mdx`（未入库）。
+实施时只读这些文件，不修改；`apps.mdx` 是 MCP Apps 的唯一口径。
 
 ### Step 0.5：测试基建（必须先于功能编码完成）
 
@@ -536,7 +529,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 请求：
 
 - `Request` 基类新增 `MetaObject meta`；`ctxProtocol` 统一由基类 `Message` 持有，**不在 `Request` 重复声明**；`logLevel` 只存在于 `meta`，不另设成员。
-- `Request` 基类统一承载 `Json::Value jInputResponses`、`std::string strRequestState`（按 schema 可出现在任意客户端请求上；非 MRTR 三类只透传、不消费；`CallToolRequest`/`ReadResourceRequest`/`GetPromptRequest` 直接读取基类字段）。
+- `Request` 基类统一承载 `MCP::InputResponses inputResponses`、`std::string strRequestState`（按 schema 可出现在任意客户端请求上；非 MRTR 三类只透传、不消费；`CallToolRequest`/`ReadResourceRequest`/`GetPromptRequest` 直接读取基类字段）。
 - 新增 `DiscoverRequest`（`params._meta` 必填）。
 - 新增 `SubscriptionsListenRequest`（过滤器嵌套在 `params.notifications`：`toolsListChanged`/`promptsListChanged`/`resourcesListChanged`/`resourceSubscriptions`）。
 - 所有 `Era_Stateless` 请求的反序列化：读取 `params._meta`，解析 `protocolVersion`、`clientCapabilities`、`clientInfo`；`logLevel` 仅当所在 profile 开启 `Feature_LogLevelInMeta` 时解析。缺失必填项时保留“缺失”事实，交由 Session 返回 `-32602`，不得在此处补默认值。
@@ -544,7 +537,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 
 响应：
 
-- `Response` 基类新增 `strResultType`、`jInputRequests`、`strRequestState`、`ttlMs`、`cacheScope`、`Json::Value jResultMeta`、`Json::Value jServerInfo`、`bool bMrtrRetry{false}`；`ctxProtocol` 统一由基类 `Message` 持有，**不在 `Response` 重复声明**。`jResultMeta` 只承载结果 `_meta` 的应用/业务键，`serverInfo` 由版本辅助方法合并写入；`bMrtrRetry` 由 `PrepareResult` 从请求复制，用于抑制缓存字段。
+- `Response` 基类新增 `strResultType`、`MCP::InputRequests inputRequests`、`strRequestState`、`ttlMs`、`cacheScope`、`Json::Value jResultMeta`、`Json::Value jServerInfo`、`bool bMrtrRetry{false}`；`ctxProtocol` 统一由基类 `Message` 持有，**不在 `Response` 重复声明**。`jResultMeta` 只承载结果 `_meta` 的应用/业务键，`serverInfo` 由版本辅助方法合并写入；`bMrtrRetry` 由 `PrepareResult` 从请求复制，用于抑制缓存字段。
 - **不在 `Response::DoSerialize()` 中写结果字段**（会被子类覆盖）。新增 `void WriteVersionResultFields(Json::Value& jResult, const ProtocolContext& ctx, const Json::Value& jServerInfo) const`，按 `ctx.Supports(...)` 写入：
   - `Feature_ResultType` → `resultType`
   - `Feature_Mrtr` 且非空时写 `inputRequests`/`requestState`
@@ -554,11 +547,11 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - 新增 `DiscoverResult`：`supportedVersions`、`capabilities`、`instructions?` 必填/可选按 schema；`resultType`、`ttlMs`、`cacheScope` 必须输出；`serverInfo` 只在 `_meta` 中；`supportedVersions` 来自 `CProtocolRegistry`。
 - 新增 `SubscriptionsListenResult`：仅服务端优雅关闭时发送，`_meta["io.modelcontextprotocol/subscriptionId"]` 必填且保留请求 id 类型。
 - `CallToolResult`/`GetPromptResult`/`ReadResourceResult`/四类 `List*Result` 继承上述能力。
-- `CallToolResult` 补 `structuredContent`（任意 JSON）与 `_meta`；`structuredContent` 仅在 `Feature_StructuredContent` 为真且实际有值时输出；`_meta` 的应用键有值才写，`serverInfo` 由辅助方法按 `Feature_ResultMeta` 写入，两者不互相替代。
+- `CallToolResult` 补 `MCP::StructuredContent structuredContent` 与 `_meta`；`structuredContent` 仅在 `Feature_StructuredContent` 为真且 `HasValue()` 时输出；`_meta` 的应用键有值才写，`serverInfo` 由辅助方法按 `Feature_ResultMeta` 写入，两者不互相替代。
 
 通知：
 
-- 新增 `SubscriptionsAcknowledgedNotification`（`notifications/subscriptions/acknowledged`）：`params._meta.subscriptionId` + `params.notifications`（授予子集）。
+- 新增 `SubscriptionsAcknowledgedNotification`（`notifications/subscriptions/acknowledged`）：`MCP::RequestId subscriptionId` + `MCP::SubscriptionFilters filters`（授予子集）。
 - `Notification` 基类补 `params._meta` 写入辅助 `WriteVersionParamsMeta(Json::Value& jParams, const ProtocolContext& ctx)`：由子类在构建完 `params` 后调用，与已有 `_meta` 合并，非协议保留键不覆盖应用自定义键；feature 关闭时 no-op。
 - 现有资源/工具/提示词变更通知保持 Handshake 行为；`Era_Stateless` 发送前由订阅表过滤并加 `subscriptionId`。
 - 新增 `notifications/tools/list_changed` 的发送路径（当前常量与发送方法都缺失）。
@@ -582,7 +575,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - `int ProcessModernNotification(const ProtocolContext&, const std::shared_ptr<MCP::Notification>&)`。
 - `int EnsureAsyncTaskThread()`：现代请求首次需要异步任务时启动 worker（legacy 仍由 `notifications/initialized` 启动）。
 - 订阅表：`std::unordered_map<std::string, SubscriptionState>`（key 由 `MakeRequestIdKey(RequestId)` 生成，保留 string/integer 类型）+ `std::mutex`。
-- `int SendSubscriptionNotification(const std::string& method, const Json::Value& params, const std::string& strMatchUri = std::string())`：list_changed 类按布尔位路由，`resources/updated` 按 `strMatchUri` 精确匹配。
+- `int SendSubscriptionNotification(const MCP::ResourceUpdatedNotification&, const std::string& strMatchUri = std::string())`：`resources/updated` 按 `strMatchUri` 精确匹配并附加 `subscriptionId`；list_changed 继续走 `SendToolListChanged`/`SendPromptListChanged`/`SendResourceListChanged`（内部按订阅过滤并附加 `subscriptionId`）。
 - 列表变更发送：`int SendToolListChanged()`、`int SendPromptListChanged()`、`int SendResourceListChanged()`（legacy 走现有行为，现代按订阅表过滤并附加 `subscriptionId`）。
 - 清理：`ResetForNewClient()`、`Terminate()` 增加清空订阅表、现代请求缓存、logLevel；`Terminate` 关闭前对存活订阅发送优雅关闭结果。
 
@@ -653,7 +646,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
    - 保持现有“一页一条”的 cursor 语义（cursor 对客户端不透明）；同一列表所有分页使用同一 `cacheScope`。
 2. `ProcessCallToolRequest`：
    - 结果补 `resultType`、`_meta`、`structuredContent`：分别由 `Feature_ResultType`、`Feature_ResultMeta`、`Feature_StructuredContent` 门控；**不写** `ttlMs`/`cacheScope`；序列化前调用 `PrepareResult`。
-   - 传递 `jInputResponses`、`strRequestState` 给应用任务。
+   - 传递 `inputResponses`、`strRequestState` 给应用任务（`InputResponses` 数据模型）。
    - 提供 `NotifyInputRequired`（校验至少一项存在、校验客户端能力）与 `NotifyMissingClientCapability`（`-32021`），两者仅为 `Feature_Mrtr` 为真的上下文生效。
    - 未知工具：现代 `-32602`，legacy 保持原行为。
 3. `ProcessReadResourceRequest`：
@@ -667,7 +660,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 5. `ProcessCompleteRequest`：结果补 `resultType`；现代能力名 `completions`；不写缓存字段；序列化前调用 `PrepareResult`。
 6. `ProcessErrorRequest`：确保所有错误响应带 `requestId`；JSON-RPC error 响应不带 `result`/`resultType`；`-32021` 的 `error.data.requiredCapabilities` 必填。
 7. `ProcessPingRequest`、`ProcessSetLevelRequest`、`ProcessSubscribeResourceRequest`、`ProcessUnsubscribeResourceRequest`：仅 legacy 可达，保持原实现。
-8. 订阅相关：list_changed 通知走 `SendToolListChanged`/`SendPromptListChanged`/`SendResourceListChanged`；资源更新走 `SendSubscriptionNotification`（精确匹配、附加 `subscriptionId`）。现有 `Send*Changed` 需在构建 `params` 后调用 `WriteVersionParamsMeta`，并由订阅表为每条匹配订阅设置 `jSubscriptionId`；legacy 不设置，输出保持原样。
+8. 订阅相关：list_changed 通知走 `SendToolListChanged`/`SendPromptListChanged`/`SendResourceListChanged`；资源更新走类型化 `SendSubscriptionNotification(const MCP::ResourceUpdatedNotification&, uri)`（精确匹配、附加 `subscriptionId`）。现有 `Send*Changed` 需在构建 `params` 后调用 `WriteVersionParamsMeta`，并由订阅表为每条匹配订阅设置 `MCP::RequestId subscriptionId`；legacy 不设置，输出保持原样。
 9. 日志：`ProcessRequest::NotifyLogMessage` 在 `Feature_LogLevelInMeta` 为真时按 `meta.logLevel` 过滤（缺失即丢弃），过滤通过后调用 `WriteLogNotification`；legacy 仍调用 `SendLogMessage` 的会话级逻辑。
 
 ### Step 6：Server 注册 API
@@ -694,10 +687,10 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 - 保持现有 2024-11-05 工具/资源/prompt 不变。
 - 新增现代示例：
   - `echo_confirm` 工具：首次调用返回 `inputRequests`（`elicitation/create`），带 `requestState`；重试带 `inputResponses` 后返回 `complete`。示例用一个“不透明字符串 + 简单校验位”演示对 `requestState` 的完整性校验（不实现加密），并在注释中写明“生产环境必须使用 AEAD/HMAC 保护”；不得为此引入第三方加密库。
-  - `ui://echo/app.html` 资源：返回 `text/html;profile=mcp-app`，`_meta.ui` 用 `Json::Value` 带最小 `csp`/`permissions`。
-  - `echo_app` 工具：`_meta.ui.resourceUri = "ui://echo/app.html"`，同时返回文本 `content`（优雅降级）。
+  - `ui://echo/app.html` 资源：返回 `text/html;profile=mcp-app`，通过 `UiResourceMeta`/`SetUiMeta()` 声明 `csp`（四子域）与 `permissions`（四键），`resources/read` 用 `BuildUiResourceContents()` 保持一致。
+  - `echo_app` 工具：`_meta.ui.resourceUri = "ui://echo/app.html"`，`visibility = ["model","app"]`，同时返回文本 `content`（优雅降级）。
   - 注册 `completions`，并通过 `RegisterServerAppsCapabilities()` 显式启用 `io.modelcontextprotocol/ui`（默认关闭）。
-  - 现代订阅示例：listen 请求用数字 `id`，过滤器写在 `params.notifications`；服务端先回 ack（带数字 `subscriptionId`），再由定时器调用 `SendSubscriptionNotification("notifications/resources/updated", params, "echo://...")` 推送；未订阅时不推送。
+  - 现代订阅示例：listen 请求用数字 `id`，过滤器写在 `params.notifications`；服务端先回 ack（带数字 `subscriptionId`），再由定时器构造 `MCP::ResourceUpdatedNotification` 调用类型化 `SendSubscriptionNotification(updated, "echo://...")` 推送；未订阅时不推送。
 - `MCPServer.cpp` 的参数解析保持 `--transport stdio|sse`；不新增传输。`--transport stdio` 分支显式声明 `{2024-11-05, 2026-07-28}`，`sse` 分支只声明 `{2024-11-05}`。
 
 ### Step 8：构建文件
@@ -751,7 +744,7 @@ MCP 扩展文档已下载到 `Doc/modelcontextprotocol/extensions/`，本计划�
 | D18 | `subscriptionId` 保留 `RequestId` 的 string/integer 类型 | schema 规定其值就是 `RequestId`；统一转字符串会导致客户端无法关联 |
 | D19 | 缓存只覆盖 6 类结果，MRTR 结果与重试结果不缓存 | 规范明确可缓存清单与 MRTR 不缓存规则 |
 | D20 | 保留 `ERRNO_HEADER_MISMATCH = -32001`，新增 `ERRNO_HEADER_MISMATCH_MODERN = -32020` | 不破坏外部引用与 legacy 语义；现代错误用新常量 |
-| D21 | Apps 只实现本地文档出现的 `_meta.ui.resourceUri`/`csp`/`permissions` | 禁止自由联想；`domain`/`prefersBorder` 未在入库文档出现 |
+| D21 | Apps 通过 setter 建模 `_meta.ui.resourceUri`/`visibility` 与 `UiResourceMeta`；未知字段只透传，不解释、不校验 | 避免魔法键与多处手写不一致；字段集以 `apps.mdx` 为准 |
 | D22 | `resources/updated` 只做精确 URI 匹配 | 原型规范未定义前缀匹配；子资源语义由应用显式传入匹配 URI 处理 |
 | D23 | 现代字段一律由 `ctxProtocol.Supports(Feature_X)` 门控，`ctxProtocol` 默认 2024-11-05/Handshake | 旧代码直接构造对象序列化时保持 legacy 输出；7.2 golden 逐字节验证；字段由 feature 位而非版本号控制，未来版本只改 profile |
 | D24 | Legacy 仅新增 `server/discover` 探测响应；其他既有错误/静默行为不变 | 老代码不会发送新 method，因此不改变任何既有功能；同时满足版本回退探测需要 |
@@ -905,8 +898,8 @@ ctest --test-dir build-tests --output-on-failure
 | `unit.message` | `Message` 基础字段、时间戳/runtimeId、序列化稳定性、可选字段 |
 | `unit.content_blocks` | text/image/audio/resource_link/tool_use/tool_result 的序列化与校验；`annotations`（`Feature_ContentAnnotations`）、内容 `_meta`（`Feature_EntityMeta`）；空文本边界 |
 | `unit.request` | 现代 `_meta` 解析、版本读取、`inputResponses`/`requestState`、`subscriptions/listen` 的 `params.notifications` 嵌套 |
-| `unit.response` | `resultType`、`inputRequests`、缓存字段仅在 6 类结果输出、`bMrtrRetry` 抑制缓存、`jServerInfo` 合并、`_meta` 保留应用非保留键 |
-| `unit.notification` | ack 结构、订阅通知、取消通知、日志通知结构；`jSubscriptionId` 类型保留；legacy 不出现 `subscriptionId` |
+| `unit.response` | `resultType`、`InputRequests inputRequests`、缓存字段仅在 6 类结果输出、`bMrtrRetry` 抑制缓存、`jServerInfo` 合并、`_meta` 保留应用非保留键、`RequestId subscriptionId` 类型保留 |
+| `unit.notification` | ack 结构（`SubscriptionFilters`）、订阅通知、取消通知、日志通知结构；`RequestId subscriptionId` 类型保留；legacy 不出现 `subscriptionId` |
 | `unit.meta` | `_meta` 命名空间 key、未知键透传、`logLevel`/客户端能力读取、`serverInfo` 注入、空 `_meta` 不输出 |
 | `unit.session` | legacy/modern 判定（仅 `progressToken`/`toolCallId` 仍为 legacy）、版本协商回退、Handshake 版本取自注册表、带现代 `_meta` 的 `initialize` 仍走 Handshake、`-32022`、现代未知 method `-32601`、legacy `server/discover` 探测、缺 `_meta` `-32602`、现代不入 `m_hashMessage`、非 stdio 入口现代请求 `-32600` |
 | `unit.tasks` | discover 必填字段、现代分页非法 cursor 带 `id`、资源不存在错误码（现代 `-32602` / legacy `-32002`）、缓存配置、`PrepareResult` 上下文复制 |
@@ -914,7 +907,7 @@ ctest --test-dir build-tests --output-on-failure
 | `unit.subscriptions` | 过滤器嵌套、ack-first、`subscriptionId` 类型保留、精确 URI 匹配、取消/优雅关闭清理 |
 | `unit.caching` | 仅 6 类结果、`complete` 才输出、MRTR 不输出、默认值与显式覆盖、仅 `Feature_Caching` 开启时输出 |
 | `unit.capabilities` | `completions` 由 `Feature_CompletionsCapability` 门控、`extensions` 显式透传、Apps `{}`、legacy initialize 透传、list_changed 能力、`logging` 能力保留 |
-| `unit.apps` | `_meta.ui.resourceUri`、`ui://`、MIME、csp/permissions 原样透传、无未文档化字段、降级内容 |
+| `unit.apps` | `_meta.ui.resourceUri`/`visibility`、`UiResourceMeta` 全字段（csp 四域、permissions 四键、domain、prefersBorder、jExtra）、`ui://`、MIME 默认值、`Start()` 四个负例、`StructuredContent`、`JsonSchema`、降级内容 |
 | `unit.legacy_compat` | 2024-11-05 输出不含现代字段；initialize 版本与能力不变；`-32001` 取值不变 |
 
 ## 8. 风险与规避

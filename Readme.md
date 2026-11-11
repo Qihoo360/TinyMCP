@@ -128,7 +128,7 @@ Applications call `NotifyInputRequired(inputRequests, requestState)`. If the cli
 { "jsonrpc": "2.0", "id": 9, "method": "subscriptions/listen", "params": { "notifications": { "toolsListChanged": true, "resourceSubscriptions": ["ui://echo/app.html"] } } }
 ```
 
-The server only grants filters it can actually publish, keeps matching resource URIs exact, and stops sending after `notifications/cancelled` or connection close. The example pushes a `notifications/resources/updated` event every five seconds through `SendSubscriptionNotification()`; a server without listeners sends nothing.
+The server only grants filters it can actually publish, keeps matching resource URIs exact, and stops sending after `notifications/cancelled` or connection close. The example pushes a `notifications/resources/updated` event every five seconds through `SendSubscriptionNotification(const MCP::ResourceUpdatedNotification&, uri)`; a server without listeners sends nothing.
 
 ### Caching
 Only these six `resultType: "complete"` results must carry `ttlMs` (>= 0) and `cacheScope` (`"public"` or `"private"`):
@@ -151,7 +151,17 @@ Modern `resources/read` reports a missing resource as `-32602`, while legacy kee
 ### Extensions and MCP Apps
 The only extension implemented today is MCP Apps (`io.modelcontextprotocol/ui`). Extensions are off by default: call `RegisterServerAppsCapabilities()` (or `RegisterServerExtensionsCapabilities()`) to advertise them. **MCP Apps is supported only on the 2026-07-28 protocol version.** 2024-11-05 explicitly does not support MCP Apps: legacy sessions never produce `Tool._meta.ui`, `Resource._meta.ui`, or `text/html;profile=mcp-app` content, so legacy clients only get text-only tools. A legacy `initialize` response never declares `io.modelcontextprotocol/ui` either.
 
-MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool to a `ui://` resource, and `Resource._meta.ui` carries `csp` and `permissions` verbatim. Tools must still return meaningful text content so that hosts without Apps support degrade gracefully. The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK. The example's `ui://echo/app.html` nevertheless embeds a small demo bridge (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`) so the App can be exercised end to end; that HTML is demo glue, not SDK behaviour.
+MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool to a `ui://` resource, and `Tool._meta.ui.visibility` lists `model`/`app`. `Resource._meta.ui` carries `csp` (`connectDomains`, `resourceDomains`, `frameDomains`, `baseUriDomains`), `permissions` (`camera`, `microphone`, `geolocation`, `clipboardWrite`), `domain`, and `prefersBorder`. Declare them with `UiResourceMeta` and `Resource::SetUiMeta`/`TextResourceContents::SetUiMeta`/`BlobResourceContents::SetUiMeta`; do not write `jMeta["ui"]` by hand. `BuildUiResourceContents()` copies the declared metadata into a `resources/read` payload.
+
+`ui://` is reserved for MCP Apps. Register UI resources through `RegisterServerUiResources()`, which fills an empty `mimeType` with `text/html;profile=mcp-app`. Before `Start()` the SDK validates the Apps configuration and returns `-32602` when a `ui://` resource has another MIME type, a tool `resourceUri` is not `ui://` or does not match a registered resource, or `visibility` contains a value other than `model`/`app`.
+
+The SDK does not validate HTML5 and does not enforce the `resources/read` MIME type at runtime; the app owns both. HTML may be returned as `text` or `blob`. Tools must still return meaningful text content so hosts without Apps support degrade gracefully. The flat `_meta["ui/resourceUri"]` key is never emitted.
+
+`structuredContent` is set with `CallToolResult::structuredContent.Set(json)` (or `ToolResultContent::structuredContent`), not by assigning JSON directly.
+
+The View↔Host `postMessage` protocol (`ui/initialize`, `ui/message`, `ui/open-link`, `ui/update-model-context`) is **not** part of this SDK. The example's `ui://echo/app.html` nevertheless embeds a small demo bridge (`ui/initialize`, `ui/notifications/tool-result`, `tools/call`) so the App can be exercised end to end; that HTML is demo glue, not SDK behaviour.
+
+**Migration notes:** `Tool.inputSchema`/`outputSchema` are `MCP::JsonSchema` (`Set()` before registering). `SendSubscriptionNotification` only accepts `MCP::ResourceUpdatedNotification`; the old `(method, params, uri)` signature is gone. MRTR fields use `MCP::InputResponses`/`InputRequests`, subscription ids use `MCP::RequestId`, and acknowledgment filters use `MCP::SubscriptionFilters`.
 
 `io.modelcontextprotocol/ui` is a modern-only extension, so a legacy `initialize` response never echoes it even when `RegisterServerAppsCapabilities()` was called; other explicitly registered extensions still pass through.
 
