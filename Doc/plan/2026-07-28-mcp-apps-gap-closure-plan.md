@@ -11,6 +11,7 @@
 3. 只实现服务端职责；宿主/View 侧的 `postMessage`、sandbox、CSP 强制执行、display mode、theming、`tool-input/tool-result` 通知、visibility 过滤等全部不在范围内。
 4. 不引入第三方依赖，沿用 jsoncpp、现有消息/任务/注册体系与 C++14 风格。
 5. 任何改动不得改变 `2024-11-05` 既有输出；legacy golden 必须逐字节一致。
+6. 一站式注册与静态文件加载属于便利层，只封装现有注册路径，不改变分步 API 与 `2024-11-05` 输出。
 
 ## 2. 缺口来源
 
@@ -35,6 +36,8 @@
 | ACK 过滤器 | `SubscriptionsAcknowledgedNotification.jNotifications` 为裸 `Json::Value` | 固定结构未建模 |
 | 通知发送 API | `SendSubscriptionNotification` 让调用者手写 `Json::Value` 参数 | 公共 API 封装缺失（破坏性调整） |
 | JSON Schema | `Tool.jInputSchema`/`jOutputSchema` 为裸 `Json::Value` | 命名明确的字段未建模 |
+| 一站式注册 | 无 `registerApp` 等价 API，应用需自行组合能力声明、工具/资源注册、UI setter 与任务注册 | 易用性（推荐层） |
+| 静态 HTML 加载 | 只支持内存 HTML 字符串，无本地文件读取入口 | 易用性（推荐层） |
 
 参考位置：
 
@@ -63,6 +66,8 @@
 | A12 | 复用已有封装类型：`InputRequests`/`InputResponses`/`RequestId` 已存在但未被使用，直接接入，不新建平行类型 | 消除“类型已实现却仍用裸 JSON”的不一致 |
 | A13 | 公共发送 API 改为类型化：`SendSubscriptionNotification` 只接受 `ResourceUpdatedNotification`，旧签名不保留 | 调用者不再手写通知 params；list_changed 已有专用发送方法 |
 | A14 | `Tool.jInputSchema` 保持 `Json::Value`；新增 `Tool.jOutputSchema` 也用 `Json::Value`；`ToolResultContent.jContent` 维持裸 JSON | `jInputSchema` 是 2024-11-05 公开成员，包装成 `JsonSchema` 会破坏旧项目源码兼容性，因此不引入包装层 |
+| A15 | 新增一站式 `RegisterServerApp`/`RegisterServerAppFromFile`，内部只调用现有注册 API | 降低 Apps 接入成本；不改变分步注册语义，便于旧代码继续使用 |
+| A16 | 静态 HTML 只支持注册期一次性读取本地文件；不做远程拉取、模板渲染、热更新 | 避免引入网络、缓存与运行期状态，保持服务端无状态与零依赖 |
 
 ## 4. 实施步骤
 
@@ -294,6 +299,60 @@
    - 在 7.6 增加上述负例与新增字段断言。
 3. 新增本文件作为补全计划，不修改已入库的规范与 schema 原文。
 
+### Phase 6：一站式注册与静态 HTML 加载（P3）
+
+目标：在不改变现有分步注册 API 的前提下，提供 Apps 的一站式接入入口，并支持从本地 HTML 文件注册 UI 资源。
+
+改动：
+
+1. `Source/Protocol/Entity/Server.h/.cpp`
+   - 新增公开结构 `MCP::AppDefinition`：
+     - `MCP::Tool tool`：工具定义，`tool.strName` 必填。
+     - `MCP::Resource resource`：UI 资源，`resource.strUri` 必须是 `ui://`。
+     - `MCP::UiResourceMeta uiResourceMeta`：可选，注册时通过 `Resource::SetUiMeta()` 写入。
+     - `std::string strHtml`：HTML 文本（`RegisterServerApp` 使用）。
+     - `std::shared_ptr<MCP::ProcessCallToolRequest> spToolTask`：工具任务原型，必填。
+   - 新增 `int RegisterServerApp(const MCP::AppDefinition& app)`：
+     1. 配置期校验（不通过返回 `ERRNO_INVALID_PARAMS`，且不产生任何注册）：
+        - `tool.strName` 非空且 `tool.IsValid()`。
+        - `resource.strUri` 满足 `IsUiResourceUri()`；`resource.strName` 非空；`resource.strMimeType` 为空或 `IsMcpAppMimeType()`。
+        - `strHtml` 非空。
+        - `spToolTask` 非空。
+        - `tool.jMeta["ui"]["resourceUri"]` 若已存在，必须与 `resource.strUri` 完全一致。
+     2. 自动调用 `RegisterServerAppsCapabilities()`（幂等），无需应用另行声明扩展。
+     3. 注入工具 UI 元数据：`SetUiResourceUri(resource.strUri)`；若工具尚未设置 `visibility`，补默认 `{UI_VISIBILITY_MODEL, UI_VISIBILITY_APP}`。
+     4. 应用 `uiResourceMeta` 到 `resource`；`ui://` 资源 MIME 留空时由 `RegisterServerUiResources()` 补默认值。
+     5. 依次注册：`RegisterServerTools({tool}, false)`、`RegisterServerUiResources({resource}, false)`、`RegisterToolsTasks(tool.strName, spToolTask)`、内置静态读取任务。
+     6. 返回 `ERRNO_OK`。
+   - 新增 `int RegisterServerAppFromFile(const MCP::AppDefinition& app, const std::string& strHtmlFilePath)`：
+     - 注册期以二进制方式读取本地文件（`std::ifstream`），读入 `strHtml` 后复用 `RegisterServerApp`。
+     - 文件不存在、不可读或内容为空返回 `ERRNO_INVALID_PARAMS`。
+     - 不做路径规范化、远程 URL、模板渲染或热更新；不新增第三方依赖。
+2. 内置读取任务
+   - 在 `Source/Protocol/Task/BasicTask.h/.cpp` 新增 `MCP::ProcessStaticUiResourceReadTask`：
+     - 构造时保存 `MCP::Resource` 与 HTML 文本，`Clone()` 复制自身。
+     - `Execute()` 调用 `BuildResult()`，通过 `BuildUiResourceContents(resource, strHtml, contents)` 生成 `contents`，再 `NotifyResult`。
+     - `Cancel()` 返回 `ERRNO_OK`。
+   - 这样 `RegisterServerApp` 无需应用再实现 `resources/read` 任务。
+3. 兼容性与边界
+   - 两个 API 均为追加，不修改现有方法签名；现有分步注册路径保持不变。
+   - 一站式注册不调用 `Start()`，仍由应用在注册完成后启动。
+   - 重复工具名/资源 URI 沿用现有注册语义，不在本阶段引入额外去重规则。
+4. 示例与测试
+   - `Example/MCPServer/Source/EchoServer.cpp` 的 `echo_app` 改用 `RegisterServerApp` 注册；另加一个 `RegisterServerAppFromFile` 用例。
+   - 单元测试：`AppDefinition` 校验负例（非 `ui://`、MIME 错误、空 HTML、空任务、`resourceUri` 不一致）、默认 `visibility` 注入、`uiResourceMeta` 写入、内置读取任务。
+   - 集成测试：一站式注册后 `tools/list` 带 `_meta.ui`，`resources/read` 返回 HTML；legacy 无任何 Apps 痕迹。
+   - 文件加载：正常文件、缺失文件、空文件。
+5. 文档
+   - README 增加 `RegisterServerApp` / `RegisterServerAppFromFile` 用法与错误码说明。
+   - 明确只支持本地文件，不支持远程 URL、模板与热更新。
+
+门禁：
+
+- `unit.apps`、`unit.message`
+- `integration.apps`、`integration.legacy`
+- 全量 `ctest --output-on-failure`
+
 ## 5. 测试门禁汇总
 
 | 阶段 | 单元 | 集成 |
@@ -305,6 +364,7 @@
 | Phase 3B | `unit.message`、`unit.request`、`unit.response`、`unit.notification`、`unit.mrtr`、`unit.subscriptions` | `integration.apps`、`integration.modern_core`、`integration.subscriptions`、`integration.legacy` |
 | Phase 4 | 全量 `unit.*` | 全量 `integration.*` |
 | Phase 5 | 全量 `ctest` | 全量 `ctest` |
+| Phase 6 | `unit.apps`、`unit.message` | `integration.apps`、`integration.legacy` |
 
 失败即停：任一用例失败不得进入下一阶段；修复后从失败用例重跑，再跑全量回归。
 
@@ -327,6 +387,9 @@
 15. ACK 使用 `SubscriptionFilters`，只输出被授予的项；空授予输出空对象。
 16. `SendSubscriptionNotification` 只接受 `ResourceUpdatedNotification`，旧签名已删除，示例与测试同步。
 17. `Tool` 的 `jInputSchema`/`jOutputSchema` 保持裸 `Json::Value`；`ToolResultContent.jContent` 同样保持裸 JSON。
+18. `RegisterServerApp` 一次调用完成扩展声明、工具/资源注册与任务注册；非法配置返回 `ERRNO_INVALID_PARAMS` 且不产生部分注册。
+19. `RegisterServerAppFromFile` 可从本地 HTML 文件注册；文件缺失、不可读或为空返回 `ERRNO_INVALID_PARAMS`。
+20. 一站式注册不改变现有分步注册 API 的行为，也不改变 `2024-11-05` 输出。
 
 ## 7. 风险与规避
 
@@ -342,6 +405,9 @@
 | `StructuredContent` 改动影响既有调用方 | 该字段仅本分支引入；迁移示例/测试，未设置时不输出，legacy 行为不变 |
 | 破坏性 API 调整影响既有调用方 | 仅涉及本分支新增能力相关 API；README 提供迁移示例，示例/测试同步更新 |
 | JSON Schema 按裸 JSON 透传 | 不校验根 `type: "object"`；布尔 schema 也可透传，保持与历史项目一致 |
+| 一站式注册与分步注册输出不一致 | 一站式内部只调用现有注册 API；新增回归用例对比两条路径的 `tools/list`/`resources/read` 输出 |
+| HTML 文件编码/换行差异 | 以二进制读取并原样写入 `text`，不做换行转换；测试覆盖 UTF-8 中文 HTML |
+| 内置静态读取任务与自定义任务冲突 | 一站式默认绑定内置任务；应用仍可用分步 API 覆盖 |
 
 ## 8. 明确不做
 
@@ -354,3 +420,5 @@
 7. 2024-11-05 上的任何 MCP Apps 能力。
 8. `ToolResultContent.jContent` 的类型化（保持裸 JSON 透传，文档说明原因）。
 9. 其余任意结构字段（`_meta`、`arguments`、error data、log data、extension settings 等）保持裸 JSON 透传。
+10. 远程 HTML 拉取、代理缓存、模板渲染、文件热更新。
+11. 为一站式注册引入额外的去重/覆盖策略；沿用现有注册语义。
