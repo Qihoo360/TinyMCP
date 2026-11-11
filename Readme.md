@@ -155,6 +155,8 @@ MCP Apps covers the server side only: `Tool._meta.ui.resourceUri` links a tool t
 
 `io.modelcontextprotocol/ui` is a modern-only extension, so a legacy `initialize` response never echoes it even when `RegisterServerAppsCapabilities()` was called; other explicitly registered extensions still pass through.
 
+A modern request can decide per call whether the client hosts MCP Apps without parsing raw JSON: `req.meta.clientCapabilities.SupportsExtension(EXTENSION_UI) && req.meta.clientCapabilities.SupportsMimeType(EXTENSION_UI, MIME_TYPE_MCP_APP)`.
+
 ### Deprecated features
 `logging`, `roots`, and `sampling` are deprecated in 2026-07-28. This release still implements them as specified: request-level `_meta.logLevel` for logging (requests without it receive no `notifications/message`), and MRTR for roots/sampling. New implementations should prefer stderr or OpenTelemetry, tool parameters or resource URIs, and direct LLM API calls. Legacy `logging/setLevel` remains available only on 2024-11-05 sessions. SSE connections reject modern requests with `-32600`.
 

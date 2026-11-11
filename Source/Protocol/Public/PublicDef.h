@@ -109,6 +109,7 @@ namespace MCP
 	static constexpr const char* MSG_KEY_PERMISSIONS = "permissions";
 	static constexpr const char* MSG_KEY_RESOURCE_URI = "resourceUri";
 	static constexpr const char* MSG_KEY_VISIBILITY = "visibility";
+	static constexpr const char* MSG_KEY_MIME_TYPES = "mimeTypes";
 
 	// 2026-07-28 icon, annotation and client capability keys.
 	static constexpr const char* MSG_KEY_SRC = "src";

@@ -488,6 +488,8 @@ TEST_CASE("unit.meta")
 	jCapabilities[MSG_KEY_SAMPLING] = Json::Value(Json::objectValue);
 	Json::Value jExtensions(Json::objectValue);
 	jExtensions[EXTENSION_UI] = Json::Value(Json::objectValue);
+	jExtensions[EXTENSION_UI][MSG_KEY_MIME_TYPES].append(MIME_TYPE_MCP_APP);
+	jExtensions["example/limited"] = Json::Value(Json::objectValue);
 	jCapabilities[MSG_KEY_EXTENSIONS] = jExtensions;
 
 	Json::Value jClientInfo(Json::objectValue);
@@ -520,6 +522,18 @@ TEST_CASE("unit.meta")
 	CHECK(meta.clientCapabilities.SupportsElicitationMode(MSG_KEY_URL));
 	CHECK(meta.clientCapabilities.SupportsExtension(EXTENSION_UI));
 	CHECK(!meta.clientCapabilities.SupportsExtension("io.example/missing"));
+
+	// Extension settings expose the declared MIME types without raw JSON parsing.
+	const Json::Value* pUiSettings = meta.clientCapabilities.FindExtensionSettings(EXTENSION_UI);
+	CHECK(pUiSettings != nullptr);
+	if (pUiSettings)
+		CHECK(pUiSettings->isMember(MSG_KEY_MIME_TYPES));
+
+	CHECK(meta.clientCapabilities.SupportsMimeType(EXTENSION_UI, MIME_TYPE_MCP_APP));
+	CHECK(!meta.clientCapabilities.SupportsMimeType(EXTENSION_UI, "text/html"));
+	CHECK(!meta.clientCapabilities.SupportsMimeType("example/limited", MIME_TYPE_MCP_APP));
+	CHECK(meta.clientCapabilities.FindExtensionSettings("io.example/missing") == nullptr);
+	CHECK(!meta.clientCapabilities.SupportsMimeType("io.example/missing", MIME_TYPE_MCP_APP));
 
 	// progressToken and toolCallId stay on the Request model.
 	CHECK(!meta.jExtra.isMember(MSG_KEY_PROGRESS_TOKEN));

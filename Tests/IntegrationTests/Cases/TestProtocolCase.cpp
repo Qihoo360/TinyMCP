@@ -1026,7 +1026,7 @@ TEST_CASE("integration.apps")
 	// Client extension capabilities and custom _meta keys are readable.
 	CHECK(ExpectResponse(driver, MakeRequest(14, METHOD_TOOLS_CALL,
 		MakeModernParams("2026-07-28",
-			"{\"extensions\":{\"" + std::string(EXTENSION_MCP_APPS_UI)
+			"{\"extensions\":{\"" + std::string(EXTENSION_UI)
 				+ "\":{\"mimeTypes\":[\"" + std::string(MIME_TYPE_MCP_APP) + "\"]}}}",
 			"\"example.com/custom\":\"x\"",
 			"\"name\":\"" + std::string(CTestServer::APP_TOOL_NAME)

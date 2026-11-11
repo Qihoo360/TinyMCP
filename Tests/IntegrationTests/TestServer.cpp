@@ -242,19 +242,15 @@ namespace MCP
 					// Client capabilities and custom _meta passthrough.
 					if ("caps" == strAction)
 					{
-						bool bHasUiExtension = m_spRequest->meta.clientCapabilities.SupportsExtension(MCP::EXTENSION_MCP_APPS_UI);
+						bool bHasUiExtension = m_spRequest->meta.clientCapabilities.SupportsExtension(MCP::EXTENSION_UI);
 
 						std::string strMimeType;
-						const Json::Value& jRawCapabilities = m_spRequest->meta.clientCapabilities.jRaw;
-						if (jRawCapabilities.isMember(MCP::MSG_KEY_EXTENSIONS)
-							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS].isObject()
-							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS].isMember(MCP::EXTENSION_MCP_APPS_UI)
-							&& jRawCapabilities[MCP::MSG_KEY_EXTENSIONS][MCP::EXTENSION_MCP_APPS_UI].isObject())
-						{
-							const Json::Value& jUi = jRawCapabilities[MCP::MSG_KEY_EXTENSIONS][MCP::EXTENSION_MCP_APPS_UI];
-							if (jUi.isMember("mimeTypes") && jUi["mimeTypes"].isArray() && jUi["mimeTypes"].size() > 0)
-								strMimeType = jUi["mimeTypes"][0].asString();
-						}
+						const Json::Value* pUiSettings =
+							m_spRequest->meta.clientCapabilities.FindExtensionSettings(MCP::EXTENSION_UI);
+						if (pUiSettings && pUiSettings->isObject()
+							&& (*pUiSettings)[MCP::MSG_KEY_MIME_TYPES].isArray()
+							&& !(*pUiSettings)[MCP::MSG_KEY_MIME_TYPES].empty())
+							strMimeType = (*pUiSettings)[MCP::MSG_KEY_MIME_TYPES][0].asString();
 
 						bool bHasCustomKey = m_spRequest->meta.jExtra.isObject()
 							&& m_spRequest->meta.jExtra.isMember("example.com/custom");

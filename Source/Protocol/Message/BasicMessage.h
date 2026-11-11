@@ -738,6 +738,12 @@ namespace MCP
 		bool SupportsCapability(const std::string& strCapability) const;
 		bool SupportsElicitationMode(const std::string& strMode) const;
 		bool SupportsExtension(const std::string& strExtensionId) const;
+		// Returns the extension settings object, or nullptr when the client did
+		// not declare that extension.
+		const Json::Value* FindExtensionSettings(const std::string& strExtensionId) const;
+		// True when the extension was declared and lists strMimeType in its
+		// non-empty string "mimeTypes" array.
+		bool SupportsMimeType(const std::string& strExtensionId, const std::string& strMimeType) const;
 
 		bool IsValid() const override;
 		int DoSerialize(Json::Value& jMsg) const override;

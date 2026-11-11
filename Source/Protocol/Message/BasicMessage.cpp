@@ -1870,6 +1870,38 @@ namespace MCP
 		return false;
 	}
 
+	const Json::Value* ClientCapabilities::FindExtensionSettings(const std::string& strExtensionId) const
+	{
+		auto it = mapExtensions.find(strExtensionId);
+		if (it != mapExtensions.end())
+			return &it->second;
+
+		if (jRaw.isObject() && jRaw.isMember(MSG_KEY_EXTENSIONS) && jRaw[MSG_KEY_EXTENSIONS].isObject()
+			&& jRaw[MSG_KEY_EXTENSIONS].isMember(strExtensionId))
+			return &jRaw[MSG_KEY_EXTENSIONS][strExtensionId];
+
+		return nullptr;
+	}
+
+	bool ClientCapabilities::SupportsMimeType(const std::string& strExtensionId, const std::string& strMimeType) const
+	{
+		const Json::Value* pSettings = FindExtensionSettings(strExtensionId);
+		if (nullptr == pSettings || !pSettings->isObject())
+			return false;
+
+		const Json::Value& jMimeTypes = (*pSettings)[MSG_KEY_MIME_TYPES];
+		if (!jMimeTypes.isArray() || jMimeTypes.empty())
+			return false;
+
+		for (const auto& jMimeType : jMimeTypes)
+		{
+			if (jMimeType.isString() && !jMimeType.asString().empty() && jMimeType.asString() == strMimeType)
+				return true;
+		}
+
+		return false;
+	}
+
 	int ClientCapabilities::DoSerialize(Json::Value& jMsg) const
 	{
 		if (jRaw.isObject())
