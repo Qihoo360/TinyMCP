@@ -188,6 +188,11 @@ namespace MCP
 		// shutdown. pbAbandoned reports that the worker is still running and therefore
 		// still owns the task cache; callers must not touch it in that case.
 		int ResetAsyncTaskThread(bool bBoundedWait = false, bool* pbAbandoned = nullptr);
+		// Called once the worker is stopped: drops queued work, retires the task
+		// cache and destroys every finished task outside the lock. Unfinished tasks
+		// stay parked because background work may still reference them. Does
+		// nothing to the cache when bAbandoned, since the worker still owns it.
+		void ReleaseFinishedTasks(bool bAbandoned);
 		int AsyncThreadProc(uint64_t nEpoch);
 
 		// Tasks never reach back to the session singleton. The session binds the

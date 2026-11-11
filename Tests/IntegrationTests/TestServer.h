@@ -12,7 +12,8 @@ namespace MCP
 	namespace Test
 	{
 		// Observed by unit.keepalive: the echo tool's "keepalive" action replies
-		// from a background thread and keeps using the task afterwards.
+		// from a background thread and keeps using the task afterwards. The
+		// "track" action only counts destruction (unit.stop_releases_tasks).
 		struct KeepAliveProbe
 		{
 			static std::atomic<int> s_nDestroyed;

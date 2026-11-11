@@ -384,6 +384,37 @@ TEST_CASE("unit.keepalive")
 	driver.Stop();
 }
 
+// Stop() must destroy finished tasks itself. Left in the cache they would only
+// die with the session singleton during static teardown, after business
+// singletons their destructors still use (the NewSearch exit crash).
+TEST_CASE("unit.stop_releases_tasks")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+	KeepAliveProbe::s_nDestroyed.store(0);
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	// The last task of a session is never reaped by the worker: nothing wakes it
+	// again, so the finished task is still cached when the server stops.
+	CHECK(ExpectResponse(driver, MakeRequest(2, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"last\",\"action\":\"track\"}}"), jResponse));
+	CHECK_EQ(2, jResponse[MSG_KEY_ID].asInt());
+	CHECK_EQ(0, KeepAliveProbe::s_nDestroyed.load());
+
+	driver.Stop();
+	CHECK_EQ(1, KeepAliveProbe::s_nDestroyed.load());
+}
+
 TEST_CASE("unit.origin_policy")
 {
 	const std::vector<std::string> vecDefaults = { "http://localhost", "http://127.0.0.1" };

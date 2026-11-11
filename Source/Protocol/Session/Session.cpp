@@ -1,4 +1,4 @@
-﻿#include "Session.h"
+#include "Session.h"
 #include "../Public/PublicDef.h"
 #include "../Public/StringHelper.h"
 #include "../Message/BasicMessage.h"
@@ -16,6 +16,7 @@
 #include <memory>
 #include <algorithm>
 #include <chrono>
+#include <iterator>
 #include <utility>
 #include <json/json.h>
 
@@ -279,7 +280,13 @@ namespace MCP
 	int CMCPSession::Terminate()
 	{
 		// Bounded: a tool that blocks inside Execute() must not hang process exit.
-		ResetAsyncTaskThread(true);
+		bool bAbandoned = false;
+		ResetAsyncTaskThread(true, &bAbandoned);
+
+		// Release finished tasks now, while the server is still being stopped.
+		// Otherwise they live until the session singleton is destroyed during
+		// static teardown, after business singletons their destructors still use.
+		ReleaseFinishedTasks(bAbandoned);
 
 		// Close every live subscription before the transport goes away so the
 		// client still observes a complete result for its listen request.
@@ -309,40 +316,13 @@ namespace MCP
 		ResetAsyncTaskThread(true, &bAbandoned);
 
 		// After join(), the async thread no longer touches any of the members below.
-		// When the worker had to be abandoned it still owns the task cache, so only
-		// the queued work is dropped there and the cache is left untouched.
+		// Bump the generation before retiring anything so a task that is still
+		// running drops its late result instead of writing it to the next client.
 		{
 			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
-			m_deqAsyncTasks.clear();
-			m_vecCancelledTaskIds.clear();
-
-			// Bump the generation before retiring anything so a task that is still
-			// running drops its late result instead of writing it to the next client.
 			++m_nClientGeneration;
-
-			// A finished task is safe to destroy. Unfinished tasks may still be
-			// referenced by worker threads or IPC callbacks through a raw pointer, so
-			// park them instead of destroying them here. They are marked stale first
-			// so a late result cannot be written into the new client's transport.
-			for (auto& spTask : m_vecAsyncTasksCache)
-			{
-				if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
-					spProcessTask->MarkStale();
-			}
-
-			if (!bAbandoned)
-			{
-				m_vecRetiredTasks.erase(
-					std::remove_if(m_vecRetiredTasks.begin(), m_vecRetiredTasks.end(), [](const auto& spTask)
-						{
-							return !spTask || spTask->IsFinished() || spTask->IsCancelled();
-						}),
-					m_vecRetiredTasks.end());
-
-				m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end());
-				m_vecAsyncTasksCache.clear();
-			}
 		}
+		ReleaseFinishedTasks(bAbandoned);
 
 		// Roll back the MCP protocol state machine to the pre-handshake state so the next
 		// client's `initialize` request is accepted (see ProcessRequest / SwitchState).
@@ -2438,6 +2418,44 @@ namespace MCP
 
 		m_upTaskThread.reset();
 		return ERRNO_OK;
+	}
+
+	void CMCPSession::ReleaseFinishedTasks(bool bAbandoned)
+	{
+		std::vector<std::shared_ptr<MCP::CMCPTask>> vecFinished;
+		{
+			std::unique_lock<std::mutex> _lock(m_mtxAsyncThread);
+			m_deqAsyncTasks.clear();
+			m_vecCancelledTaskIds.clear();
+
+			// Marked stale first so a late result can never be written to a client
+			// that is gone or to the next one.
+			for (auto& spTask : m_vecAsyncTasksCache)
+			{
+				if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
+					spProcessTask->MarkStale();
+			}
+
+			// An abandoned worker still owns the cache.
+			if (bAbandoned)
+				return;
+
+			m_vecRetiredTasks.insert(m_vecRetiredTasks.end(), m_vecAsyncTasksCache.begin(), m_vecAsyncTasksCache.end());
+			m_vecAsyncTasksCache.clear();
+
+			// Unfinished tasks may still be referenced by worker threads or IPC
+			// callbacks through a raw pointer, so they stay parked.
+			auto itrFinished = std::stable_partition(m_vecRetiredTasks.begin(), m_vecRetiredTasks.end(), [](const auto& spTask)
+				{
+					return spTask && !spTask->IsFinished() && !spTask->IsCancelled();
+				});
+			std::move(itrFinished, m_vecRetiredTasks.end(), std::back_inserter(vecFinished));
+			m_vecRetiredTasks.erase(itrFinished, m_vecRetiredTasks.end());
+		}
+
+		// Destroyed outside the lock: a task destructor may block on its own
+		// background work or take business-side locks.
+		vecFinished.clear();
 	}
 
 	int CMCPSession::StopAsyncTaskThread()

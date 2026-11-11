@@ -436,6 +436,11 @@ namespace MCP
 						return MCP::ERRNO_OK;
 					}
 
+					// Lifetime probe: a normal echo whose destruction is counted, so a
+					// test can observe when the session releases the finished task.
+					if ("track" == strAction)
+						m_bKeepAliveProbe = true;
+
 					// Gives the E2E client a window to queue a second request and
 					// cancel it before the async worker reaches it.
 					if ("slow" == strAction)
