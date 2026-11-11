@@ -2753,8 +2753,13 @@ namespace MCP
 		}
 
 		// Publish this incarnation's exit so a bounded reset waits for the right
-		// worker instead of a stale signal from a previous one.
-		m_nAsyncThreadExitedEpoch.store(nEpoch);
+		// worker instead of a stale signal from a previous one. Stored under the
+		// waiter's mutex so the signal cannot slip in between its predicate check
+		// and its wait.
+		{
+			std::lock_guard<std::mutex> _exitLock(m_mtxAsyncExit);
+			m_nAsyncThreadExitedEpoch.store(nEpoch);
+		}
 		m_cvAsyncExit.notify_all();
 
 		return ERRNO_OK;

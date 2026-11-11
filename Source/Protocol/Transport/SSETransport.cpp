@@ -233,9 +233,17 @@ namespace MCP
 					// with 409. Drain both queues to avoid cross-session bleed-through: any
 					// half-consumed inbound bytes or unsent outbound messages belonged to the
 					// prior session and must not leak into the next one.
+					// The reset is flagged together with draining the inbound queue, under
+					// the reader's mutex, so Read() can neither miss the wakeup nor hand a
+					// message of the next client to the old session state.
 					{
 						std::lock_guard<std::mutex> _lock(m_mtxIncoming);
 						m_deqIncoming.clear();
+						// Signal the Session::Run() thread (blocked in Read()) that the MCP
+						// session-level state must be reset before serving the next client.
+						// Doing the reset on the reader thread avoids racing with
+						// CMCPSession's non-thread-safe internal state.
+						m_bResetPending.store(true);
 					}
 					{
 						std::lock_guard<std::mutex> _lock(m_mtxOutgoing);
@@ -249,14 +257,11 @@ namespace MCP
 						m_strSessionId = GenerateSessionId();
 					}
 					m_bEndpointSent.store(false);
-					m_bClientConnected.store(false);
-					// Signal the Session::Run() thread (blocked in Read()) that the MCP
-					// session-level state must be reset before serving the next client.
-					// Doing the reset on the reader thread avoids racing with
-					// CMCPSession's non-thread-safe internal state.
-					m_bResetPending.store(true);
 					// Wake any Read() waiter so it observes the drained state promptly.
 					m_cvIncoming.notify_all();
+					// Released last: only once the reset is pending may the next client
+					// attach, otherwise its first message could race the reset.
+					m_bClientConnected.store(false);
 				});
 		});
 
@@ -325,7 +330,15 @@ namespace MCP
 			return ERRNO_OK;
 
 		// Wake any thread waiting in Read() or in the SSE provider so they can observe m_bRunning == false.
+		// Passing through each waiter's mutex first means a waiter is either before its
+		// predicate check (and sees the flag) or already waiting (and gets the notify).
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxIncoming);
+		}
 		m_cvIncoming.notify_all();
+		{
+			std::lock_guard<std::mutex> _lock(m_mtxOutgoing);
+		}
 		m_cvOutgoing.notify_all();
 
 		if (m_upServerHolder)
