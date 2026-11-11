@@ -448,7 +448,9 @@ namespace MCP
 					// holds the task until Cancel() arrives, then reports cancellation
 					// after a short cleanup, like a tool driving an external process.
 					// The reenter variant also calls back into CancelTask from Cancel().
-					if ("hang" == strAction || "reenter" == strAction)
+					// The late variant ignores the cancellation and still reports a
+					// result, which the session must not deliver.
+					if ("hang" == strAction || "reenter" == strAction || "late" == strAction)
 					{
 						auto spSelf = SharedFromThis<CTestEchoTask>();
 						if (!spSelf)
@@ -457,7 +459,8 @@ namespace MCP
 						m_bKeepAliveProbe = true;
 						m_bHangProbe = true;
 						m_bReenterProbe = ("reenter" == strAction);
-						std::thread([spSelf]()
+						const bool bLateResult = ("late" == strAction);
+						std::thread([spSelf, bLateResult]()
 							{
 								KeepAliveProbe::s_bHangStarted.store(true);
 								auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -465,6 +468,19 @@ namespace MCP
 									std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
 								std::this_thread::sleep_for(std::chrono::milliseconds(50));
+								if (bLateResult)
+								{
+									auto spLateResult = spSelf->BuildResult();
+									if (spLateResult)
+									{
+										MCP::TextContent lateContent;
+										lateContent.strType = MCP::CONST_TEXT;
+										lateContent.strText = "late";
+										spLateResult->vecTextContent.push_back(lateContent);
+										spSelf->NotifyResult(spLateResult);
+										return;
+									}
+								}
 								spSelf->NotifyCancelled();
 							}).detach();
 
@@ -491,6 +507,10 @@ namespace MCP
 					textContent.strText = strInput;
 					spResult->vecTextContent.push_back(textContent);
 					spResult->bIsError = false;
+
+					// Duplicate probe: a buggy tool reporting its result twice.
+					if ("double" == strAction)
+						NotifyResult(spResult);
 
 					return NotifyResult(spResult);
 				}

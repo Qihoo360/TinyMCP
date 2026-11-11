@@ -153,6 +153,18 @@ namespace MCP
 		return 0 != (m_nStateFlags.load() & StateFlag_Cancelled);
 	}
 
+	void ProcessRequest::MarkCancelRequested()
+	{
+		m_nStateFlags.fetch_or(StateFlag_CancelRequested);
+	}
+
+	bool ProcessRequest::ClaimReply()
+	{
+		// One atomic step, so two threads racing to answer cannot both win.
+		const unsigned int nPrevious = m_nStateFlags.fetch_or(StateFlag_Replied);
+		return 0 == (nPrevious & (StateFlag_Replied | StateFlag_Cancelled | StateFlag_CancelRequested | StateFlag_Stale));
+	}
+
 	int ProcessRequest::WriteToClient(const std::string& strMessage)
 	{
 		// A task retired by a session reset must stay silent: its client is gone and
@@ -271,7 +283,7 @@ namespace MCP
 		if (!spResult || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		if (IsStale())
+		if (!ClaimReply())
 			return ERRNO_OK;
 
 		spResult->strResultType = RESULT_TYPE_INPUT_REQUIRED;
@@ -293,7 +305,7 @@ namespace MCP
 		if (!jRequiredCapabilities.isObject() || jRequiredCapabilities.empty())
 			return ERRNO_INVALID_PARAMS;
 
-		if (IsStale())
+		if (!ClaimReply())
 			return ERRNO_OK;
 
 		Json::Value jErrorData(Json::objectValue);
@@ -602,6 +614,13 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
+		// A cancelled request, or one already answered, gets no second reply.
+		if (!ClaimReply())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
+
 		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
 		if (ERRNO_OK == SerializeResult(spResult, strResponse))
@@ -808,6 +827,13 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
+		// A cancelled request, or one already answered, gets no second reply.
+		if (!ClaimReply())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
+
 		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
 		if (ERRNO_OK == SerializeResult(spResult, strResponse))
@@ -819,7 +845,7 @@ namespace MCP
 
 	int ProcessReadResourceRequest::NotifyError(int iCode, const std::string& strMessage, const Json::Value& jErrData)
 	{
-		if (IsStale())
+		if (!ClaimReply())
 		{
 			MarkFinished();
 			return ERRNO_OK;
@@ -887,7 +913,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		if (IsStale())
+		if (!ClaimReply())
 			return ERRNO_OK;
 
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
@@ -910,7 +936,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
-		if (IsStale())
+		if (!ClaimReply())
 		{
 			MarkFinished();
 			return ERRNO_OK;
@@ -978,7 +1004,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		if (IsStale())
+		if (!ClaimReply())
 			return ERRNO_OK;
 
 		auto spEmptyResponse = std::make_shared<EmptyResponse>(true);
@@ -998,7 +1024,7 @@ namespace MCP
 		if (!m_spRequest || !m_spServices)
 			return ERRNO_INTERNAL_ERROR;
 
-		if (IsStale())
+		if (!ClaimReply())
 			return ERRNO_OK;
 
 		auto spErrorResponse = std::make_shared<ErrorResponse>(true);
@@ -1328,6 +1354,13 @@ namespace MCP
 
 		spResult->requestId = spRequest->requestId;
 
+		// A cancelled request, or one already answered, gets no second reply.
+		if (!ClaimReply())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
+
 		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
 		if (ERRNO_OK == SerializeResult(spResult, strResponse))
@@ -1346,7 +1379,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
-		if (IsStale())
+		if (!ClaimReply())
 		{
 			MarkFinished();
 			return ERRNO_OK;
@@ -1474,6 +1507,13 @@ namespace MCP
 
 		spResult->requestId = spRequest->requestId;
 
+		// A cancelled request, or one already answered, gets no second reply.
+		if (!ClaimReply())
+		{
+			MarkFinished();
+			return ERRNO_OK;
+		}
+
 		int iErrCode = ERRNO_INTERNAL_ERROR;
 		std::string strResponse;
 		if (ERRNO_OK == SerializeResult(spResult, strResponse))
@@ -1492,7 +1532,7 @@ namespace MCP
 			return ERRNO_INTERNAL_ERROR;
 		}
 
-		if (IsStale())
+		if (!ClaimReply())
 		{
 			MarkFinished();
 			return ERRNO_OK;

@@ -52,6 +52,10 @@ namespace MCP
 		bool IsStale() const;
 		void MarkStale();
 
+		// Set by the session when the client cancelled this request. The request
+		// must not be answered any more, even if the task still reports a result.
+		void MarkCancelRequested();
+
 		// A strong reference to this task for background threads and IPC callbacks
 		// that may run after the task reported its result. The session drops its
 		// own reference once the task is finished, so any work that can still touch
@@ -84,6 +88,11 @@ namespace MCP
 		void MarkCancelledFlag();
 		bool IsCancelledFlag() const;
 
+		// Claims the one final reply of this request. Returns false when the reply
+		// was already sent, or the request was cancelled or retired, in which case
+		// the caller must not write a response.
+		bool ClaimReply();
+
 		// Copies the request era onto the result and applies server defaults
 		// before the result is serialized.
 		int SerializeResult(const std::shared_ptr<MCP::Response>& spResult, std::string& strResponse);
@@ -111,7 +120,9 @@ namespace MCP
 		{
 			StateFlag_Finished = 1u << 0,
 			StateFlag_Cancelled = 1u << 1,
-			StateFlag_Stale = 1u << 2
+			StateFlag_Stale = 1u << 2,
+			StateFlag_Replied = 1u << 3,
+			StateFlag_CancelRequested = 1u << 4
 		};
 
 		std::atomic<unsigned int> m_nStateFlags{ 0 };

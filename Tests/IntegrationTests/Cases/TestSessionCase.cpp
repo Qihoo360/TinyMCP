@@ -361,6 +361,68 @@ TEST_CASE("unit.async_cancel_reentrant")
 	driver.Stop();
 }
 
+// A request is answered at most once: a duplicate result is dropped, and so is
+// a result the task still reports after the client cancelled the request.
+TEST_CASE("unit.reply_once")
+{
+	CMCPSession::GetInstance().ResetForNewClient();
+	KeepAliveProbe::s_bHangStarted.store(false);
+	KeepAliveProbe::s_bCancelRequested.store(false);
+
+	CTestServer& server = CTestServer::s_Instance;
+	CHECK_EQ(ERRNO_OK, server.Initialize());
+
+	CDriver driver;
+	CHECK_EQ(ERRNO_OK, driver.Start(WAIT_TIMEOUT_MS));
+
+	Json::Value jResponse;
+	CHECK(ExpectResponse(driver, MakeRequest(1, METHOD_INITIALIZE,
+		"{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"client\",\"version\":\"1.0.0\"}}"),
+		jResponse));
+	CHECK_EQ(ERRNO_OK, driver.Send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"));
+
+	CHECK(ExpectResponse(driver, MakeRequest(2, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"double\"}}"), jResponse));
+	CHECK_EQ(2, jResponse[MSG_KEY_ID].asInt());
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/none\"}", 3));
+
+	CHECK_EQ(ERRNO_OK, driver.Send(MakeRequest(4, METHOD_TOOLS_CALL,
+		"{\"name\":\"echo\",\"arguments\":{\"input\":\"x\",\"action\":\"late\"}}")));
+	auto tpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WAIT_TIMEOUT_MS);
+	while (!KeepAliveProbe::s_bHangStarted.load() && std::chrono::steady_clock::now() < tpDeadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	CHECK(KeepAliveProbe::s_bHangStarted.load());
+
+	CHECK_EQ(ERRNO_OK, driver.Send(
+		"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":4}}"));
+	tpDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WAIT_TIMEOUT_MS);
+	while (!KeepAliveProbe::s_bCancelRequested.load() && std::chrono::steady_clock::now() < tpDeadline)
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	CHECK(KeepAliveProbe::s_bCancelRequested.load());
+
+	// Give the background thread time to report its late result.
+	std::this_thread::sleep_for(std::chrono::milliseconds(300));
+	CHECK(ExpectSilentThenPing(driver, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/none\"}", 5));
+
+	int iReplies2 = 0;
+	int iReplies4 = 0;
+	for (size_t i = 1; i < driver.GetOutputCount(); ++i)
+	{
+		Json::Value jOutput;
+		if (!ParseJson(driver.GetOutput(i), jOutput) || !jOutput.isMember(MSG_KEY_ID))
+			continue;
+		if (2 == jOutput[MSG_KEY_ID].asInt())
+			++iReplies2;
+		if (4 == jOutput[MSG_KEY_ID].asInt())
+			++iReplies4;
+	}
+
+	CHECK_EQ(1, iReplies2);
+	CHECK_EQ(0, iReplies4);
+
+	driver.Stop();
+}
+
 // Malformed or hostile input must never take the server down, and every request
 // whose id can be recovered must be answered instead of left pending.
 TEST_CASE("unit.robustness")

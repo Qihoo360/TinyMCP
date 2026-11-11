@@ -91,6 +91,8 @@ add_test(NAME unit.async_cancel_in_batch COMMAND TinyMCPTests --unit async_cance
 set_tests_properties(unit.async_cancel_in_batch PROPERTIES TIMEOUT 30)
 add_test(NAME unit.async_cancel_reentrant COMMAND TinyMCPTests --unit async_cancel_reentrant)
 set_tests_properties(unit.async_cancel_reentrant PROPERTIES TIMEOUT 30)
+add_test(NAME unit.reply_once COMMAND TinyMCPTests --unit reply_once)
+set_tests_properties(unit.reply_once PROPERTIES TIMEOUT 30)
 add_test(NAME unit.tasks COMMAND TinyMCPTests --unit tasks)
 set_tests_properties(unit.tasks PROPERTIES TIMEOUT 30)
 add_test(NAME unit.caching COMMAND TinyMCPTests --unit caching)

@@ -2672,7 +2672,13 @@ namespace MCP
 			_lock.unlock();
 
 			for (auto& spTask : vecToCancel)
+			{
+				// The client gave up on the request, so a result the task still
+				// reports afterwards must be dropped instead of answered.
+				if (auto spProcessTask = std::dynamic_pointer_cast<MCP::ProcessRequest>(spTask))
+					spProcessTask->MarkCancelRequested();
 				spTask->Cancel();
+			}
 			vecToCancel.clear();
 
 			// Cache new tasks
